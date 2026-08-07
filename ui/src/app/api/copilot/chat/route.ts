@@ -189,7 +189,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Dynamic Generative Reasoning Engine (Fluid responses for all queries when key is pending)
+    // 5. If no API key is provided, return a prompt to configure it instead of generating a fake response
+    if (!apiKey || apiKey.trim().length <= 5) {
+      return NextResponse.json({
+        reply: `⚠️ **API Key Required**\n\nPlease configure your LLM API Key to enable chat and agent execution.\n\nClick the **⚙️ Settings / Key icon** at the top right to link your API key.`,
+        suggested_actions: ["🔑 Configure LLM Key"],
+        ragSources: [],
+        provider_used: "none",
+        is_live_llm: false,
+      });
+    }
+
+    // 6. Dynamic Generative Reasoning Engine (Fallback if API call fails)
     const dynamicReply = generateFluidDynamicResponse(message, asset_spec, ragSources, !apiKey);
 
     return NextResponse.json({

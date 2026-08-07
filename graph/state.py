@@ -32,6 +32,10 @@ class BlendPilotState(TypedDict, total=False):
     status: str  # IDLE, RUNNING, INTERRUPTED, COMPLETED, FAILED
     error: str | None
 
+    # Config
+    api_key: str | None
+    provider: str | None
+
     # Workflow 1 — Design Intent
     design_spec: dict[str, Any] | None
 
@@ -102,6 +106,8 @@ def create_initial_state(
         "current_agent": "intent_agent",
         "status": "RUNNING",
         "error": None,
+        "api_key": None,
+        "provider": None,
         "design_spec": None,
         "scene_summary": None,
         "research_results": [],

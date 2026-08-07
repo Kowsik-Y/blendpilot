@@ -43,11 +43,21 @@ def _record_event(state: BlendPilotState, agent_name: str, status: str, descript
     state["events"] = events
 
 
+def _get_llm_service(state: BlendPilotState) -> Any:
+    """Helper to instantiate LLMService with user-provided keys from state."""
+    from services.llm import LLMService
+    return LLMService(
+        api_key=state.get("api_key"),
+        provider=state.get("provider") or "openai"
+    )
+
+
+
 # ── Workflow 1: Intent Understanding Node ───────────────────
 async def node_intent(state: BlendPilotState) -> dict[str, Any]:
     """Parse user request into structured DesignSpec."""
     logger.info("[Node] Running Intent Agent")
-    agent = IntentAgent()
+    agent = IntentAgent(llm_service=_get_llm_service(state))
     spec = await agent.execute(
         user_prompt=state["user_prompt"],
         reference_images=state.get("reference_images", []),
@@ -90,7 +100,7 @@ async def node_research(state: BlendPilotState) -> dict[str, Any]:
 async def node_planning(state: BlendPilotState) -> dict[str, Any]:
     """Generate atomic, step-by-step DesignPlan."""
     logger.info("[Node] Running Planning Agent")
-    agent = PlanningAgent()
+    agent = PlanningAgent(llm_service=_get_llm_service(state))
     spec = DesignSpec.model_validate(state["design_spec"])
     scene = SceneSummary.model_validate(state["scene_summary"]) if state.get("scene_summary") else None
     plan = await agent.execute(spec=spec, scene=scene, research=state.get("research_results"))
@@ -181,7 +191,7 @@ async def node_geometry_repair(state: BlendPilotState, mcp_server: BlenderMCPSer
 async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
     """Evaluate rendered image with Vision model against design spec."""
     logger.info("[Node] Running Visual Critic Agent")
-    agent = VisualCriticAgent()
+    agent = VisualCriticAgent(llm_service=_get_llm_service(state))
     spec = DesignSpec.model_validate(state["design_spec"])
     preview = state.get("preview_image_path", "output/preview.png")
     revs = state.get("visual_revision_count", 0)

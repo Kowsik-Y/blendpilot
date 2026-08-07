@@ -258,8 +258,8 @@ export default function StudioPage() {
         </div>
 
         {/* Right Column: Unified Copilot Chatbox (All Prompts, Plans & Agents Flow Here) */}
-        <div className="lg:col-span-5 flex flex-col gap-3 min-w-0 h-full">
-          <div className="flex-1 min-h-[500px]">
+        <div className="lg:col-span-5 flex flex-col gap-3 min-w-0 h-full overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <CopilotChatbox
               assetSpec={assetSpec}
               onApplyAction={(action) => {
@@ -275,42 +275,7 @@ export default function StudioPage() {
             />
           </div>
 
-          {/* Production Export Badges */}
-          <Card className="bg-card/70 backdrop-blur-md border-border p-3 space-y-2 shrink-0">
-            <div className="text-xs font-semibold text-foreground flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <FileCode className="w-3.5 h-3.5 text-primary" />
-                Production Exports
-              </span>
-              <span className="text-[10px] text-muted-foreground">Blender 5.2</span>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[11px] h-7 border-border hover:border-cyan-500/50"
-                onClick={() => handleDownload("blend")}
-              >
-                .BLEND
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[11px] h-7 border-border hover:border-purple-500/50"
-                onClick={() => handleDownload("fbx")}
-              >
-                .FBX
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[11px] h-7 border-border hover:border-emerald-500/50"
-                onClick={() => handleDownload("glb")}
-              >
-                .GLB
-              </Button>
-            </div>
-          </Card>
+
         </div>
       </div>
 

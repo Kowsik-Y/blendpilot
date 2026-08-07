@@ -56,7 +56,7 @@ export function ThreeViewport({
 
     // 1. Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0d14);
+    scene.background = new THREE.Color(0xffffff);
     sceneRef.current = scene;
 
     // 2. Camera
@@ -113,7 +113,7 @@ export function ThreeViewport({
     scene.add(rimLight);
 
     // 6. Floor Grid & Shadow Catcher Plane
-    const gridHelper = new THREE.GridHelper(10, 20, 0x06b6d4, 0x1e293b);
+    const gridHelper = new THREE.GridHelper(10, 20, 0x0ea5e9, 0xe2e8f0);
     gridHelper.position.y = 0;
     scene.add(gridHelper);
 

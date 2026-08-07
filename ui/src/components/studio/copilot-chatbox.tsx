@@ -360,9 +360,9 @@ export function CopilotChatbox({
 
   return (
     <>
-      <Card className="bg-card/70 backdrop-blur-md border-border flex flex-col h-full overflow-hidden shadow-xl">
+      <Card className="bg-slate-900/80 backdrop-blur-2xl border-slate-700/50 flex flex-col h-full overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/5">
         {/* Header Bar with Store Connection & Key Config Dialog */}
-        <CardHeader className="p-3 pb-2 border-b border-border bg-card/40">
+        <CardHeader className="p-3 pb-2 border-b border-slate-700/50 bg-slate-800/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
@@ -372,72 +372,32 @@ export function CopilotChatbox({
                 <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   3D Copilot & 10 Agents
                 </CardTitle>
-                <div
-                  onClick={() => setKeyDialogOpen(true)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Click to configure API Key & Provider"
-                >
+                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-cyan-400" />
                   <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
                   <span>({llmModel})</span>
-                  {hasApiKey ? (
-                    <span className="text-emerald-400 font-mono text-[9px] flex items-center gap-0.5">
-                      • Key Active
-                    </span>
-                  ) : (
-                    <span className="text-amber-400 font-mono text-[9px] flex items-center gap-0.5 underline">
-                      • Set Key
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setKeyDialogOpen(true)}
-                className={`h-7 px-2 text-[11px] border-border gap-1 ${
-                  hasApiKey
-                    ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
-                    : "text-amber-400 border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
-                }`}
-                title="Configure LLM Provider & Key"
-              >
-                <Key className="w-3 h-3" />
-                <span>{hasApiKey ? "Key Linked" : "Set Key"}</span>
-              </Button>
-
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-auto">
-                <TabsList className="h-7 p-0.5 bg-muted/30">
-                  <TabsTrigger value="chat" className="text-[11px] h-6 px-2.5 data-[state=active]:bg-card">
-                    Chat & Stream
-                  </TabsTrigger>
-                  <TabsTrigger value="plan" className="text-[11px] h-6 px-2.5 data-[state=active]:bg-card flex items-center gap-1">
-                    <ListOrdered className="w-3 h-3 text-primary" />
-                    Plan
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
           </div>
         </CardHeader>
 
-        <CardContent className="p-3 flex-1 flex flex-col overflow-hidden">
+        <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
           {activeTab === "chat" ? (
             <>
               {/* Scrollable Messages + In-chat Timeline */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[440px]">
+              <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
                 {/* In-Chat 10-Agent Progress Card */}
                 {showProgressGrid && (
-                  <div className="my-2 p-3 rounded-2xl bg-card border border-border text-xs shadow-sm space-y-2">
-                    <div className="font-semibold text-foreground flex items-center justify-between">
+                  <div className="my-2 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/50 text-xs shadow-inner space-y-2">
+                    <div className="font-semibold text-slate-200 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <Cpu className="w-3.5 h-3.5 text-cyan-400" />
                         10-Agent Pipeline Execution
                       </span>
-                      <span className="text-[10px] text-muted-foreground font-mono">
+                      <span className="text-[10px] text-slate-400 font-mono">
                         {agentSteps.filter((s) => s.status === "done").length}/{agentSteps.length} Completed
                       </span>
                     </div>
@@ -446,12 +406,12 @@ export function CopilotChatbox({
                       {agentSteps.map((step) => (
                         <div
                           key={step.id}
-                          className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] transition-colors ${
+                          className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] transition-all duration-300 ${
                             step.status === "done"
-                              ? "bg-emerald-500/10 border-emerald-500/30 text-foreground font-medium"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-100 font-medium"
                               : step.status === "running"
-                              ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 animate-pulse font-medium"
-                              : "bg-muted/30 border-border/50 text-muted-foreground"
+                              ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300 animate-pulse font-medium shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                              : "bg-slate-800/40 border-slate-700/40 text-slate-500"
                           }`}
                         >
                           {step.status === "done" ? (
@@ -491,12 +451,12 @@ export function CopilotChatbox({
                       )}
 
                       <div
-                        className={`relative group max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
+                        className={`relative group max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed transition-all duration-300 ${
                           isUser
-                            ? "bg-primary text-primary-foreground rounded-tr-sm shadow-md font-medium"
+                            ? "bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-tr-sm shadow-lg shadow-cyan-900/30 font-medium border border-cyan-500/30"
                             : isAgent
-                            ? "bg-cyan-950/20 text-foreground border border-cyan-500/30 rounded-tl-sm shadow-sm"
-                            : "bg-card text-foreground border border-border rounded-tl-sm shadow-sm"
+                            ? "bg-slate-800/80 text-slate-100 border border-cyan-500/30 rounded-tl-sm shadow-md backdrop-blur-md"
+                            : "bg-slate-800/90 text-slate-200 border border-slate-700/60 rounded-tl-sm shadow-md backdrop-blur-md"
                         }`}
                       >
                         {/* Copy Action Button */}
@@ -552,62 +512,79 @@ export function CopilotChatbox({
                 )}
               </div>
 
-              {/* Chat Input Bar */}
-              <div className="pt-2 border-t border-border flex gap-1.5 items-center">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder="Ask Copilot (e.g. 'Make a sword', 'Add bevel', 'Explain UV')..."
-                  className="h-9 text-xs bg-background/50 border-border focus-visible:ring-primary"
-                  disabled={loading}
-                />
-                <Button
-                  size="sm"
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || loading}
-                  className="h-9 px-3 bg-primary text-primary-foreground"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </Button>
-              </div>
             </>
           ) : (
             /* Plan Inspector Tab */
-            <div className="flex-1 overflow-y-auto space-y-2 p-1 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="font-semibold text-foreground">Current 10-Agent Plan</span>
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 p-1 pr-2 text-xs [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-700/50">
+                <span className="font-semibold text-slate-200">Current 10-Agent Plan</span>
                 <Badge variant="outline" className="text-[10px]">
                   {currentPlan.length} Operations
                 </Badge>
               </div>
 
               {currentPlan.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground space-y-2">
+                <div className="text-center py-8 text-slate-400 space-y-2">
                   <ListOrdered className="w-8 h-8 mx-auto opacity-40" />
                   <p>No active plan generated yet.</p>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleSend("Generate Detailed Modeling Plan")}
-                    className="text-xs"
+                    className="text-xs border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 mt-2"
                   >
                     Generate Step-by-Step Plan
                   </Button>
                 </div>
               ) : (
                 currentPlan.map((step, idx) => (
-                  <div key={idx} className="p-2.5 rounded-xl border border-border bg-card/60 space-y-1">
-                    <div className="flex items-center justify-between font-medium text-foreground">
-                      <span>Step {step.step_number || idx + 1}: {step.operation}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">{step.agent || "Modeler"}</span>
+                  <div key={idx} className="p-2.5 rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm space-y-1 hover:bg-slate-800/60 transition-colors">
+                    <div className="flex items-center justify-between font-medium text-slate-200">
+                      <span className="text-cyan-400">Step {step.step_number || idx + 1}: <span className="text-slate-200">{step.operation}</span></span>
+                      <Badge variant="outline" className="text-[9px] border-slate-600 bg-slate-900/50 text-slate-400 font-mono">
+                        {step.agent || "Modeler"}
+                      </Badge>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">{step.description}</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">{step.description}</p>
                   </div>
                 ))
               )}
             </div>
           )}
+          </div>
+          {/* Chat Input Bar with Plan Toggle */}
+          <div className="p-3 border-t border-slate-700/50 bg-slate-900/80 backdrop-blur-md flex gap-2 items-center z-10 shrink-0">
+            <Button
+              size="sm"
+              variant={activeTab === "plan" ? "default" : "outline"}
+              onClick={() => setActiveTab(activeTab === "chat" ? "plan" : "chat")}
+              className={`h-9 px-2.5 transition-all duration-300 border-slate-600 hover:bg-slate-800 ${
+                activeTab === "plan" 
+                  ? "bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]" 
+                  : "bg-slate-800/80 text-slate-300"
+              }`}
+              title="Toggle Plan View"
+            >
+              <ListOrdered className="w-4 h-4" />
+              <span className="sr-only">Plan</span>
+            </Button>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              placeholder="Ask Copilot (e.g. 'Make a sword')..."
+              className="h-9 text-xs bg-slate-950/50 border-slate-700 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 text-slate-100 placeholder:text-slate-500 shadow-inner"
+              disabled={loading}
+            />
+            <Button
+              size="sm"
+              onClick={() => handleSend()}
+              disabled={!input.trim() || loading}
+              className="h-9 px-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-900/30 border-0 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -624,9 +601,10 @@ export function CopilotChatbox({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-foreground font-medium">Provider</Label>
+          <form onSubmit={(e) => { e.preventDefault(); handleSaveKeySettings(); }}>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-foreground font-medium">Provider</Label>
               <Select value={llmProvider} onValueChange={(val) => {
                 if (!val) return;
                 setLlmProvider(val);
@@ -666,6 +644,7 @@ export function CopilotChatbox({
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   placeholder={hasApiKey ? "••••••••••••••••••••••••" : "Paste sk-... or api key here"}
                   className="h-9 text-xs bg-background pr-9"
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
@@ -679,27 +658,28 @@ export function CopilotChatbox({
                 Keys are AES-256 encrypted server-side in your local database.
               </p>
             </div>
-          </div>
-
-          <DialogFooter className="flex items-center justify-between sm:justify-between">
-            <Link href="/settings" className="text-xs text-cyan-400 hover:underline">
-              Advanced Settings →
-            </Link>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setKeyDialogOpen(false)} className="text-xs">
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveKeySettings}
-                disabled={savingKey || (!apiKeyInput.trim() && !hasApiKey)}
-                className="text-xs bg-primary text-primary-foreground gap-1.5"
-              >
-                {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Save & Connect
-              </Button>
             </div>
-          </DialogFooter>
+            
+            <DialogFooter className="flex items-center justify-between sm:justify-between">
+              <Link href="/settings" className="text-xs text-cyan-400 hover:underline">
+                Advanced Settings →
+              </Link>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setKeyDialogOpen(false)} className="text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={savingKey || (!apiKeyInput.trim() && !hasApiKey)}
+                  className="text-xs bg-primary text-primary-foreground gap-1.5"
+                >
+                  {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Save & Connect
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
