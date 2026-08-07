@@ -1,0 +1,31 @@
+{
+  "asset_name": "barrel",
+  "timestamp": "2026-08-07T10:02:06.849040+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 0.5,
+    "depth": 0.5,
+    "height": 0.8
+  },
+  "triangle_budget": 4000,
+  "created_objects": [
+    "Barrel_Main",
+    "Barrel_Accent"
+  ],
+  "materials": [
+    "base_gray_pbr"
+  ],
+  "files": {
+    "blend": "output/barrel/barrel.blend",
+    "fbx": "output/barrel/barrel.fbx",
+    "glb": "output/barrel/barrel.glb",
+    "preview": "output/barrel/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "PASS",
+    "geometry_score": 1.0,
+    "visual_score": 0.88,
+    "approved": true
+  }
+}

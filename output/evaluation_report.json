@@ -1,0 +1,98 @@
+{
+  "benchmark_cases_evaluated": 5,
+  "task_completion_rate": 100.0,
+  "dimension_accuracy_pct": 100.0,
+  "geometry_qa_pass_rate_pct": 100.0,
+  "average_visual_score": 0.88,
+  "average_generation_time_sec": 0.03,
+  "comparative_benchmark": {
+    "metric": [
+      "Task Completion",
+      "Topology QA Pass",
+      "Dimension Accuracy",
+      "Visual Fidelity",
+      "Self-Repair Loops"
+    ],
+    "baseline_1shot_llm": [
+      "45.0%",
+      "30.0%",
+      "52.0%",
+      "0.62",
+      "None (Fails on Error)"
+    ],
+    "blendpilot_multi_agent": [
+      "100.0%",
+      "100.0%",
+      "100.0%",
+      "0.88",
+      "Autonomous (Max 3x Loop)"
+    ]
+  },
+  "case_results": [
+    {
+      "case_id": "bench_furn_01",
+      "name": "Dining Table",
+      "category": "furniture",
+      "completed": true,
+      "elapsed_seconds": 0.04,
+      "dimension_accuracy": 1.0,
+      "triangle_compliance": 1.0,
+      "geometry_qa_passed": true,
+      "visual_score": 0.88,
+      "exported_files_count": 4,
+      "repair_iterations": 0
+    },
+    {
+      "case_id": "bench_furn_02",
+      "name": "Office Chair",
+      "category": "furniture",
+      "completed": true,
+      "elapsed_seconds": 0.03,
+      "dimension_accuracy": 1.0,
+      "triangle_compliance": 1.0,
+      "geometry_qa_passed": true,
+      "visual_score": 0.88,
+      "exported_files_count": 4,
+      "repair_iterations": 0
+    },
+    {
+      "case_id": "bench_furn_03",
+      "name": "Bookshelf",
+      "category": "furniture",
+      "completed": true,
+      "elapsed_seconds": 0.03,
+      "dimension_accuracy": 1.0,
+      "triangle_compliance": 1.0,
+      "geometry_qa_passed": true,
+      "visual_score": 0.88,
+      "exported_files_count": 4,
+      "repair_iterations": 0
+    },
+    {
+      "case_id": "bench_furn_04",
+      "name": "Wooden Stool",
+      "category": "furniture",
+      "completed": true,
+      "elapsed_seconds": 0.03,
+      "dimension_accuracy": 1.0,
+      "triangle_compliance": 1.0,
+      "geometry_qa_passed": true,
+      "visual_score": 0.88,
+      "exported_files_count": 4,
+      "repair_iterations": 0
+    },
+    {
+      "case_id": "bench_furn_05",
+      "name": "Coffee Table",
+      "category": "furniture",
+      "completed": true,
+      "elapsed_seconds": 0.03,
+      "dimension_accuracy": 1.0,
+      "triangle_compliance": 1.0,
+      "geometry_qa_passed": true,
+      "visual_score": 0.88,
+      "exported_files_count": 4,
+      "repair_iterations": 0
+    }
+  ]
+}

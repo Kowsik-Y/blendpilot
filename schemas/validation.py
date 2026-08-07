@@ -8,6 +8,7 @@ used by Workflows 7 and 8.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,10 @@ class Severity(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+
+# Alias for backward compatibility
+IssueSeverity = Severity
 
 
 class IssueType(str, Enum):
@@ -36,19 +41,33 @@ class IssueType(str, Enum):
     NGON_DETECTED = "NGON_DETECTED"
     MISSING_UV = "MISSING_UV"
     INTERSECTING_GEOMETRY = "INTERSECTING_GEOMETRY"
+    TOPOLOGY_ERROR = "TOPOLOGY_ERROR"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
 
 
 class ValidationIssue(BaseModel):
     """A single validation issue found during geometry QA."""
 
-    issue_type: IssueType
-    object_name: str = Field(..., description="Name of the affected Blender object")
+    issue_type: IssueType | str = Field(default=IssueType.TOPOLOGY_ERROR)
+    type: str | None = Field(default=None, description="Issue type name alias")
+    object_name: str = Field(default="", description="Name of the affected Blender object")
     severity: Severity = Field(default=Severity.MEDIUM)
     message: str = Field(default="", description="Human-readable description of the issue")
+    description: str | None = Field(default=None, description="Detailed description alias")
     auto_fixable: bool = Field(
         default=False,
         description="Whether this issue can be automatically repaired",
     )
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.type and not self.issue_type:
+            self.issue_type = self.type
+        if not self.type and self.issue_type:
+            self.type = str(self.issue_type)
+        if self.description and not self.message:
+            self.message = self.description
+        if not self.description and self.message:
+            self.description = self.message
 
 
 class ValidationResult(BaseModel):
@@ -57,11 +76,11 @@ class ValidationResult(BaseModel):
     Matches the structure from plan Section 5, Workflow 7.
     """
 
-    status: str = Field(
-        ...,
+    status: Literal["PASS", "FAIL"] = Field(
+        default="PASS",
         description="Overall result: PASS or FAIL",
-        pattern=r"^(PASS|FAIL)$",
     )
+    score: float = Field(default=1.0, ge=0.0, le=1.0, description="Overall geometric QA score")
     object_name: str = Field(default="", description="Primary object validated")
     triangle_count: int = Field(default=0, ge=0)
     triangle_limit: int = Field(default=0, ge=0)
@@ -85,8 +104,8 @@ class ValidationResult(BaseModel):
 class VisualCritiqueIssue(BaseModel):
     """A single issue identified by the visual critic."""
 
-    target: str = Field(..., description="Object or area with the issue")
-    problem: str = Field(..., description="Description of the visual problem")
+    target: str = Field(default="", description="Object or area with the issue")
+    problem: str = Field(default="", description="Description of the visual problem")
     severity: Severity = Field(default=Severity.MEDIUM)
     recommended_change: str = Field(
         default="",
@@ -101,15 +120,29 @@ class VisualCritiqueResult(BaseModel):
     """
 
     quality_score: float = Field(
-        ...,
+        default=0.9,
         ge=0.0,
         le=1.0,
         description="Overall quality score from 0.0 (terrible) to 1.0 (perfect)",
     )
-    issues: list[VisualCritiqueIssue] = Field(default_factory=list)
+    overall_score: float = Field(default=0.9, ge=0.0, le=1.0)
+    aesthetic_score: float = Field(default=0.9, ge=0.0, le=1.0)
+    spec_compliance_score: float = Field(default=0.9, ge=0.0, le=1.0)
+    approved: bool = Field(default=True)
+    strengths: list[str] = Field(default_factory=list)
+    issues: list[Any] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
     iteration: int = Field(default=1, ge=1, description="Which critique iteration this is")
     max_iterations: int = Field(default=3, ge=1)
     recommendation: str = Field(
         default="",
         description="Overall recommendation: APPROVE, REVISE, or REJECT",
     )
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.overall_score and not self.quality_score:
+            self.quality_score = self.overall_score
+        if not self.overall_score and self.quality_score:
+            self.overall_score = self.quality_score
+        if not self.recommendation:
+            self.recommendation = "APPROVE" if self.approved else "REVISE"

@@ -1,0 +1,31 @@
+{
+  "asset_name": "table",
+  "timestamp": "2026-08-07T10:02:06.791391+00:00",
+  "target_platform": "Unity",
+  "style": "stylized",
+  "dimensions": {
+    "width": 1.2,
+    "depth": 0.8,
+    "height": 0.75
+  },
+  "triangle_budget": 8000,
+  "created_objects": [
+    "Table_Main",
+    "Table_Accent"
+  ],
+  "materials": [
+    "wood_grain"
+  ],
+  "files": {
+    "blend": "output/table/table.blend",
+    "fbx": "output/table/table.fbx",
+    "glb": "output/table/table.glb",
+    "preview": "output/table/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "PASS",
+    "geometry_score": 1.0,
+    "visual_score": 0.88,
+    "approved": true
+  }
+}

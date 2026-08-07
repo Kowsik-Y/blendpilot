@@ -1,46 +1,202 @@
-{
-  "version": "1.0",
-  "description": "BlendPilot AI evaluation benchmark — 20 prompts across 4 categories",
-  "categories": [
-    {
-      "name": "furniture",
-      "prompts": [
-        "Create a simple wooden dining table with four legs",
-        "Create a modern office chair with armrests",
-        "Create a minimalist bookshelf with three shelves",
-        "Create a bedside nightstand with a single drawer",
-        "Create a low-poly wooden stool"
-      ]
-    },
-    {
-      "name": "game_props",
-      "prompts": [
-        "Create a wooden barrel for a medieval game",
-        "Create a treasure chest with a hinged lid",
-        "Create a wooden crate with metal reinforcements",
-        "Create a simple stone well",
-        "Create a wooden door with iron hinges"
-      ]
-    },
-    {
-      "name": "sci_fi",
-      "prompts": [
-        "Create a low-poly sci-fi supply crate with emissive strips",
-        "Create a futuristic control panel with buttons",
-        "Create a sci-fi power cell container",
-        "Create a space station cargo pod",
-        "Create a cyberpunk vending machine"
-      ]
-    },
-    {
-      "name": "mechanical",
-      "prompts": [
-        "Create a simple gear wheel",
-        "Create a bolt and nut assembly",
-        "Create a pipe connector junction",
-        "Create a mechanical lever switch",
-        "Create a simple piston cylinder"
-      ]
-    }
-  ]
-}
+[
+  {
+    "id": "bench_furn_01",
+    "category": "furniture",
+    "name": "Dining Table",
+    "prompt": "Create a wooden dining table for Unity. Dimensions: 1.2m x 0.8m x 0.75m. Triangle limit: 5,000. Stylized wood finish.",
+    "target_dimensions": [1.2, 0.8, 0.75],
+    "triangle_limit": 5000,
+    "target_platform": "Unity",
+    "style": "stylized"
+  },
+  {
+    "id": "bench_furn_02",
+    "category": "furniture",
+    "name": "Office Chair",
+    "prompt": "Create a modern office chair. Dimensions: 0.45m x 0.45m x 0.85m. Triangle budget: 8,000 triangles. Dark matte materials.",
+    "target_dimensions": [0.45, 0.45, 0.85],
+    "triangle_limit": 8000,
+    "target_platform": "Unity",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_furn_03",
+    "category": "furniture",
+    "name": "Bookshelf",
+    "prompt": "Create a vertical bookshelf for Unreal Engine. Dimensions: 0.8m x 0.3m x 1.6m. Under 6,000 triangles. Dark wood grain.",
+    "target_dimensions": [0.8, 0.3, 1.6],
+    "triangle_limit": 6000,
+    "target_platform": "Unreal",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_furn_04",
+    "category": "furniture",
+    "name": "Wooden Stool",
+    "prompt": "Create a simple four-legged wooden stool. Dimensions: 0.35m x 0.35m x 0.45m. Under 3,000 triangles.",
+    "target_dimensions": [0.35, 0.35, 0.45],
+    "triangle_limit": 3000,
+    "target_platform": "Unity",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_furn_05",
+    "category": "furniture",
+    "name": "Coffee Table",
+    "prompt": "Create a low coffee table for WebGL. Dimensions: 1.0m x 0.6m x 0.45m. Triangle limit: 4,500. Glass and metal trims.",
+    "target_dimensions": [1.0, 0.6, 0.45],
+    "triangle_limit": 4500,
+    "target_platform": "WebGL",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_prop_01",
+    "category": "game_props",
+    "name": "Wooden Barrel",
+    "prompt": "Create a medieval wooden barrel with metal hoops. Dimensions: 0.5m x 0.5m x 0.8m. Triangle budget: 4,000.",
+    "target_dimensions": [0.5, 0.5, 0.8],
+    "triangle_limit": 4000,
+    "target_platform": "Unity",
+    "style": "medieval"
+  },
+  {
+    "id": "bench_prop_02",
+    "category": "game_props",
+    "name": "Street Lamp",
+    "prompt": "Create an outdoor street lamp pole. Dimensions: 0.4m x 0.4m x 2.8m. Under 6,500 triangles. Metallic body with glowing lamp.",
+    "target_dimensions": [0.4, 0.4, 2.8],
+    "triangle_limit": 6500,
+    "target_platform": "Unity",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_prop_03",
+    "category": "game_props",
+    "name": "Road Barrier",
+    "prompt": "Create a concrete road barrier for Unreal Engine. Dimensions: 1.5m x 0.3m x 0.8m. Under 3,500 triangles.",
+    "target_dimensions": [1.5, 0.3, 0.8],
+    "triangle_limit": 3500,
+    "target_platform": "Unreal",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_prop_04",
+    "category": "game_props",
+    "name": "Treasure Chest",
+    "prompt": "Create a fantasy treasure chest with curved lid. Dimensions: 0.8m x 0.5m x 0.5m. Under 7,000 triangles.",
+    "target_dimensions": [0.8, 0.5, 0.5],
+    "triangle_limit": 7000,
+    "target_platform": "Unity",
+    "style": "medieval"
+  },
+  {
+    "id": "bench_prop_05",
+    "category": "game_props",
+    "name": "Trash Can",
+    "prompt": "Create an urban steel trash can. Dimensions: 0.4m x 0.4m x 0.7m. Under 3,000 triangles.",
+    "target_dimensions": [0.4, 0.4, 0.7],
+    "triangle_limit": 3000,
+    "target_platform": "Unity",
+    "style": "low-poly"
+  },
+  {
+    "id": "bench_scifi_01",
+    "category": "sci_fi",
+    "name": "Sci-Fi Supply Crate",
+    "prompt": "Create a low-poly sci-fi supply crate for Unity. Dimensions: 1.0m x 0.7m x 0.6m. Under 8,000 triangles. Dark metal with blue emissive strips.",
+    "target_dimensions": [1.0, 0.7, 0.6],
+    "triangle_limit": 8000,
+    "target_platform": "Unity",
+    "style": "sci-fi"
+  },
+  {
+    "id": "bench_scifi_02",
+    "category": "sci_fi",
+    "name": "Energy Pylon",
+    "prompt": "Create a sci-fi energy pylon tower. Dimensions: 0.6m x 0.6m x 2.2m. Under 9,000 triangles. Glowing core.",
+    "target_dimensions": [0.6, 0.6, 2.2],
+    "triangle_limit": 9000,
+    "target_platform": "Unreal",
+    "style": "sci-fi"
+  },
+  {
+    "id": "bench_scifi_03",
+    "category": "sci_fi",
+    "name": "Hologram Pedestal",
+    "prompt": "Create a futuristic hologram emitter pedestal. Dimensions: 0.7m x 0.7m x 1.0m. Under 7,500 triangles.",
+    "target_dimensions": [0.7, 0.7, 1.0],
+    "triangle_limit": 7500,
+    "target_platform": "WebGL",
+    "style": "sci-fi"
+  },
+  {
+    "id": "bench_scifi_04",
+    "category": "sci_fi",
+    "name": "Ventilation Air Duct",
+    "prompt": "Create a modular sci-fi air duct section. Dimensions: 1.2m x 0.8m x 0.8m. Under 5,000 triangles.",
+    "target_dimensions": [1.2, 0.8, 0.8],
+    "triangle_limit": 5000,
+    "target_platform": "Unity",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_scifi_05",
+    "category": "sci_fi",
+    "name": "Sci-Fi Blast Door",
+    "prompt": "Create a heavy sci-fi blast door. Dimensions: 1.2m x 0.2m x 2.4m. Under 10,000 triangles. Metallic with warning stripes.",
+    "target_dimensions": [1.2, 0.2, 2.4],
+    "triangle_limit": 10000,
+    "target_platform": "Unreal",
+    "style": "sci-fi"
+  },
+  {
+    "id": "bench_mech_01",
+    "category": "mechanical",
+    "name": "Piston Cylinder",
+    "prompt": "Create a hydraulic piston cylinder assembly. Dimensions: 0.3m x 0.3m x 0.8m. Under 5,500 triangles.",
+    "target_dimensions": [0.3, 0.3, 0.8],
+    "triangle_limit": 5500,
+    "target_platform": "Unity",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_mech_02",
+    "category": "mechanical",
+    "name": "Gearbox Enclosure",
+    "prompt": "Create an industrial gearbox enclosure. Dimensions: 0.5m x 0.4m x 0.35m. Under 6,000 triangles.",
+    "target_dimensions": [0.5, 0.4, 0.35],
+    "triangle_limit": 6000,
+    "target_platform": "Unity",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_mech_03",
+    "category": "mechanical",
+    "name": "Robot Wheel",
+    "prompt": "Create a heavy-duty robot tire and rim wheel. Dimensions: 0.4m x 0.4m x 0.2m. Under 4,500 triangles.",
+    "target_dimensions": [0.4, 0.4, 0.2],
+    "triangle_limit": 4500,
+    "target_platform": "Unreal",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_mech_04",
+    "category": "mechanical",
+    "name": "Conveyor Roller",
+    "prompt": "Create a factory conveyor roller segment. Dimensions: 0.8m x 0.2m x 0.2m. Under 3,500 triangles.",
+    "target_dimensions": [0.8, 0.2, 0.2],
+    "triangle_limit": 3500,
+    "target_platform": "Unity",
+    "style": "industrial"
+  },
+  {
+    "id": "bench_mech_05",
+    "category": "mechanical",
+    "name": "Pipe Valve",
+    "prompt": "Create a plumbing pipe valve with handwheel. Dimensions: 0.5m x 0.3m x 0.5m. Under 6,000 triangles.",
+    "target_dimensions": [0.5, 0.3, 0.5],
+    "triangle_limit": 6000,
+    "target_platform": "Unity",
+    "style": "industrial"
+  }
+]

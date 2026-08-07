@@ -232,16 +232,28 @@ def render_preview(
     os.makedirs(out_dir, exist_ok=True)
 
     # Configure render settings
-    scene.render.engine = engine
+    try:
+        scene.render.engine = engine
+    except TypeError:
+        # Fallback to standard EEVEE or CYCLES if engine name differs across versions
+        if "EEVEE" in engine:
+            scene.render.engine = "BLENDER_EEVEE"
+        else:
+            scene.render.engine = "CYCLES"
+
     scene.render.resolution_x = resolution_x
     scene.render.resolution_y = resolution_y
     scene.render.resolution_percentage = 100
 
     # Set samples
-    if engine == "CYCLES":
-        scene.cycles.samples = samples
-    else:
-        scene.eevee.taa_render_samples = samples
+    if scene.render.engine == "CYCLES":
+        if hasattr(scene, "cycles"):
+            scene.cycles.samples = samples
+    elif hasattr(scene, "eevee"):
+        if hasattr(scene.eevee, "taa_render_samples"):
+            scene.eevee.taa_render_samples = samples
+        elif hasattr(scene.eevee, "max_samples"):
+            scene.eevee.max_samples = samples
 
     # Output format
     scene.render.image_settings.file_format = "PNG"

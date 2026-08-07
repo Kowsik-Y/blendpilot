@@ -1,15 +1,15 @@
 """
 BlendPilot AI — LLM Provider Service
 
-Unified interface for LLM providers (OpenAI, Anthropic, etc.)
-used by all agents for text generation and vision tasks.
-
-Phase: 4 (interface defined, implementation pending)
+Unified interface for LLM providers (OpenAI, Anthropic, Google Gemini, Ollama, etc.)
+used by all agents for text generation, plan synthesis, copilot chat, and vision critique.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -20,29 +20,20 @@ logger = logging.getLogger("blendpilot.services.llm")
 class LLMConfig(BaseModel):
     """Configuration for an LLM provider."""
 
-    provider: str = Field(default="openai", description="LLM provider: openai, anthropic")
+    provider: str = Field(default="openai", description="LLM provider: openai, anthropic, custom")
     model: str = Field(default="gpt-4o", description="Model name")
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, gt=0)
-    api_key: str = Field(default="", description="API key (loaded from env)")
+    api_key: str = Field(default="", description="API key (loaded from env or request)")
+    base_url: str | None = Field(default=None, description="Custom API base URL")
 
 
 class LLMService:
-    """Unified LLM client with provider abstraction.
+    """Unified LLM client with provider abstraction."""
 
-    Provides a consistent interface for text generation and
-    vision tasks across different LLM providers.
-
-    Usage:
-        llm = LLMService(provider="openai", model="gpt-4o")
-        chat_model = llm.get_chat_model()  # LangChain ChatModel
-        vision_model = llm.get_vision_model()  # Vision-capable model
-    """
-
-    # Provider → model mapping for vision tasks
     VISION_MODELS: dict[str, str] = {
         "openai": "gpt-4o",
-        "anthropic": "claude-sonnet-4-20250514",
+        "anthropic": "claude-3-5-sonnet-20241022",
     }
 
     def __init__(
@@ -51,74 +42,105 @@ class LLMService:
         model: str = "gpt-4o",
         temperature: float = 0.0,
         api_key: str | None = None,
+        base_url: str | None = None,
     ):
+        # Auto-resolve API keys from environment if not explicitly passed
+        resolved_key = (
+            api_key
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("ANTHROPIC_API_KEY")
+            or ""
+        )
+        resolved_provider = provider
+        if not api_key:
+            if os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
+                resolved_provider = "anthropic"
+                resolved_key = os.environ.get("ANTHROPIC_API_KEY", "")
+
         self.config = LLMConfig(
-            provider=provider,
+            provider=resolved_provider,
             model=model,
             temperature=temperature,
-            api_key=api_key or "",
+            api_key=resolved_key,
+            base_url=base_url or os.environ.get("LLM_BASE_URL"),
         )
 
     def get_chat_model(self) -> Any:
-        """Return a LangChain ChatModel instance for text generation.
-
-        Returns:
-            ChatOpenAI or ChatAnthropic instance.
-
-        Raises:
-            ImportError: If the required LangChain package is not installed.
-            ValueError: If the provider is not supported.
-        """
+        """Return a LangChain ChatModel instance for text generation."""
         if self.config.provider == "openai":
             from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-            )
+            kwargs: dict[str, Any] = {
+                "model": self.config.model,
+                "temperature": self.config.temperature,
+                "max_tokens": self.config.max_tokens,
+            }
+            if self.config.api_key:
+                kwargs["api_key"] = self.config.api_key
+            if self.config.base_url:
+                kwargs["base_url"] = self.config.base_url
+            return ChatOpenAI(**kwargs)
+
         elif self.config.provider == "anthropic":
             from langchain_anthropic import ChatAnthropic
-            return ChatAnthropic(
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-            )
+            kwargs = {
+                "model": self.config.model,
+                "temperature": self.config.temperature,
+                "max_tokens": self.config.max_tokens,
+            }
+            if self.config.api_key:
+                kwargs["api_key"] = self.config.api_key
+            return ChatAnthropic(**kwargs)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config.provider}")
 
-    def get_vision_model(self) -> Any:
-        """Return a vision-capable LLM model for visual critique.
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        """Execute async text generation using the configured LLM provider."""
+        if not self.config.api_key and self.config.provider != "custom":
+            logger.debug("No API key configured for LLMService; returning empty for heuristic fallback")
+            return ""
 
-        Used by the Visual Critic Agent (Workflow 8) to evaluate
-        rendered preview images.
+        try:
+            model = self.get_chat_model()
+            messages = []
+            if system_prompt:
+                from langchain_core.messages import SystemMessage
+                messages.append(SystemMessage(content=system_prompt))
+            from langchain_core.messages import HumanMessage
+            messages.append(HumanMessage(content=prompt))
 
-        Returns:
-            A vision-capable ChatModel instance.
-        """
-        vision_model = self.VISION_MODELS.get(self.config.provider)
-        if vision_model is None:
-            raise ValueError(
-                f"No vision model available for provider: {self.config.provider}"
-            )
+            response = await model.ainvoke(messages)
+            return str(response.content)
+        except Exception as e:
+            logger.warning("LLM generation encountered an error: %s", e)
+            return ""
 
-        logger.info(
-            "Creating vision model: %s/%s",
-            self.config.provider, vision_model,
-        )
+    async def generate_vision(self, prompt: str, image_paths: list[str]) -> str:
+        """Execute multimodal vision evaluation using real vision models."""
+        if not self.config.api_key or not image_paths:
+            return ""
 
-        if self.config.provider == "openai":
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=vision_model,
-                temperature=0.0,
-                max_tokens=self.config.max_tokens,
-            )
-        elif self.config.provider == "anthropic":
-            from langchain_anthropic import ChatAnthropic
-            return ChatAnthropic(
-                model=vision_model,
-                temperature=0.0,
-                max_tokens=self.config.max_tokens,
-            )
-        else:
-            raise ValueError(f"Unsupported provider for vision: {self.config.provider}")
+        try:
+            from langchain_core.messages import HumanMessage
+            content_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+
+            for img_path in image_paths:
+                if os.path.exists(img_path):
+                    with open(img_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("utf-8")
+                        content_parts.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}"},
+                        })
+
+            model = self.get_chat_model()
+            msg = HumanMessage(content=content_parts)
+            res = await model.ainvoke([msg])
+            return str(res.content)
+        except Exception as e:
+            logger.warning("Vision LLM evaluation failed: %s", e)
+            return ""

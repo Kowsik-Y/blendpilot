@@ -61,15 +61,26 @@ def create_red_table(
     """
     import bpy  # type: ignore[import-not-found]
 
-    from blendpilot.core.materials import assign_material, create_material
-    from blendpilot.core.modifiers import add_modifier
-    from blendpilot.core.objects import create_primitive, delete_object
-    from blendpilot.core.project import export_asset, save_project
-    from blendpilot.core.rendering import (
-        render_preview as do_render,
-        setup_preview_camera,
-        setup_studio_lighting,
-    )
+    try:
+        from core.materials import assign_material, create_material
+        from core.modifiers import add_modifier
+        from core.objects import create_primitive, delete_object
+        from core.project import export_asset, save_project
+        from core.rendering import (
+            render_preview as do_render,
+            setup_preview_camera,
+            setup_studio_lighting,
+        )
+    except ImportError:
+        from blendpilot.core.materials import assign_material, create_material
+        from blendpilot.core.modifiers import add_modifier
+        from blendpilot.core.objects import create_primitive, delete_object
+        from blendpilot.core.project import export_asset, save_project
+        from blendpilot.core.rendering import (
+            render_preview as do_render,
+            setup_preview_camera,
+            setup_studio_lighting,
+        )
 
     results: dict = {"steps": []}
     os.makedirs(output_dir, exist_ok=True)
