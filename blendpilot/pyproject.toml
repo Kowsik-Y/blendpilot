@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "schemas*", "graph*", "agents*", "services*", "backend*", "blender_addon*", "mcp_servers*", "prompts*", "ui*", "evaluation*"]
+
+[project]
+name = "blendpilot"
+version = "0.1.0"
+description = "A Self-Correcting Agentic AI Copilot for Blender"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "BlendPilot Team"}
+]
+
+dependencies = [
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5",
+]
+# Phase 2+ dependencies (not needed yet)
+bridge = [
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "httpx>=0.24",
+]
+agents = [
+    "langchain>=0.2",
+    "langgraph>=0.0.30",
+    "openai>=1.0",
+]
+ui = [
+    "streamlit>=1.28",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

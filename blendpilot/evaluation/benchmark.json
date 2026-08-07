@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "description": "BlendPilot AI evaluation benchmark — 20 prompts across 4 categories",
+  "categories": [
+    {
+      "name": "furniture",
+      "prompts": [
+        "Create a simple wooden dining table with four legs",
+        "Create a modern office chair with armrests",
+        "Create a minimalist bookshelf with three shelves",
+        "Create a bedside nightstand with a single drawer",
+        "Create a low-poly wooden stool"
+      ]
+    },
+    {
+      "name": "game_props",
+      "prompts": [
+        "Create a wooden barrel for a medieval game",
+        "Create a treasure chest with a hinged lid",
+        "Create a wooden crate with metal reinforcements",
+        "Create a simple stone well",
+        "Create a wooden door with iron hinges"
+      ]
+    },
+    {
+      "name": "sci_fi",
+      "prompts": [
+        "Create a low-poly sci-fi supply crate with emissive strips",
+        "Create a futuristic control panel with buttons",
+        "Create a sci-fi power cell container",
+        "Create a space station cargo pod",
+        "Create a cyberpunk vending machine"
+      ]
+    },
+    {
+      "name": "mechanical",
+      "prompts": [
+        "Create a simple gear wheel",
+        "Create a bolt and nut assembly",
+        "Create a pipe connector junction",
+        "Create a mechanical lever switch",
+        "Create a simple piston cylinder"
+      ]
+    }
+  ]
+}
