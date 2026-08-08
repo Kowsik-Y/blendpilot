@@ -57,7 +57,7 @@ def build_blendpilot_graph(
     workflow.add_node("geometry_repair", node_geometry_repair)
     workflow.add_node("visual_critic", node_visual_critic)
     workflow.add_node("visual_repair", node_visual_repair)
-    workflow.add_node("human_feedback", node_human_feedback)
+    workflow.add_node("human_review", node_human_feedback)
     workflow.add_node("export", node_export)
 
     # ── Add Sequential Edges ────────────────────────────────────
@@ -86,7 +86,7 @@ def build_blendpilot_graph(
         "visual_critic",
         route_after_visual_critic,
         {
-            "human_feedback": "human_feedback",
+            "human_review": "human_review",
             "visual_repair": "visual_repair",
         },
     )
@@ -94,7 +94,7 @@ def build_blendpilot_graph(
 
     # 3. Human Review & Feedback Branch
     workflow.add_conditional_edges(
-        "human_feedback",
+        "human_review",
         route_after_human_feedback,
         {
             "export": "export",
@@ -106,7 +106,7 @@ def build_blendpilot_graph(
     workflow.add_edge("export", END)
 
     # Compile with optional checkpointer and human interrupt
-    interrupt_before = ["human_feedback"] if enable_human_interrupt else []
+    interrupt_before = ["human_review"] if enable_human_interrupt else []
     cp = checkpointer or get_checkpointer()
 
     app = workflow.compile(

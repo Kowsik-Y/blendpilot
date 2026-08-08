@@ -139,6 +139,72 @@ class MockMaterialList:
         return len(self._materials)
 
 
+class MockObjectsCollection:
+    def __init__(self, objects_dict, register_fn, remove_fn):
+        self._dict = objects_dict
+        self._register = register_fn
+        self._remove = remove_fn
+
+    def get(self, name, default=None):
+        return self._dict.get(name, default)
+
+    def keys(self):
+        return list(self._dict.keys())
+
+    def __getitem__(self, name):
+        return self._dict[name]
+
+    def __contains__(self, name):
+        return name in self._dict
+
+    def __iter__(self):
+        return iter(self._dict.values())
+
+    def new(self, name, data=None):
+        obj = MockBlenderObject(name)
+        self._register(obj)
+        return obj
+
+    def remove(self, obj, do_unlink=True):
+        name = obj.name if hasattr(obj, 'name') else str(obj)
+        self._remove(name)
+
+
+class MockMaterialsCollection:
+    def __init__(self, materials_dict):
+        self._dict = materials_dict
+
+    def get(self, name, default=None):
+        return self._dict.get(name, default)
+
+    def __getitem__(self, name):
+        return self._dict[name]
+
+    def __contains__(self, name):
+        return name in self._dict
+
+    def __iter__(self):
+        return iter(self._dict.values())
+
+    def new(self, name):
+        mat = MagicMock()
+        mat.name = name
+        mat.use_nodes = True
+        mat.node_tree = MagicMock()
+        node = MagicMock()
+        node.type = "BSDF_PRINCIPLED"
+        node.inputs = {
+            "Base Color": MagicMock(default_value=(0.8, 0.8, 0.8, 1.0)),
+            "Metallic": MagicMock(default_value=0.0),
+            "Roughness": MagicMock(default_value=0.5),
+            "Emission Color": MagicMock(default_value=(0.0, 0.0, 0.0, 1.0)),
+            "Emission Strength": MagicMock(default_value=0.0),
+        }
+        mat.node_tree.nodes = [node]
+        self._dict[name] = mat
+        return mat
+
+
 def create_mock_bpy():
     """Create a comprehensive bpy mock module."""
     bpy = MagicMock(spec=[])
@@ -148,26 +214,12 @@ def create_mock_bpy():
     materials_dict = {}
 
     bpy.data = MagicMock()
-    bpy.data.objects = MagicMock()
-    bpy.data.objects.get = lambda name: objects_dict.get(name)
-    bpy.data.objects.keys = lambda: list(objects_dict.keys())
-    bpy.data.objects.__getitem__ = lambda _, name: objects_dict[name]
-    bpy.data.objects.__contains__ = lambda _, name: name in objects_dict
-
-    bpy.data.materials = MagicMock()
-    bpy.data.materials.get = lambda name: materials_dict.get(name)
-    bpy.data.materials.__getitem__ = lambda _, name: materials_dict[name]
-
-    def new_material(name):
-        mat = MagicMock()
-        mat.name = name
-        mat.use_nodes = False
-        mat.node_tree = MagicMock()
-        mat.node_tree.nodes = MockNodeCollection()
-        materials_dict[name] = mat
-        return mat
-
-    bpy.data.materials.new = new_material
+    bpy.data.objects = MockObjectsCollection(
+        objects_dict,
+        lambda obj: _register_object(obj),
+        lambda name: _remove_object(name)
+    )
+    bpy.data.materials = MockMaterialsCollection(materials_dict)
 
     bpy.data.cameras = MagicMock()
     bpy.data.cameras.new = lambda name: MagicMock(name=name)

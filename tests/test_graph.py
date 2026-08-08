@@ -40,7 +40,7 @@ def test_conditional_routing_geometry_qa():
 
 def test_conditional_routing_visual_critic():
     state_approved: BlendPilotState = {"visual_qa_approved": True, "visual_revision_count": 0}
-    assert route_after_visual_critic(state_approved) == "human_feedback"
+    assert route_after_visual_critic(state_approved) == "human_review"
 
     state_needs_work: BlendPilotState = {"visual_qa_approved": False, "visual_revision_count": 0, "max_visual_revisions": 3}
     assert route_after_visual_critic(state_needs_work) == "visual_repair"

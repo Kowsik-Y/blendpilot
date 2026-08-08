@@ -32,15 +32,15 @@ def route_after_geometry_qa(
 
 def route_after_visual_critic(
     state: BlendPilotState,
-) -> Literal["human_feedback", "visual_repair"]:
+) -> Literal["human_review", "visual_repair"]:
     """Route based on visual critique score and maximum aesthetic revision count."""
     approved = state.get("visual_qa_approved", True)
     rev_count = state.get("visual_revision_count", 0)
     max_revs = state.get("max_visual_revisions", 3)
 
     if approved or rev_count >= max_revs:
-        logger.info("[Route] Visual critique approved or max revisions reached (%d/%d) -> human_feedback", rev_count, max_revs)
-        return "human_feedback"
+        logger.info("[Route] Visual critique approved or max revisions reached (%d/%d) -> human_review", rev_count, max_revs)
+        return "human_review"
 
     logger.info("[Route] Visual critique requires aesthetic refinement -> visual_repair (attempt %d/%d)", rev_count + 1, max_revs)
     return "visual_repair"

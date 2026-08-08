@@ -1,6 +1,6 @@
 {
   "asset_name": "table",
-  "timestamp": "2026-08-08T03:21:59.185064+00:00",
+  "timestamp": "2026-08-08T04:58:19.372132+00:00",
   "target_platform": "Unity",
   "style": "stylized",
   "dimensions": {
@@ -9,21 +9,15 @@
     "height": 0.75
   },
   "triangle_budget": 8000,
-  "created_objects": [
-    "Table_Main",
-    "Table_Leg_1",
-    "Table_Leg_2",
-    "Table_Leg_3",
-    "Table_Leg_4"
-  ],
+  "created_objects": [],
   "materials": [
     "wood_grain"
   ],
   "files": {
-    "blend": "output/table/table.blend",
-    "fbx": "output/table/table.fbx",
-    "glb": "output/table/table.glb",
-    "preview": "output/table/preview.png"
+    "blend": "output\\table\\table.blend",
+    "fbx": "output\\table\\table.fbx",
+    "glb": "output\\table\\table.glb",
+    "preview": "output\\table\\preview.png"
   },
   "quality_assurance": {
     "geometry_status": "PASS",
