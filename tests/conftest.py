@@ -58,7 +58,8 @@ class MockBlenderObject:
     """Mock of a Blender object for testing."""
 
     def __init__(self, name="Object", obj_type="MESH"):
-        self.name = name
+        self._name = name
+        self._objects_dict = None
         self.type = obj_type
         self.location = MockVector((0.0, 0.0, 0.0))
         self.rotation_euler = MockVector((0.0, 0.0, 0.0))
@@ -70,6 +71,19 @@ class MockBlenderObject:
         self.constraints = []
         self.data = MockMeshData()
         self._visible = True
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, new_val: str) -> None:
+        old_val = getattr(self, "_name", None)
+        self._name = new_val
+        if getattr(self, "_objects_dict", None) is not None:
+            if old_val in self._objects_dict:
+                del self._objects_dict[old_val]
+            self._objects_dict[new_val] = self
 
     def visible_get(self):
         return self._visible
@@ -156,6 +170,7 @@ def create_mock_bpy():
 
     def _new_object(name, data=None):
         obj = MockBlenderObject(name)
+        obj._objects_dict = objects_dict
         objects_dict[name] = obj
         scene.objects = list(objects_dict.values())
         return obj
@@ -201,6 +216,7 @@ def create_mock_bpy():
 
     # --- bpy.context ---
     active_obj = MockBlenderObject("DefaultCube")
+    active_obj._objects_dict = objects_dict
     objects_dict["DefaultCube"] = active_obj
 
     bpy.context = MagicMock()
@@ -228,12 +244,27 @@ def create_mock_bpy():
     bpy.ops.export_scene.gltf = MagicMock()
 
     # Primitive creation operators
+    def _make_primitive_add_mock(prim_name):
+        def _add_prim(*args, **kwargs):
+            if getattr(bpy.context, "active_object", None) is None:
+                return {"FINISHED"}
+            # Create a new MockBlenderObject
+            new_obj = MockBlenderObject(name=prim_name.capitalize())
+            new_obj._objects_dict = objects_dict
+            objects_dict[new_obj.name] = new_obj
+            scene.objects = list(objects_dict.values())
+            bpy.context.active_object = new_obj
+            bpy.context.view_layer.objects.active = new_obj
+            return {"FINISHED"}
+        return _add_prim
+
     for prim in ["cube", "uv_sphere", "cylinder", "plane", "cone", "torus", "ico_sphere"]:
         op = getattr(bpy.ops.mesh, f"primitive_{prim}_add")
-        op.return_value = {"FINISHED"}
+        op.side_effect = _make_primitive_add_mock(prim)
 
     # Helper to register a new object in the mock
     def _register_object(obj):
+        obj._objects_dict = objects_dict
         objects_dict[obj.name] = obj
         bpy.context.active_object = obj
         bpy.context.view_layer.objects.active = obj
@@ -291,6 +322,10 @@ def mock_bpy():
     This fixture ensures that `import bpy` works outside Blender
     and provides a controllable mock environment.
     """
+    for m in list(sys.modules.keys()):
+        if m.startswith("core") or m.startswith("agents"):
+            sys.modules.pop(m, None)
+
     mock = create_mock_bpy()
 
     # Also mock mathutils and bmesh
@@ -310,3 +345,6 @@ def mock_bpy():
     sys.modules.pop("bpy", None)
     sys.modules.pop("mathutils", None)
     sys.modules.pop("bmesh", None)
+    for m in list(sys.modules.keys()):
+        if m.startswith("core") or m.startswith("agents"):
+            sys.modules.pop(m, None)

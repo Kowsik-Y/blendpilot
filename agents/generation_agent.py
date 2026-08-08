@@ -228,12 +228,12 @@ class GenerationAgent:
             obj_name = params.get("object_name") or step.target
             mod_type = params.get("modifier_type") or "BEVEL"
             name = params.get("name") or "Bevel"
-            props = params.get("properties")
+            props = params.get("properties") or params.get("params")
             return core.modifiers.add_modifier(
                 object_name=obj_name,
                 modifier_type=mod_type,
-                name=name,
-                properties=props,
+                modifier_name=name,
+                params=props,
             )
 
         elif op == "apply_modifier":

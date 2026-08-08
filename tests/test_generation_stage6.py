@@ -87,8 +87,8 @@ async def test_generation_agent_mapping_to_core():
         mock_add_mod.assert_called_once_with(
             object_name="tabletop",
             modifier_type="BEVEL",
-            name="Bevel",
-            properties=None,
+            modifier_name="Bevel",
+            params=None,
         )
         mock_render.assert_called_once_with(
             output_path="output/table/preview.png",

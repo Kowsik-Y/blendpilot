@@ -1,29 +1,26 @@
 """
 BlendPilot AI — Command Line Interface (CLI)
 
-Interactive terminal runner for the 10-agent autonomous 3D modeling pipeline.
-
-Usage:
-    python cli.py "Create a low-poly sci-fi supply crate for Unity. Dimensions: 1.0m x 0.7m x 0.6m."
-    python cli.py --benchmark
-    python cli.py --interactive
+Synchronous modeling pipeline runner for Stage 7.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
+import os
 import sys
 import time
+from typing import Any
 
-from evaluation.metrics import run_full_benchmark
-from graph.graph import run_pipeline
+from agents.intent_agent import IntentAgent
+from agents.planning_agent import PlanningAgent
+from agents.generation_agent import GenerationAgent
 
 CYAN = "\033[96m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
-MAGENTA = "\033[95m"
+RED = "\033[91m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
@@ -37,79 +34,157 @@ def print_banner() -> None:
       | |_) | |  __/ | | | (_| |  __/| | | (_) | |_ / ___ \ | | 
       |____/|_|\___|_| |_|\__,_|_|   |_|_|\___/ \__/_/   \_\___|
       
-     Autonomous 10-Agent Copilot for Blender 3D Modeling
+         Synchronous 3D Modeling Pipeline Runner (Stage 7)
 ==============================================================={RESET}
 """
     print(banner)
 
 
-async def run_prompt_cli(prompt: str) -> None:
-    print(f"\n{YELLOW}{BOLD}▶ USER PROMPT:{RESET} {prompt}\n")
-    print(f"{CYAN}Starting LangGraph 10-Agent Pipeline...{RESET}\n")
-
+async def run_sync_pipeline(prompt: str) -> dict[str, Any]:
+    """Execute the synchronous pipeline end-to-end:
+    1. Parse intent
+    2. Generate modeling plan
+    3. Execute supported operations
+    4. Save the Blender scene
+    5. Render preview
+    6. Produce SceneState
+    7. Return pipeline execution report data
+    """
+    print(f"\n{YELLOW}{BOLD}> USER PROMPT:{RESET} {prompt}\n")
     start_time = time.perf_counter()
-    state = await run_pipeline(user_prompt=prompt)
+
+    # 1. Parse Intent
+    print(f"{CYAN}[1/6] Parsing design intent...{RESET}")
+    intent_agent = IntentAgent()
+    try:
+        intent = await intent_agent.execute(user_prompt=prompt)
+    except Exception as e:
+        print(f"{RED}Error parsing intent: {e}{RESET}")
+        raise
+
+    obj_type = intent.object_type
+    print(f"      - Category: {intent.object_type}")
+    print(f"      - Style: {intent.style}")
+    print(f"      - Color: {intent.color or 'default'}")
+    print(f"      - Material: {intent.material or 'default'}")
+
+    # 2. Generate Modeling Plan
+    print(f"\n{CYAN}[2/6] Generating modeling plan...{RESET}")
+    planning_agent = PlanningAgent()
+    plan = await planning_agent.execute(intent=intent)
+    print(f"      - Generated {len(plan.steps)} modeling steps.")
+
+    # 3. Execute Supported Operations
+    print(f"\n{CYAN}[3/6] Executing modeling operations...{RESET}")
+    try:
+        import bpy
+        mock_mode = False
+    except ImportError:
+        mock_mode = True
+    generation_agent = GenerationAgent(mock_mode=mock_mode)
+    gen_result = await generation_agent.execute(spec=intent, plan=plan)
+    executed_steps = gen_result.get("step_executions", [])
+    success_count = sum(1 for s in executed_steps if s.get("success"))
+    print(f"      - Executed {success_count}/{len(plan.steps)} steps successfully.")
+
+    # 4. Save Blender Scene
+    blend_path = None
+    print(f"\n{CYAN}[4/6] Saving Blender scene...{RESET}")
+    try:
+        import core.project
+        os.makedirs(f"output/{obj_type}", exist_ok=True)
+        blend_path = os.path.abspath(f"output/{obj_type}/{obj_type}.blend")
+        save_res = core.project.save_project(path=blend_path)
+        if save_res.get("success"):
+            print(f"      - Saved scene to: {blend_path}")
+        else:
+            print(f"      - Save failed: {save_res.get('message')}")
+    except Exception as e:
+        print(f"      - Skip saving (Bpy module not available/mocked): {e}")
+
+    # 5. Render Preview
+    preview_path = None
+    print(f"\n{CYAN}[5/6] Rendering preview...{RESET}")
+    try:
+        import core.rendering
+        os.makedirs(f"output/{obj_type}", exist_ok=True)
+        preview_path = os.path.abspath(f"output/{obj_type}/preview.png")
+        render_res = core.rendering.render_preview(
+            output_path=preview_path,
+            resolution_x=512,
+            resolution_y=512,
+            samples=16,
+        )
+        if render_res.get("success"):
+            print(f"      - Rendered preview to: {preview_path}")
+        else:
+            print(f"      - Render failed: {render_res.get('message')}")
+    except Exception as e:
+        print(f"      - Skip rendering (Bpy module not available/mocked): {e}")
+
+    # 6. Produce SceneState
+    scene_state = None
+    print(f"\n{CYAN}[6/6] Collecting SceneState...{RESET}")
+    try:
+        from core.scene_inspector import inspect_scene
+        scene_state = inspect_scene()
+        print(f"      - Successfully inspected scene.")
+    except Exception as e:
+        print(f"      - Skip inspection (Bpy module not available/mocked): {e}")
+
     elapsed = time.perf_counter() - start_time
 
-    print(f"\n{GREEN}{BOLD}✔ PIPELINE EXECUTION COMPLETED in {elapsed:.2f}s!{RESET}\n")
+    # 7. Print Concise Execution Report
+    print(f"\n{GREEN}{BOLD}===============================================================")
+    print(f"                   PIPELINE EXECUTION REPORT                   ")
+    print(f"==============================================================={RESET}")
+    print(f" {BOLD}Execution Time:{RESET}  {elapsed:.2f} seconds")
+    print(f" {BOLD}Overall Status:{RESET}  {'SUCCESS' if gen_result.get('success') else 'FAILED'}")
+    print(f" {BOLD}Asset Details:{RESET}")
+    print(f"   - Object Type:   {intent.object_type}")
+    print(f"   - Color:         {intent.color}")
+    print(f"   - Material:      {intent.material}")
+    if intent.dimensions:
+        print(f"   - Dimensions:    {intent.dimensions.width}m x {intent.dimensions.depth}m x {intent.dimensions.height}m")
+    
+    print(f"\n {BOLD}Modeling Steps Executed:{RESET}")
+    for idx, step in enumerate(executed_steps, 1):
+        status_icon = f"[{GREEN}OK{RESET}]" if step.get("success") else f"[{RED}FAIL{RESET}]"
+        print(f"   {status_icon} Step {step.get('step_id')}: {step.get('operation')} ({step.get('target')})")
 
-    spec = state.get("design_spec", {})
-    dims = spec.get("dimensions", {})
-    print(f"{BOLD}📦 Asset Specification:{RESET}")
-    print(f"   • Asset Type: {spec.get('asset_type', 'N/A')}")
-    print(f"   • Target Platform: {spec.get('target_platform', 'Unity')}")
-    print(f"   • Dimensions: {dims.get('width', 1.0)}m × {dims.get('depth', 1.0)}m × {dims.get('height', 1.0)}m")
-    print(f"   • Triangle Budget: {spec.get('triangle_limit', 8000)}")
+    if scene_state:
+        print(f"\n {BOLD}Blender Scene Snapshot:{RESET}")
+        print(f"   - Total Objects: {len(scene_state.objects)}")
+        print(f"   - Mesh Objects:  {len(scene_state.mesh_objects)}")
+        print(f"   - Total Tris:    {scene_state.total_triangle_count}")
+        print(f"   - Camera Set:    {scene_state.has_camera}")
+        print(f"   - Lights Found:  {len(scene_state.lighting)}")
 
-    print(f"\n{BOLD}🔍 Quality & Verification:{RESET}")
-    print(f"   • Geometry QA: {state.get('geometry_qa_status', 'PASS')} (Score: {state.get('geometry_score', 1.0) * 100:.0f}%)")
-    print(f"   • Visual Critic Score: {state.get('visual_score', 0.9) * 100:.0f}%")
-    print(f"   • Repair Loops: {state.get('geometry_repair_count', 0)} QA repairs, {state.get('visual_revision_count', 0)} visual revisions")
+    if blend_path:
+        print(f"\n {BOLD}Saved Deliverables:{RESET}")
+        print(f"   - Blend File:    {blend_path}")
+        if preview_path:
+            print(f"   - Preview Image: {preview_path}")
+    print(f"{GREEN}{BOLD}==============================================================={RESET}\n")
 
-    exported = state.get("exported_files", [])
-    print(f"\n{BOLD}🚀 Exported Production Files ({len(exported)} files):{RESET}")
-    for f in exported:
-        print(f"   {GREEN}✔{RESET} {f}")
-    print()
-
-
-async def run_benchmark_cli() -> None:
-    print(f"\n{MAGENTA}{BOLD}▶ Executing 20-Prompt Evaluation Benchmark...{RESET}\n")
-    summary = await run_full_benchmark()
-
-    print(f"\n{GREEN}{BOLD}═══════════════════════════════════════════════════════════════")
-    print(f"                 BENCHMARK EVALUATION SUMMARY                  ")
-    print(f"═══════════════════════════════════════════════════════════════{RESET}")
-    print(f" Total Cases Evaluated:       {summary['benchmark_cases_evaluated']}")
-    print(f" Task Completion Rate:        {GREEN}{summary['task_completion_rate']}%{RESET}")
-    print(f" Topology QA Pass Rate:       {GREEN}{summary['geometry_qa_pass_rate_pct']}%{RESET}")
-    print(f" Dimension Accuracy:          {GREEN}{summary['dimension_accuracy_pct']}%{RESET}")
-    print(f" Average Visual Score:        {CYAN}{summary['average_visual_score']}{RESET}")
-    print(f" Average Execution Time:      {YELLOW}{summary['average_generation_time_sec']}s{RESET}")
-    print(f"{BOLD}═══════════════════════════════════════════════════════════════{RESET}\n")
+    return {
+        "intent": intent,
+        "plan": plan,
+        "generation": gen_result,
+        "scene_state": scene_state,
+        "blend_path": blend_path,
+        "preview_path": preview_path,
+        "success": gen_result.get("success", False),
+    }
 
 
 def main() -> None:
     print_banner()
-    parser = argparse.ArgumentParser(description="BlendPilot AI CLI Runner")
-    parser.add_argument("prompt", nargs="?", help="Natural language description of 3D asset")
-    parser.add_argument("--benchmark", action="store_true", help="Run full 20-case evaluation benchmark")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Run interactive prompt loop")
+    parser = argparse.ArgumentParser(description="BlendPilot AI CLI Synchronous Pipeline")
+    parser.add_argument("prompt", help="Natural language description of 3D asset")
     args = parser.parse_args()
 
-    if args.benchmark:
-        asyncio.run(run_benchmark_cli())
-    elif args.interactive or not args.prompt:
-        try:
-            while True:
-                prompt = input(f"{BOLD}Enter 3D asset prompt (or 'exit'): {RESET}").strip()
-                if not prompt or prompt.lower() in ["exit", "quit", "q"]:
-                    break
-                asyncio.run(run_prompt_cli(prompt))
-        except (KeyboardInterrupt, EOFError):
-            print("\nExiting BlendPilot CLI.")
-    else:
-        asyncio.run(run_prompt_cli(args.prompt))
+    asyncio.run(run_sync_pipeline(args.prompt))
 
 
 if __name__ == "__main__":
