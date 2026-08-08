@@ -1,8 +1,12 @@
 """
 BlendPilot AI — LangGraph Typed State Definition
 
-Defines the central state dictionary that flows across all 10 agent nodes,
+Defines the central state dictionary that flows across all agent nodes,
 supporting serialization, checkpointing, and conditional branch routing.
+
+Target pipeline:
+    User → Intent → Planning → Generation → Scene State →
+    Geometry QA → Visual Critic → Decision → Repair → Re-validation → Export
 """
 
 from __future__ import annotations
@@ -23,66 +27,61 @@ class AgentStepEvent(TypedDict, total=False):
 class BlendPilotState(TypedDict, total=False):
     """Central state passed through the LangGraph multi-agent orchestrator."""
 
-    # Session & Identity
+    # ── Session & Identity ────────────────────────────────────────────────
     project_id: str
     session_id: str
     user_prompt: str
     reference_images: list[str]
     current_agent: str
-    status: str  # IDLE, RUNNING, INTERRUPTED, COMPLETED, FAILED
+    status: str  # IDLE, RUNNING, COMPLETED, FAILED
     error: str | None
 
-    # Config
+    # ── Config ────────────────────────────────────────────────────────────
     api_key: str | None
     provider: str | None
 
-    # Workflow 1 — Design Intent
+    # ── Intent Agent ─────────────────────────────────────────────────────
     design_spec: dict[str, Any] | None
 
-    # Workflow 2 — Scene Understanding
-    scene_summary: dict[str, Any] | None
-
-    # Workflow 3 — Reference & Technical Research
-    research_results: list[dict[str, Any]]
-
-    # Workflow 4 — Design Planning
+    # ── Planning Agent ───────────────────────────────────────────────────
     design_plan: dict[str, Any] | None
-    current_step_index: int
-    completed_steps: list[str]
 
-    # Workflow 5 — Autonomous Modeling
+    # ── Generation Agent ─────────────────────────────────────────────────
     created_objects: list[str]
-    modeling_logs: list[dict[str, Any]]
-
-    # Workflow 6 — Materials & Lighting
     materials_created: list[str]
+    modeling_logs: list[dict[str, Any]]
     preview_image_path: str | None
 
-    # Workflow 7 — Deterministic Geometry QA & Repair
-    geometry_qa_status: str  # PASS, FAIL
+    # ── Scene State (post-generation Blender context snapshot) ───────────
+    scene_summary: dict[str, Any] | None
+
+    # ── Geometry QA ──────────────────────────────────────────────────────
+    geometry_qa_status: str   # PASS, FAIL, PENDING
     geometry_score: float
     geometry_issues: list[dict[str, Any]]
-    geometry_repair_count: int
-    max_geometry_repairs: int
 
-    # Workflow 8 — Visual Critic & Aesthetic Self-Repair
+    # ── Visual Critic ─────────────────────────────────────────────────────
     visual_qa_approved: bool
     visual_score: float
     visual_issues: list[str]
+
+    # ── Decision Agent ────────────────────────────────────────────────────
+    decision: str             # APPROVE, REPAIR
+    decision_reason: str
+    priority_issue: str       # geometry, visual, none
+
+    # ── Repair Agent ──────────────────────────────────────────────────────
+    geometry_repair_count: int
+    max_geometry_repairs: int
     visual_revision_count: int
     max_visual_revisions: int
 
-    # Workflow 9 — Human Review & Feedback
-    human_feedback: str | None
-    human_action: str | None  # APPROVE, REQUEST_CHANGE, ROLLBACK, REJECT
-    approval_status: str  # PENDING, APPROVED, REVISION_REQUESTED
-
-    # Workflow 10 — Production Export & Packaging
+    # ── Export ────────────────────────────────────────────────────────────
     export_directory: str | None
     exported_files: list[str]
     asset_report: dict[str, Any] | None
 
-    # Stream Events & Logs
+    # ── Event Log ─────────────────────────────────────────────────────────
     events: list[dict[str, Any]]
     checkpoint_path: str | None
 
@@ -92,6 +91,8 @@ def create_initial_state(
     project_id: str | None = None,
     session_id: str | None = None,
     reference_images: list[str] | None = None,
+    api_key: str | None = None,
+    provider: str | None = None,
     overrides: dict[str, Any] | None = None,
 ) -> BlendPilotState:
     """Create a fully initialized default state for starting a modeling pipeline."""
@@ -99,6 +100,7 @@ def create_initial_state(
     sid = session_id or f"sess_{uuid.uuid4().hex[:8]}"
 
     state: BlendPilotState = {
+        # Identity
         "project_id": pid,
         "session_id": sid,
         "user_prompt": user_prompt,
@@ -106,34 +108,42 @@ def create_initial_state(
         "current_agent": "intent_agent",
         "status": "RUNNING",
         "error": None,
-        "api_key": None,
-        "provider": None,
+        # Config
+        "api_key": api_key,
+        "provider": provider or "openai",
+        # Intent
         "design_spec": None,
-        "scene_summary": None,
-        "research_results": [],
+        # Planning
         "design_plan": None,
-        "current_step_index": 0,
-        "completed_steps": [],
+        # Generation
         "created_objects": [],
-        "modeling_logs": [],
         "materials_created": [],
+        "modeling_logs": [],
         "preview_image_path": None,
+        # Scene State
+        "scene_summary": None,
+        # Geometry QA
         "geometry_qa_status": "PENDING",
         "geometry_score": 1.0,
         "geometry_issues": [],
-        "geometry_repair_count": 0,
-        "max_geometry_repairs": 3,
+        # Visual Critic
         "visual_qa_approved": False,
         "visual_score": 0.0,
         "visual_issues": [],
+        # Decision
+        "decision": "REPAIR",
+        "decision_reason": "",
+        "priority_issue": "none",
+        # Repair counters
+        "geometry_repair_count": 0,
+        "max_geometry_repairs": 3,
         "visual_revision_count": 0,
         "max_visual_revisions": 3,
-        "human_feedback": None,
-        "human_action": None,
-        "approval_status": "PENDING",
+        # Export
         "export_directory": None,
         "exported_files": [],
         "asset_report": None,
+        # Events
         "events": [],
         "checkpoint_path": None,
     }

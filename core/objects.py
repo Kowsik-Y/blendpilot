@@ -4,6 +4,11 @@ BlendPilot AI — Object Creation & Manipulation
 Functions for creating Blender primitives, setting transforms,
 duplicating, and deleting objects.
 
+Design notes:
+- Uses bpy.data API wherever possible instead of bpy.context.
+- bpy.ops is only used for primitive creation and deletion (no direct data API).
+- All functions return plain dicts with 'success' and 'message'.
+
 Runs inside Blender's Python environment.
 """
 
@@ -20,6 +25,7 @@ logger = logging.getLogger("blendpilot.core.objects")
 PRIMITIVE_TYPES: dict[str, str] = {
     "cube": "mesh.primitive_cube_add",
     "sphere": "mesh.primitive_uv_sphere_add",
+    "uv_sphere": "mesh.primitive_uv_sphere_add",  # explicit alias
     "cylinder": "mesh.primitive_cylinder_add",
     "plane": "mesh.primitive_plane_add",
     "cone": "mesh.primitive_cone_add",
@@ -38,19 +44,24 @@ def create_primitive(
     """Create a Blender mesh primitive.
 
     Args:
-        primitive_type: One of 'cube', 'sphere', 'cylinder', 'plane',
-                       'cone', 'torus', 'ico_sphere'.
-        name: Name for the new object.
-        dimensions: Optional (width, depth, height) to set after creation.
-                    If None, uses Blender defaults.
-        location: World-space position (x, y, z).
-        rotation: Euler rotation in radians (x, y, z).
+        primitive_type: One of 'cube', 'sphere', 'uv_sphere', 'cylinder',
+                       'plane', 'cone', 'torus', 'ico_sphere'.
+        name: Unique name for the new object. Must be non-empty.
+        dimensions: Optional (width, depth, height) in metres. All values must
+                    be positive. If None, Blender defaults are used.
+        location: World-space position (x, y, z) in metres.
+        rotation: Euler rotation in radians (rx, ry, rz).
 
     Returns:
-        Dict with 'success', 'object_name', and 'message'.
+        Dict with:
+            - 'success' (bool)
+            - 'object_name' (str | None)
+            - 'message' (str)
 
     Raises:
-        ValueError: If primitive_type is not supported or name is empty.
+        ValueError: If primitive_type is unsupported, name is empty,
+                    dimensions/location/rotation have wrong length, or
+                    any dimension value is non-positive.
     """
     # --- Input validation ---
     if not name or not name.strip():
@@ -60,7 +71,7 @@ def create_primitive(
     if ptype not in PRIMITIVE_TYPES:
         raise ValueError(
             f"Unsupported primitive type '{primitive_type}'. "
-            f"Must be one of: {', '.join(PRIMITIVE_TYPES.keys())}"
+            f"Must be one of: {', '.join(sorted(set(PRIMITIVE_TYPES.keys())))}"
         )
 
     if dimensions is not None:
@@ -74,17 +85,15 @@ def create_primitive(
     if len(rotation) != 3:
         raise ValueError("Rotation must be a tuple of 3 floats (x, y, z) in radians.")
 
-    # --- Create the primitive ---
+    # --- Create the primitive via bpy.ops ---
     logger.info("Creating %s primitive '%s' at %s", ptype, name, location)
 
     operator_path = PRIMITIVE_TYPES[ptype]
-    # Navigate the operator path: e.g. "mesh.primitive_cube_add"
     parts = operator_path.split(".")
-    op = getattr(bpy.ops, parts[0])
-    op_func = getattr(op, parts[1])
+    op_func = getattr(getattr(bpy.ops, parts[0]), parts[1])
     op_func(location=location, rotation=rotation)
 
-    # Rename the newly created object
+    # Retrieve the newly created object — prefer bpy.context.active_object
     obj = bpy.context.active_object
     if obj is None:
         return {
@@ -95,15 +104,10 @@ def create_primitive(
 
     obj.name = name
 
-    # Set dimensions if provided
+    # Set dimensions if provided (via data API, no context needed)
     if dimensions is not None:
         obj.dimensions = dimensions
         logger.info("Set dimensions of '%s' to %s", name, dimensions)
-
-    # Deselect all to clean up
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
 
     logger.info("Successfully created '%s' (%s)", obj.name, ptype)
     return {
@@ -121,17 +125,21 @@ def set_transform(
 ) -> dict[str, Any]:
     """Set the transform (location, rotation, scale) of an existing object.
 
+    Uses bpy.data.objects directly — no bpy.context dependency.
+
     Args:
-        name: Name of the Blender object to modify.
-        location: New world-space position, or None to keep current.
-        rotation: New Euler rotation in radians, or None to keep current.
-        scale: New scale factors, or None to keep current.
+        name: Name of the Blender object to modify. Must be non-empty.
+        location: New world-space position, or None to leave unchanged.
+        rotation: New Euler rotation in radians, or None to leave unchanged.
+        scale: New scale factors, or None to leave unchanged.
+                All scale components must be non-zero.
 
     Returns:
         Dict with 'success' and 'message'.
 
     Raises:
-        ValueError: If name is empty or object not found.
+        ValueError: If name is empty, object not found, any tuple has wrong
+                    length, or a scale component is zero.
     """
     if not name or not name.strip():
         raise ValueError("Object name cannot be empty.")
@@ -140,7 +148,7 @@ def set_transform(
     if obj is None:
         raise ValueError(f"Object '{name}' not found in scene.")
 
-    changes = []
+    changes: list[str] = []
 
     if location is not None:
         if len(location) != 3:
@@ -181,18 +189,24 @@ def duplicate_object(
     new_name: str | None = None,
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> dict[str, Any]:
-    """Duplicate an existing object.
+    """Duplicate an existing object using the data API where possible.
+
+    The duplicate shares the same mesh data as the source (linked=False
+    gives independent mesh), and an optional position offset is applied.
 
     Args:
-        name: Name of the object to duplicate.
+        name: Name of the source object. Must be non-empty.
         new_name: Name for the duplicate. If None, Blender auto-generates.
-        offset: Position offset from the original.
+        offset: XYZ position offset relative to the source object's location.
 
     Returns:
-        Dict with 'success', 'object_name', and 'message'.
+        Dict with:
+            - 'success' (bool)
+            - 'object_name' (str | None) — the duplicate's name
+            - 'message' (str)
 
     Raises:
-        ValueError: If the source object is not found.
+        ValueError: If name is empty or source object not found.
     """
     if not name or not name.strip():
         raise ValueError("Object name cannot be empty.")
@@ -201,12 +215,14 @@ def duplicate_object(
     if src is None:
         raise ValueError(f"Source object '{name}' not found in scene.")
 
-    # Select only the source object
+    if len(offset) != 3:
+        raise ValueError("Offset must be a tuple of 3 floats.")
+
+    # Select only the source object, then duplicate via ops
     bpy.ops.object.select_all(action="DESELECT")
     src.select_set(True)
     bpy.context.view_layer.objects.active = src
 
-    # Duplicate
     bpy.ops.object.duplicate(linked=False)
     dup = bpy.context.active_object
 
@@ -217,11 +233,10 @@ def duplicate_object(
             "message": f"Failed to duplicate '{name}'.",
         }
 
-    # Rename if requested
     if new_name:
         dup.name = new_name
 
-    # Apply offset
+    # Apply position offset
     dup.location = (
         dup.location.x + offset[0],
         dup.location.y + offset[1],
@@ -237,16 +252,19 @@ def duplicate_object(
 
 
 def delete_object(name: str) -> dict[str, Any]:
-    """Delete an object from the scene.
+    """Delete an object and its mesh data from the scene.
+
+    Uses bpy.data.objects.remove() which does not require an active context
+    selection state, and is more reliable than bpy.ops.object.delete().
 
     Args:
-        name: Name of the object to delete.
+        name: Name of the object to delete. Must be non-empty.
 
     Returns:
         Dict with 'success' and 'message'.
 
     Raises:
-        ValueError: If the object is not found.
+        ValueError: If name is empty or the object is not found.
     """
     if not name or not name.strip():
         raise ValueError("Object name cannot be empty.")
@@ -255,11 +273,8 @@ def delete_object(name: str) -> dict[str, Any]:
     if obj is None:
         raise ValueError(f"Object '{name}' not found in scene.")
 
-    # Select the object and delete
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.delete(use_global=False)
+    # Use data API: no context selection needed
+    bpy.data.objects.remove(obj, do_unlink=True)
 
     logger.info("Deleted object '%s'", name)
     return {

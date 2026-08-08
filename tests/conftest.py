@@ -154,6 +154,22 @@ def create_mock_bpy():
     bpy.data.objects.__getitem__ = lambda _, name: objects_dict[name]
     bpy.data.objects.__contains__ = lambda _, name: name in objects_dict
 
+    def _new_object(name, data=None):
+        obj = MockBlenderObject(name)
+        objects_dict[name] = obj
+        scene.objects = list(objects_dict.values())
+        return obj
+
+    def _remove_object_data_api(obj, do_unlink=True):
+        """Simulate bpy.data.objects.remove(obj, do_unlink=True)."""
+        obj_name = obj.name if hasattr(obj, 'name') else str(obj)
+        objects_dict.pop(obj_name, None)
+        scene.objects = list(objects_dict.values())
+
+    bpy.data.objects.new = _new_object
+    bpy.data.objects.remove = _remove_object_data_api
+    bpy.data.objects.__iter__ = lambda _: iter(objects_dict.values())
+
     bpy.data.materials = MagicMock()
     bpy.data.materials.get = lambda name: materials_dict.get(name)
     bpy.data.materials.__getitem__ = lambda _, name: materials_dict[name]
@@ -161,13 +177,18 @@ def create_mock_bpy():
     def new_material(name):
         mat = MagicMock()
         mat.name = name
-        mat.use_nodes = False
+        mat.use_nodes = True
+        mat.users = 0
         mat.node_tree = MagicMock()
-        mat.node_tree.nodes = MockNodeCollection()
+        nodes_col = MockNodeCollection()
+        # Add a Principled BSDF node so inspector can read PBR values
+        nodes_col.new("ShaderNodeBsdfPrincipled")
+        mat.node_tree.nodes = nodes_col
         materials_dict[name] = mat
         return mat
 
     bpy.data.materials.new = new_material
+    bpy.data.materials.__iter__ = lambda _: iter(materials_dict.values())
 
     bpy.data.cameras = MagicMock()
     bpy.data.cameras.new = lambda name: MagicMock(name=name)
