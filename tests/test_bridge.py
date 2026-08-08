@@ -182,8 +182,9 @@ class TestObjectOperators:
 
     def test_handle_delete_object_not_found(self, mock_bpy):
         ops = self._setup()
-        with pytest.raises(ValueError, match="not found"):
-            ops.handle_delete_object({"name": "DoesNotExist"})
+        res = ops.handle_delete_object({"name": "DoesNotExist"})
+        assert res["success"] is True
+        assert "already absent" in res["message"]
 
 
 # ── Material Operator Tests ─────────────────────────────────

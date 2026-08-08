@@ -151,7 +151,8 @@ class TestDeleteObject:
         with pytest.raises(ValueError, match="name cannot be empty"):
             mod.delete_object("")
 
-    def test_object_not_found_raises(self, mock_bpy):
+    def test_object_not_found_returns_success(self, mock_bpy):
         mod = self._import_module()
-        with pytest.raises(ValueError, match="not found"):
-            mod.delete_object("NonExistent")
+        res = mod.delete_object("NonExistent")
+        assert res["success"] is True
+        assert "already absent" in res["message"]
