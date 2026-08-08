@@ -1,0 +1,31 @@
+{
+  "asset_name": "potion",
+  "timestamp": "2026-08-07T15:53:31.170652+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 0.1,
+    "depth": 0.1,
+    "height": 0.25
+  },
+  "triangle_budget": 8000,
+  "created_objects": [
+    "Potion_Main",
+    "Potion_Accent"
+  ],
+  "materials": [
+    "base_gray_pbr"
+  ],
+  "files": {
+    "blend": "output/potion/potion.blend",
+    "fbx": "output/potion/potion.fbx",
+    "glb": "output/potion/potion.glb",
+    "preview": "output/potion/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "PASS",
+    "geometry_score": 1.0,
+    "visual_score": 0.88,
+    "approved": true
+  }
+}

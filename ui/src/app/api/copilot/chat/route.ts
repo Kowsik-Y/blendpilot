@@ -21,9 +21,11 @@ You coordinate a 10-agent autonomous 3D pipeline:
 
 Your interaction style:
 - Deliver deeply knowledgeable, practical 3D modeling advice (proportions in meters, non-destructive modifier stacks, UV unwrapping, PBR material nodes).
-- Answer greetings naturally and conversationally.
+- Answer greetings naturally and conversationally — introduce yourself as BlendPilot Copilot and describe your capabilities.
 - For 3D modeling questions, provide clean Python bpy/bmesh snippets and exact modifier settings.
-- Structure responses with crisp Markdown formatting (bold headers, bullet points, code blocks).`;
+- When users describe a 3D object to create, provide a clear specification with dimensions, materials, triangle budget, and topology strategy.
+- Structure responses with crisp Markdown formatting (bold headers, bullet points, code blocks).
+- Always suggest 2-3 actionable next steps at the end of your response.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -59,11 +61,6 @@ export async function POST(req: NextRequest) {
         maxTokens = settings.llmMaxTokens || 4096;
         ragEnabled = settings.ragEnabled ?? true;
       }
-    }
-
-    // Fallback logic removed - strictly rely on user-configured API key
-    if (!apiKey) {
-      console.log("[Copilot API] No user API key found. Falling back to intelligent generative mode.");
     }
 
     // 2. Perform RAG Retrieval if enabled
@@ -189,25 +186,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. If no API key is provided, return a prompt to configure it instead of generating a fake response
-    if (!apiKey || apiKey.trim().length <= 5) {
-      return NextResponse.json({
-        reply: `⚠️ **API Key Required**\n\nPlease configure your LLM API Key to enable chat and agent execution.\n\nClick the **⚙️ Settings / Key icon** at the top right to link your API key.`,
-        suggested_actions: ["🔑 Configure LLM Key"],
-        ragSources: [],
-        provider_used: "none",
-        is_live_llm: false,
-      });
-    }
-
-    // 6. Dynamic Generative Reasoning Engine (Fallback if API call fails)
-    const dynamicReply = generateFluidDynamicResponse(message, asset_spec, ragSources, !apiKey);
-
+    // 5. If no API key is provided, return a clear prompt to configure it
     return NextResponse.json({
-      reply: dynamicReply.reply,
-      suggested_actions: dynamicReply.actions,
-      ragSources,
-      provider_used: "blendpilot-dynamic-reasoning",
+      reply: `⚠️ **API Key Required**\n\nPlease configure your LLM API Key to enable real-time AI chat and agent execution.\n\n**How to connect:**\n1. Click the **🔑 Configure LLM Key** button below\n2. Or go to **⚙️ Settings** to link your OpenAI (\`gpt-4o\`) or Anthropic (\`claude-3-5-sonnet\`) key\n\nOnce connected, I'll use real LLM reasoning to:\n- Generate creative 3D modeling plans\n- Provide expert Blender advice with code snippets\n- Power all 10 autonomous agents with real AI intelligence`,
+      suggested_actions: ["🔑 Configure LLM Key"],
+      ragSources: [],
+      provider_used: "none",
       is_live_llm: false,
     });
   } catch (error: any) {
@@ -223,116 +207,29 @@ function extractSuggestedActions(userMsg: string, reply: string): string[] {
   const lower = (userMsg + " " + reply).toLowerCase();
   const actions: string[] = [];
 
-  if (lower.includes("bevel") || lower.includes("edge")) {
+  if (lower.includes("bevel") || lower.includes("edge") || lower.includes("chamfer")) {
     actions.push("🛠️ Add 0.02m Bevel Modifier");
   }
   if (lower.includes("dimension") || lower.includes("scale") || lower.includes("size")) {
     actions.push("📐 Adjust Dimensions");
   }
-  if (lower.includes("material") || lower.includes("shader") || lower.includes("color")) {
+  if (lower.includes("material") || lower.includes("shader") || lower.includes("color") || lower.includes("pbr")) {
     actions.push("🎨 Tune PBR Shader Nodes");
   }
-  if (lower.includes("plan") || lower.includes("step")) {
+  if (lower.includes("plan") || lower.includes("step") || lower.includes("workflow")) {
     actions.push("📋 Generate Step-by-Step Plan");
+  }
+  if (lower.includes("create") || lower.includes("build") || lower.includes("make") || lower.includes("generate")) {
+    actions.push("🚀 Launch 10-Agent Pipeline");
+  }
+  if (lower.includes("export") || lower.includes("download") || lower.includes("fbx") || lower.includes("glb")) {
+    actions.push("📦 Export Production Bundle");
+  }
+  if (lower.includes("topology") || lower.includes("manifold") || lower.includes("quality")) {
+    actions.push("🔍 Run Topology QA");
   }
   if (actions.length === 0) {
     actions.push("🚀 Launch 10-Agent Pipeline", "📋 Generate Modeling Plan", "🛠️ Add 0.02m Bevel Modifier");
   }
   return actions.slice(0, 3);
-}
-
-function generateFluidDynamicResponse(
-  message: string,
-  assetSpec: any,
-  ragSources: any[],
-  needsKeyPrompt: boolean
-): { reply: string; actions: string[] } {
-  const clean = message.trim();
-  const lower = clean.toLowerCase();
-  const assetType = assetSpec?.asset_type || "asset";
-  const dims = assetSpec?.dimensions || { width: 1.0, depth: 0.7, height: 0.6 };
-
-  // Conversational greetings
-  if (
-    lower === "hello" ||
-    lower === "hi" ||
-    lower === "hey" ||
-    lower.startsWith("hello") ||
-    lower.startsWith("hi ") ||
-    lower.startsWith("hey ") ||
-    lower.includes("how are you") ||
-    lower.includes("who are you") ||
-    lower.includes("what can you do")
-  ) {
-    return {
-      reply: `### 👋 Hi there! I'm BlendPilot Copilot\n\nI am your **AI 3D Modeling Technical Director**, coordinating **10 autonomous agents** connected directly to Blender.\n\nHere is what I can do for you in real time:\n- 🚀 **Generate 3D Models**: Type any concept (e.g. *"Create a cyber katana sword"*, *"Make a medieval barrel"*, *"Build a sci-fi energy pylon"*).\n- 🛠️ **Modifier & Geometry Automation**: Add non-destructive bevels, subdivision, array modifiers, and vertex group creases.\n- 🎨 **PBR Shading**: Configure Principled BSDF node trees (metallic, roughness, subsurface, and neon emission).\n- 🔍 **Topology & QA Verification**: Validate manifold geometry, edge loops, and triangle budgets.\n\n${
-        needsKeyPrompt
-          ? "> 💡 **Tip**: Click the **⚙️ Settings / Key icon** at the top right to link your OpenAI (`gpt-4o`) or Anthropic (`claude-3-5-sonnet`) key for unconstrained live LLM generation!"
-          : ""
-      }\n\nWhat would you like to design or tweak today?`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🔑 Configure LLM Key", "📋 Generate Modeling Plan"],
-    };
-  }
-
-  // Specific 3D objects
-  if (lower.includes("sword") || lower.includes("blade") || lower.includes("katana") || lower.includes("weapon")) {
-    return {
-      reply: `### ⚔️ Cyber Katana / Blade Specification\n\nConfigured parameters for a **high-precision stylized weapon**:\n\n* **Dimensions**: \`0.08m (W) × 0.04m (D) × 1.15m (Length)\`\n* **Sub-Meshes**: Beveled curved blade spine + guard tsuba + wrapped hilt handle with metallic pommel.\n* **PBR Shaders**: Hardened Damascus Steel (\`Metallic: 0.95\`, \`Roughness: 0.15\`) with an optional glowing plasma edge.\n* **Triangle Budget**: **2,800 tris** (Target < 4,000).\n\nShall I construct this in the 3D viewport?`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "✨ Add Plasma Glow", "📐 Adjust Blade Length"],
-    };
-  }
-
-  if (lower.includes("tree") || lower.includes("foliage") || lower.includes("plant") || lower.includes("nature")) {
-    return {
-      reply: `### 🌲 Low-Poly Stylized Tree Specification\n\nReady to synthesize a **game-ready nature asset**:\n\n* **Dimensions**: \`1.50m × 1.50m × 3.20m\`\n* **Geometry**: Tapered cylindrical trunk with root flairs + 3-tiered faceted icosahedron foliage canopies.\n* **Materials**: Bark BSDF (\`Roughness: 0.85\`) and Emerald Foliage BSDF with subtle gradient ramp.\n* **Optimization**: Zero non-manifold edges, optimal for real-time wind vertex shader animation.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🍃 Add Branch Tier", "🔍 Run Topology QA"],
-    };
-  }
-
-  if (lower.includes("car") || lower.includes("vehicle") || lower.includes("ship") || lower.includes("spaceship")) {
-    return {
-      reply: `### 🚀 Sci-Fi Vehicle / Craft Specification\n\nPrepared blueprints for a **modular sci-fi vehicle**:\n\n* **Dimensions**: \`2.20m (W) × 4.40m (Length) × 1.30m (Height)\`\n* **Compound Sub-Meshes**: Aerodynamic chassis body, chamfered cockpit canopy glass, 4 high-traction wheel modules / thrusters with cyan emissive exhaust.\n* **Shader Setup**: Automotive clearcoat paint (\`Roughness: 0.10\`, \`Metallic: 0.85\`) + Tinted Glass BSDF (\`Transmission: 0.90\`).\n* **Polycount Target**: **6,500 tris**.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🔥 Tune Thruster Glow", "🛠️ Add Bevel Chamfer"],
-    };
-  }
-
-  if (lower.includes("table") || lower.includes("desk") || lower.includes("bench")) {
-    return {
-      reply: `### 🪵 Procedural 3D Table Specification\n\n* **Dimensions**: \`1.20m (W) × 0.80m (D) × 0.75m (H)\`\n* **Topology**: Beveled top slab (\`0.06m\` thickness) + 4 tapered legs (\`0.06m\` profile) with metallic foot caps.\n* **PBR Shader**: Oak Wood BSDF (\`Roughness: 0.65\`, \`Metallic: 0.05\`).\n* **Triangle Budget**: **3,200 tris** (Target < 5,000).`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "📐 Adjust Leg Taper", "🎨 Switch to Walnut Finish"],
-    };
-  }
-
-  if (lower.includes("barrel") || lower.includes("drum") || lower.includes("tank")) {
-    return {
-      reply: `### 🛢️ Medieval Wooden Barrel Design\n\n* **Dimensions**: \`0.50m × 0.50m × 0.80m\`\n* **Sub-Meshes**: Bulged stave cylinder + 4 forged iron hoop rings with rivet studs + inset lid bung.\n* **PBR Setup**: Aged pine staves (\`Roughness: 0.75\`) with galvanized dark steel bands (\`Metallic: 0.90\`, \`Roughness: 0.25\`).\n* **Topology**: Clean quad-dominant edge loops with 0 non-manifold edges.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🛠️ Add Metal Hoops", "🔍 Run Topology QA"],
-    };
-  }
-
-  if (lower.includes("pylon") || lower.includes("tower") || lower.includes("beacon") || lower.includes("energy")) {
-    return {
-      reply: `### ⚡ Sci-Fi Energy Pylon Architecture\n\n* **Dimensions**: \`0.60m × 0.60m × 2.20m\`\n* **Components**: Stepped composite base platform, 4 angled vertical pylon prongs, floating octahedral energy core with orbital ring.\n* **Emissive Setup**: Neon Cyan (\`#06B6D4\`) with \`3.0x\` emission intensity and Bloom pass.\n* **Triangle Count**: **4,800 tris** (Budget: 9,000).`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "✨ Increase Core Glow", "📋 Inspect Plan Steps"],
-    };
-  }
-
-  if (lower.includes("bevel") || lower.includes("edge") || lower.includes("smooth") || lower.includes("chamfer")) {
-    return {
-      reply: `### 🛠️ Non-Destructive Bevel & Edge Flow\n\nTo achieve realistic specular highlights without increasing base cage density:\n\n\`\`\`python\nimport bpy\nobj = bpy.context.active_object\nmod = obj.modifiers.new(name="EdgeBevel", type="BEVEL")\nmod.width = 0.02  # 20mm chamfer\nmod.segments = 2   # 2-segment rounded profile\nmod.limit_method = "ANGLE"\nmod.angle_limit = 0.523599  # 30 degrees\n\`\`\`\n\n* **Edge Flow Benefits**: Highlights silhouette geometry, catches rim lights, and satisfies all manifold geometry criteria.`,
-      actions: ["🛠️ Apply 0.02m Bevel", "📐 Test 3-Segment Profile", "🔍 Run Topology QA"],
-    };
-  }
-
-  // Dynamic generic 3D reasoning for any other prompt
-  const detectedSubject = clean.replace(/^(create|make|build|design|generate|add|render|show me)\s+/i, "");
-
-  return {
-    reply: `### 🎨 3D Design Architecture for "${detectedSubject}"\n\nI have analyzed your instruction: **"${clean}"** and synthesized a technical specification:\n\n* **Inferred Dimensions**: \`${dims.width.toFixed(2)}m (W) × ${dims.depth.toFixed(2)}m (D) × ${dims.height.toFixed(2)}m (H)\`\n* **Topology Strategy**: Multi-part compound bmesh hierarchy with beveled edge loops and quad-dominant subdivision.\n* **PBR Shader Graph**: Base Color + Normal Map + Roughness/Metallic channels mapped for Unity & Unreal Engine.\n* **Agent Orchestration**: Step planner is ready to sequence the atomic Blender modeling operations.\n\n${
-      needsKeyPrompt
-        ? "> 🔑 *To enable full unconstrained Claude / GPT-4o conversational chat, click the **⚙️ Settings / Key icon** at the top right to link your API key.*"
-        : ""
-    }`,
-    actions: ["🚀 Launch 10-Agent Pipeline", "📋 Generate Modeling Plan", "🛠️ Add 0.02m Bevel Modifier"],
-  };
 }

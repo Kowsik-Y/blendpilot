@@ -24,6 +24,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  MessageScroller,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+} from "@/components/ui/message-scroller";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageHeader,
+  MessageFooter,
+} from "@/components/ui/message";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -131,8 +147,6 @@ export function CopilotChatbox({
   // In-chat 10-Agent Execution Progress
   const [agentSteps, setAgentSteps] = useState<PipelineStep[]>(INITIAL_10_STEPS);
   const [showProgressGrid, setShowProgressGrid] = useState(false);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-fetch user settings on mount
   const loadSettings = async () => {
@@ -255,11 +269,7 @@ export function CopilotChatbox({
     };
   }, [pipelineSessionId]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, agentSteps]);
+
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -277,26 +287,21 @@ export function CopilotChatbox({
     }
 
     const lower = text.toLowerCase();
+    // Broad intent detection — let the LLM handle nuanced classification
+    // Pipeline triggers: explicit launch commands OR any 3D creation verbs
+    const creationVerbs = ["create", "make", "generate", "build", "design", "model", "construct", "sculpt", "craft"];
     const isCreationIntent =
       lower.includes("launch 10-agent") ||
-      lower.startsWith("create") ||
-      lower.startsWith("make") ||
-      lower.startsWith("generate") ||
-      lower.startsWith("build") ||
-      lower.startsWith("design") ||
-      lower.includes("sword") ||
-      lower.includes("tree") ||
-      lower.includes("car") ||
-      lower.includes("table") ||
-      lower.includes("crate") ||
-      lower.includes("barrel") ||
-      lower.includes("pylon") ||
-      lower.includes("chair");
+      lower.includes("launch pipeline") ||
+      lower.includes("run pipeline") ||
+      creationVerbs.some((v) => lower.startsWith(v)) ||
+      (creationVerbs.some((v) => lower.includes(v)) && lower.split(" ").length >= 3);
 
     if (isCreationIntent && onStartPipeline) {
       setShowProgressGrid(true);
       setAgentSteps(INITIAL_10_STEPS.map((s, idx) => (idx === 0 ? { ...s, status: "running" } : { ...s, status: "pending" })));
       onStartPipeline(text);
+      return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
     }
 
     const userMsg: CopilotMessage = {
@@ -360,9 +365,9 @@ export function CopilotChatbox({
 
   return (
     <>
-      <Card className="bg-slate-900/80 backdrop-blur-2xl border-slate-700/50 flex flex-col h-full overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] ring-1 ring-white/5">
+      <Card className="bg-card border-border py-0 flex flex-col h-full overflow-hidden">
         {/* Header Bar with Store Connection & Key Config Dialog */}
-        <CardHeader className="p-3 pb-2 border-b border-slate-700/50 bg-slate-800/50">
+        <CardHeader className="p-3 pb-2 bg-muted/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
@@ -373,179 +378,189 @@ export function CopilotChatbox({
                   3D Copilot & 10 Agents
                 </CardTitle>
                 <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-cyan-400" />
+                  <Sparkles className="w-3 h-3 text-primary" />
                   <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
                   <span>({llmModel})</span>
+                  {hasApiKey ? (
+                    <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-0.5 text-orange-400 font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                      No Key
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
-
           </div>
         </CardHeader>
 
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
           {activeTab === "chat" ? (
-            <>
-              {/* Scrollable Messages + In-chat Timeline */}
-              <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
-                {/* In-Chat 10-Agent Progress Card */}
-                {showProgressGrid && (
-                  <div className="my-2 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/50 text-xs shadow-inner space-y-2">
-                    <div className="font-semibold text-slate-200 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                        10-Agent Pipeline Execution
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {agentSteps.filter((s) => s.status === "done").length}/{agentSteps.length} Completed
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {agentSteps.map((step) => (
-                        <div
-                          key={step.id}
-                          className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] transition-all duration-300 ${
-                            step.status === "done"
-                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-100 font-medium"
-                              : step.status === "running"
-                              ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300 animate-pulse font-medium shadow-[0_0_10px_rgba(6,182,212,0.2)]"
-                              : "bg-slate-800/40 border-slate-700/40 text-slate-500"
-                          }`}
-                        >
-                          {step.status === "done" ? (
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                          ) : step.status === "running" ? (
-                            <Loader2 className="w-3 h-3 text-cyan-400 animate-spin shrink-0" />
-                          ) : (
-                            <Circle className="w-3 h-3 text-muted-foreground/40 shrink-0" />
-                          )}
-                          <span className="truncate">{step.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Message Flow */}
-                {messages.map((m) => {
-                  const isUser = m.role === "user";
-                  const isAgent = m.role === "agent";
-
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex gap-2.5 my-2 ${isUser ? "justify-end" : "justify-start"}`}
-                    >
-                      {!isUser && (
-                        <div
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${
-                            isAgent
-                              ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
-                              : "bg-primary text-primary-foreground"
-                          }`}
-                        >
-                          {isAgent ? <Sparkles className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                        </div>
-                      )}
-
-                      <div
-                        className={`relative group max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed transition-all duration-300 ${
-                          isUser
-                            ? "bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-tr-sm shadow-lg shadow-cyan-900/30 font-medium border border-cyan-500/30"
-                            : isAgent
-                            ? "bg-slate-800/80 text-slate-100 border border-cyan-500/30 rounded-tl-sm shadow-md backdrop-blur-md"
-                            : "bg-slate-800/90 text-slate-200 border border-slate-700/60 rounded-tl-sm shadow-md backdrop-blur-md"
-                        }`}
-                      >
-                        {/* Copy Action Button */}
-                        <button
-                          onClick={() => handleCopy(m.id, m.content)}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md bg-background/80 hover:bg-muted text-muted-foreground"
-                          title="Copy message"
-                        >
-                          {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-
-                        {/* Markdown Body */}
-                        <div className="prose prose-invert prose-xs max-w-none break-words">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                        </div>
-
-                        {/* Action Chips */}
-                        {m.actions && m.actions.length > 0 && (
-                          <div className="mt-2.5 pt-2 border-t border-border/40 flex flex-wrap gap-1">
-                            {m.actions.map((act, i) => (
-                              <button
-                                key={i}
-                                onClick={() => {
-                                  handleSend(act);
-                                  if (onApplyAction) onApplyAction(act);
-                                }}
-                                className="text-[10px] px-2 py-1 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors border border-border/60 font-medium"
+            <div className="flex-1 min-h-0 relative">
+              <MessageScrollerProvider autoScroll>
+                <MessageScroller>
+                  <MessageScrollerViewport className="pr-2">
+                    <MessageScrollerContent className="space-y-3 pb-2">
+                      {/* In-Chat 10-Agent Progress Card */}
+                      {showProgressGrid && (
+                        <div className="my-2 p-3 rounded-2xl text-xs shadow-inner space-y-2 bg-muted/30">
+                          <div className="font-semibold text-foreground flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Cpu className="w-3.5 h-3.5 text-primary" />
+                              10-Agent Pipeline Execution
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {agentSteps.filter((s) => s.status === "done").length}/{agentSteps.length} Completed
+                            </span>
+                          </div>
+      
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {agentSteps.map((step) => (
+                              <div
+                                key={step.id}
+                                className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-[11px] transition-all duration-300 ${
+                                  step.status === "done"
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium"
+                                    : step.status === "running"
+                                    ? "bg-primary/10 border-primary/30 text-primary animate-pulse font-medium"
+                                    : "bg-muted/40 border-border/40 text-muted-foreground"
+                                }`}
                               >
-                                {act}
-                              </button>
+                                {step.status === "done" ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                ) : step.status === "running" ? (
+                                  <Loader2 className="w-3 h-3 text-primary animate-spin shrink-0" />
+                                ) : (
+                                  <Circle className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                                )}
+                                <span className="truncate">{step.name}</span>
+                              </div>
                             ))}
                           </div>
-                        )}
-
-                        <div className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60">
-                          <span>{m.time}</span>
-                          {m.isLiveLLM && (
-                            <span className="text-cyan-400 font-mono flex items-center gap-0.5">
-                              <Sparkles className="w-2.5 h-2.5" /> Live LLM
-                            </span>
-                          )}
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      )}
+      
+                      {/* Message Flow */}
+                      {messages.map((m) => {
+                        const isUser = m.role === "user";
+                        const isAgent = m.role === "agent";
+      
+                        return (
+                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser}>
+                            <Message align={isUser ? "end" : "start"} className="my-2">
+                              <MessageAvatar>
+                                <div
+                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${
+                                    isAgent
+                                      ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                                      : "bg-primary text-primary-foreground"
+                                  }`}
+                                >
+                                  {isUser ? <User className="w-3.5 h-3.5" /> : isAgent ? <Sparkles className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                                </div>
+                              </MessageAvatar>
+      
+                              <MessageContent>
+                                <Bubble variant={isUser ? "default" : "outline"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
+                                  <BubbleContent>
+                                    {/* Copy Action Button */}
+                                    <button
+                                      onClick={() => handleCopy(m.id, m.content)}
+                                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md bg-background/80 hover:bg-muted text-muted-foreground"
+                                      title="Copy message"
+                                    >
+                                      {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                    </button>
+            
+                                    {/* Markdown Body */}
+                                    <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                                    </div>
+            
+                                    {/* Action Chips */}
+                                    {m.actions && m.actions.length > 0 && (
+                                      <div className="mt-2.5 pt-2 border-t border-border/40 flex flex-wrap gap-1">
+                                        {m.actions.map((act, i) => (
+                                          <button
+                                            key={i}
+                                            onClick={() => {
+                                              handleSend(act);
+                                              if (onApplyAction) onApplyAction(act);
+                                            }}
+                                            className="text-[10px] px-2 py-1 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors border border-border/60 font-medium"
+                                          >
+                                            {act}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </BubbleContent>
+                                </Bubble>
 
-                {loading && (
-                  <div className="flex gap-2 items-center text-xs text-muted-foreground p-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    <span>BlendPilot Copilot reasoning...</span>
-                  </div>
-                )}
-              </div>
+                                <MessageFooter className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 w-full">
+                                  <span>{m.time}</span>
+                                  {m.isLiveLLM && (
+                                    <span className="text-cyan-400 font-mono flex items-center gap-0.5 ml-auto">
+                                      <Sparkles className="w-2.5 h-2.5" /> Live LLM
+                                    </span>
+                                  )}
+                                </MessageFooter>
+                              </MessageContent>
+                            </Message>
+                          </MessageScrollerItem>
+                        );
+                      })}
 
-            </>
+                      {loading && (
+                        <div className="flex gap-2 items-center text-xs text-muted-foreground p-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          <span>{hasApiKey ? "LLM reasoning via " + llmProvider.toUpperCase() + "..." : "Processing..."}</span>
+                        </div>
+                      )}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                  <MessageScrollerButton />
+                </MessageScroller>
+              </MessageScrollerProvider>
+            </div>
           ) : (
             /* Plan Inspector Tab */
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 p-1 pr-2 text-xs [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-700/50">
-                <span className="font-semibold text-slate-200">Current 10-Agent Plan</span>
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 p-1 pr-2 text-xs [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="font-semibold text-foreground">Current 10-Agent Plan</span>
                 <Badge variant="outline" className="text-[10px]">
                   {currentPlan.length} Operations
                 </Badge>
               </div>
 
               {currentPlan.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 space-y-2">
+                <div className="text-center py-8 text-muted-foreground space-y-2">
                   <ListOrdered className="w-8 h-8 mx-auto opacity-40" />
                   <p>No active plan generated yet.</p>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleSend("Generate Detailed Modeling Plan")}
-                    className="text-xs border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 mt-2"
+                    className="text-xs border-border bg-card hover:bg-muted text-foreground mt-2"
                   >
                     Generate Step-by-Step Plan
                   </Button>
                 </div>
               ) : (
                 currentPlan.map((step, idx) => (
-                  <div key={idx} className="p-2.5 rounded-xl border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm space-y-1 hover:bg-slate-800/60 transition-colors">
-                    <div className="flex items-center justify-between font-medium text-slate-200">
-                      <span className="text-cyan-400">Step {step.step_number || idx + 1}: <span className="text-slate-200">{step.operation}</span></span>
-                      <Badge variant="outline" className="text-[9px] border-slate-600 bg-slate-900/50 text-slate-400 font-mono">
+                  <div key={idx} className="p-2.5 rounded-xl border border-border backdrop-blur-sm space-y-1 hover:bg-muted/60 transition-colors">
+                    <div className="flex items-center justify-between font-medium text-foreground">
+                      <span className="text-primary">Step {step.step_number || idx + 1}: <span className="text-foreground">{step.operation}</span></span>
+                      <Badge variant="outline" className="text-[9px] border-border bg-muted/50 text-muted-foreground font-mono">
                         {step.agent || "Modeler"}
                       </Badge>
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">{step.description}</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">{step.description}</p>
                   </div>
                 ))
               )}
@@ -553,15 +568,15 @@ export function CopilotChatbox({
           )}
           </div>
           {/* Chat Input Bar with Plan Toggle */}
-          <div className="p-3 border-t border-slate-700/50 bg-slate-900/80 backdrop-blur-md flex gap-2 items-center z-10 shrink-0">
+          <div className="p-3 flex gap-2 items-center z-10 shrink-0 border-t border-border">
             <Button
               size="sm"
               variant={activeTab === "plan" ? "default" : "outline"}
               onClick={() => setActiveTab(activeTab === "chat" ? "plan" : "chat")}
-              className={`h-9 px-2.5 transition-all duration-300 border-slate-600 hover:bg-slate-800 ${
+              className={`h-9 px-2.5 transition-all duration-300 ${
                 activeTab === "plan" 
-                  ? "bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]" 
-                  : "bg-slate-800/80 text-slate-300"
+                  ? "shadow-md" 
+                  : "text-muted-foreground hover:bg-muted"
               }`}
               title="Toggle Plan View"
             >
@@ -573,14 +588,14 @@ export function CopilotChatbox({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
               placeholder="Ask Copilot (e.g. 'Make a sword')..."
-              className="h-9 text-xs bg-slate-950/50 border-slate-700 focus-visible:ring-cyan-500 focus-visible:border-cyan-500 text-slate-100 placeholder:text-slate-500 shadow-inner"
+              className="h-9 text-xs"
               disabled={loading}
             />
             <Button
               size="sm"
               onClick={() => handleSend()}
               disabled={!input.trim() || loading}
-              className="h-9 px-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-900/30 border-0 disabled:opacity-50"
+              className="h-9 px-3 shadow-lg disabled:opacity-50"
             >
               <Send className="w-4 h-4" />
             </Button>
@@ -593,7 +608,7 @@ export function CopilotChatbox({
         <DialogContent className="max-w-md bg-card border-border shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
-              <Key className="w-4 h-4 text-cyan-400" />
+              <Key className="w-4 h-4 text-primary" />
               Configure LLM Provider & Key
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">

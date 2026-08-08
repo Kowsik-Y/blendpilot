@@ -7,6 +7,14 @@ import { MessageInput } from "./message-input";
 import { AgentProgress, type ProgressStep } from "./agent-progress";
 import { Box, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import {
+  MessageScroller,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+} from "@/components/ui/message-scroller";
 
 interface ChatInterfaceProps {
   sessionId: string;
@@ -19,17 +27,6 @@ export function ChatInterface({ sessionId, initialMessages = [] }: ChatInterface
   const [streamingContent, setStreamingContent] = useState("");
   const [activeRagSources, setActiveRagSources] = useState<Array<{ title: string; source: string; score: number }>>([]);
   const [agentSteps, setAgentSteps] = useState<ProgressStep[]>([]);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent]);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || streaming) return;
@@ -143,46 +140,59 @@ export function ChatInterface({ sessionId, initialMessages = [] }: ChatInterface
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background text-foreground">
       {/* Messages Scroll Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-4">
-        {messages.length === 0 && !streaming && (
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto py-12">
-            <div className="p-4 rounded-3xl bg-muted border border-border text-foreground mb-4 shadow-sm">
-              <Box className="w-12 h-12" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">
-              What 3D asset would you like to build?
-            </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              BlendPilot converts natural language descriptions into game-ready Blender assets with verified topology, PBR materials, and real-time QA.
-            </p>
-            <div className="flex items-center gap-2 text-xs text-foreground bg-muted px-3.5 py-1.5 rounded-full border border-border">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span>RAG Knowledge Base & Blender Docs Connected</span>
-            </div>
-          </div>
-        )}
+      <div className="flex-1 min-h-0 relative">
+        <MessageScrollerProvider autoScroll>
+          <MessageScroller>
+            <MessageScrollerViewport className="px-4 sm:px-8 py-6">
+              <MessageScrollerContent className="space-y-4">
+                {messages.length === 0 && !streaming && (
+                  <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto py-12">
+                    <div className="p-4 rounded-3xl bg-muted border border-border text-foreground mb-4 shadow-sm">
+                      <Box className="w-12 h-12" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">
+                      What 3D asset would you like to build?
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                      BlendPilot converts natural language descriptions into game-ready Blender assets with verified topology, PBR materials, and real-time QA.
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-foreground bg-muted px-3.5 py-1.5 rounded-full border border-border">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      <span>RAG Knowledge Base & Blender Docs Connected</span>
+                    </div>
+                  </div>
+                )}
 
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
+                {messages.map((m) => (
+                  <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={m.role === "user"}>
+                    <MessageBubble message={m} />
+                  </MessageScrollerItem>
+                ))}
 
-        {/* Live streaming message */}
-        {streaming && (
-          <div>
-            <AgentProgress steps={agentSteps} />
-            <MessageBubble
-              message={{
-                id: "streaming",
-                sessionId,
-                role: "assistant",
-                content: streamingContent || "_Analyzing Blender design context..._",
-                metadata: { ragSources: activeRagSources },
-                tokenCount: 0,
-                createdAt: new Date(),
-              }}
-            />
-          </div>
-        )}
+                {/* Live streaming message */}
+                {streaming && (
+                  <MessageScrollerItem messageId="streaming" scrollAnchor={false}>
+                    <div>
+                      <AgentProgress steps={agentSteps} />
+                      <MessageBubble
+                        message={{
+                          id: "streaming",
+                          sessionId,
+                          role: "assistant",
+                          content: streamingContent || "_Analyzing Blender design context..._",
+                          metadata: { ragSources: activeRagSources },
+                          tokenCount: 0,
+                          createdAt: new Date(),
+                        }}
+                      />
+                    </div>
+                  </MessageScrollerItem>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton />
+          </MessageScroller>
+        </MessageScrollerProvider>
       </div>
 
       {/* Message Input Bar */}

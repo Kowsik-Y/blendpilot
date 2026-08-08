@@ -1,6 +1,6 @@
 {
   "asset_name": "table",
-  "timestamp": "2026-08-07T10:02:06.791391+00:00",
+  "timestamp": "2026-08-08T03:21:59.185064+00:00",
   "target_platform": "Unity",
   "style": "stylized",
   "dimensions": {
@@ -11,7 +11,10 @@
   "triangle_budget": 8000,
   "created_objects": [
     "Table_Main",
-    "Table_Accent"
+    "Table_Leg_1",
+    "Table_Leg_2",
+    "Table_Leg_3",
+    "Table_Leg_4"
   ],
   "materials": [
     "wood_grain"

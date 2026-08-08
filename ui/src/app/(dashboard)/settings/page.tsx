@@ -225,17 +225,35 @@ export default function SettingsPage() {
                       className="bg-background border-input"
                     />
                   ) : (
-                    <select
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      {DEFAULT_MODELS[provider]?.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.contextWindow.toLocaleString()} tokens)
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        value={DEFAULT_MODELS[provider]?.some(m => m.id === model) ? model : "custom-input"}
+                        onChange={(e) => {
+                          if (e.target.value !== "custom-input") {
+                            setModel(e.target.value);
+                          } else {
+                            setModel("");
+                          }
+                        }}
+                        className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        {DEFAULT_MODELS[provider]?.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.contextWindow.toLocaleString()} tokens)
+                          </option>
+                        ))}
+                        <option value="custom-input">Custom Model...</option>
+                      </select>
+                      
+                      {!DEFAULT_MODELS[provider]?.some(m => m.id === model) && (
+                        <Input
+                          placeholder={`Enter custom ${provider} model name`}
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                          className="bg-background border-input"
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -272,33 +290,7 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <Label>Temperature</Label>
-                    <span className="text-muted-foreground font-mono">{temperature}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={temperature}
-                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    className="w-full accent-primary"
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <Label>Max Output Tokens</Label>
-                  <Input
-                    type="number"
-                    value={maxTokens}
-                    onChange={(e) => setMaxTokens(parseInt(e.target.value) || 4096)}
-                    className="bg-background border-input font-mono"
-                  />
-                </div>
-              </div>
             </CardContent>
             <CardFooter className="flex justify-between border-t border-border pt-4">
               <Button

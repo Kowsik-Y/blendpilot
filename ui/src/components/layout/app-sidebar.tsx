@@ -103,22 +103,7 @@ export function AppSidebar() {
 
       {/* Navigation Links */}
       <div className="px-3 py-1 space-y-1">
-        <Link
-          href="/studio"
-          className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            pathname === "/studio"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-              : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Box className="w-4 h-4 text-cyan-400" />
-            <span>3D Studio</span>
-          </div>
-          <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-400 font-semibold border border-cyan-500/20">
-            10-Agent
-          </span>
-        </Link>
+        {/* 3D Studio link removed as it is now project-specific and accessed via Projects */}
         <Link
           href="/chat"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${

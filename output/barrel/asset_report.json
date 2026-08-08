@@ -1,6 +1,6 @@
 {
   "asset_name": "barrel",
-  "timestamp": "2026-08-07T10:02:06.849040+00:00",
+  "timestamp": "2026-08-07T15:20:57.882842+00:00",
   "target_platform": "Unity",
   "style": "low-poly",
   "dimensions": {
@@ -11,7 +11,9 @@
   "triangle_budget": 4000,
   "created_objects": [
     "Barrel_Main",
-    "Barrel_Accent"
+    "Barrel_Hoop_1",
+    "Barrel_Hoop_2",
+    "Barrel_Hoop_3"
   ],
   "materials": [
     "base_gray_pbr"

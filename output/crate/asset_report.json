@@ -1,18 +1,22 @@
 {
   "asset_name": "crate",
-  "timestamp": "2026-08-07T10:02:06.622007+00:00",
+  "timestamp": "2026-08-08T03:17:02.835795+00:00",
   "target_platform": "Unity",
-  "style": "sci-fi",
+  "style": "low-poly",
   "dimensions": {
     "width": 1.0,
     "depth": 0.7,
     "height": 0.6
   },
-  "triangle_budget": 10000,
+  "triangle_budget": 8000,
   "created_objects": [
-    "Crate_Main"
+    "Crate_Main",
+    "Crate_Lid",
+    "Crate_Trim"
   ],
-  "materials": [],
+  "materials": [
+    "base_gray_pbr"
+  ],
   "files": {
     "blend": "output/crate/crate.blend",
     "fbx": "output/crate/crate.fbx",
@@ -22,7 +26,7 @@
   "quality_assurance": {
     "geometry_status": "PASS",
     "geometry_score": 1.0,
-    "visual_score": 0.92,
+    "visual_score": 0.88,
     "approved": true
   }
 }

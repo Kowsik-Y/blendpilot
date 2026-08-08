@@ -2,7 +2,7 @@
 BlendPilot AI — Autonomous Modeling Agent
 
 Workflow 5: Executes 3D modeling operations sequentially, calls Blender MCP tools,
-tracks created objects, and manages rollback checkpoints.
+tracks created objects, and uses LLM for adaptive error recovery when steps fail.
 """
 
 from __future__ import annotations
@@ -12,18 +12,28 @@ from typing import Any
 
 from mcp_servers.blender.server import BlenderMCPServer
 from schemas.plan import DesignPlan, StepStatus
+from services.llm import LLMService
 
 logger = logging.getLogger("blendpilot.agents.modeling")
 
 
 class ModelingAgent:
-    """Agent that executes step-by-step 3D modeling operations in Blender."""
+    """Agent that executes step-by-step 3D modeling operations in Blender.
+    
+    When a step fails, uses LLM to reason about alternative approaches
+    and generate recovery operations.
+    """
 
-    def __init__(self, mcp_server: BlenderMCPServer | None = None):
+    def __init__(
+        self,
+        mcp_server: BlenderMCPServer | None = None,
+        llm_service: LLMService | None = None,
+    ):
         self.mcp_server = mcp_server or BlenderMCPServer()
+        self.llm_service = llm_service
 
     async def execute(self, plan: DesignPlan) -> dict[str, Any]:
-        """Execute all modeling steps in the DesignPlan."""
+        """Execute all modeling steps in the DesignPlan with adaptive error recovery."""
         logger.info("Executing 3D modeling operations for plan: %s", plan.spec_id)
 
         created_objects: list[str] = []
@@ -47,14 +57,24 @@ class ModelingAgent:
                 elif "name" in step.parameters and step.parameters["name"] not in created_objects:
                     created_objects.append(step.parameters["name"])
             else:
-                step.status = StepStatus.FAILED
-                step.error_message = res.get("error", "Unknown error during tool execution")
-                logger.error("Step %d failed: %s", step.step_id, step.error_message)
+                error_msg = res.get("error", "Unknown error during tool execution")
+                logger.error("Step %d failed: %s", step.step_id, error_msg)
+
+                # Attempt LLM-powered error recovery
+                recovered = await self._attempt_recovery(step, error_msg, created_objects)
+                if recovered:
+                    step.status = StepStatus.COMPLETED
+                    if recovered.get("created_object"):
+                        created_objects.append(recovered["created_object"])
+                    logger.info("Step %d recovered via LLM adaptation", step.step_id)
+                else:
+                    step.status = StepStatus.FAILED
+                    step.error_message = error_msg
 
             execution_logs.append({
                 "step_id": step.step_id,
                 "tool": step.tool,
-                "success": success,
+                "success": step.status == StepStatus.COMPLETED,
                 "response": res,
             })
 
@@ -67,3 +87,64 @@ class ModelingAgent:
             "plan": plan,
             "logs": execution_logs,
         }
+
+    async def _attempt_recovery(
+        self,
+        failed_step: Any,
+        error_msg: str,
+        created_objects: list[str],
+    ) -> dict[str, Any] | None:
+        """Use LLM to reason about and attempt alternative recovery for a failed step."""
+        if not self.llm_service or not self.llm_service.config.api_key:
+            return None
+
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage
+            import json
+
+            system_prompt = (
+                "You are a Blender 3D modeling expert. A modeling step has failed. "
+                "Analyze the error and suggest a single corrected MCP tool call that achieves "
+                "the same goal. Respond with a JSON object: "
+                '{"tool": "<tool_name>", "parameters": {<params>}, "reasoning": "<why>"}'
+            )
+            user_prompt = (
+                f"Failed step: {failed_step.description}\n"
+                f"Tool: {failed_step.tool}\n"
+                f"Parameters: {json.dumps(failed_step.parameters)}\n"
+                f"Error: {error_msg}\n"
+                f"Existing objects in scene: {created_objects}\n\n"
+                f"Suggest a corrected tool call to achieve the same goal."
+            )
+
+            response = await self.llm_service.generate(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                response_format={"type": "json_object"},
+            )
+
+            if not response:
+                return None
+
+            import re
+            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            recovery = json.loads(clean)
+
+            # Execute the recovery tool call
+            tool_name = recovery.get("tool", failed_step.tool)
+            params = recovery.get("parameters", failed_step.parameters)
+            logger.info("LLM recovery: calling %s with %s (reason: %s)", tool_name, params, recovery.get("reasoning", ""))
+
+            retry_res = await self.mcp_server.call_tool(tool_name, params)
+            if retry_res.get("success", False):
+                result: dict[str, Any] = {"success": True, "reasoning": recovery.get("reasoning", "")}
+                if "object_name" in retry_res:
+                    result["created_object"] = retry_res["object_name"]
+                elif "name" in params:
+                    result["created_object"] = params["name"]
+                return result
+
+        except Exception as e:
+            logger.warning("LLM error recovery failed: %s", e)
+
+        return None

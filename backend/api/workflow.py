@@ -84,18 +84,32 @@ async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
     config = {"configurable": {"thread_id": session_id}}
     try:
         async for output in _compiled_app.astream(state, config=config):
-            # output is {node_name: partial_state}
+            # LangGraph astream yields {node_name: partial_state}
+            # partial_state can be a dict, tuple, or other type depending on state reducers
             for node_name, partial_state in output.items():
+                # Normalize partial_state to a dict — LangGraph Annotated reducers
+                # can yield tuples instead of dicts
+                if isinstance(partial_state, tuple):
+                    # Tuple output: try to convert first element if it's a dict,
+                    # otherwise wrap the whole thing
+                    if len(partial_state) > 0 and isinstance(partial_state[0], dict):
+                        partial_state = partial_state[0]
+                    else:
+                        partial_state = {"_raw_output": str(partial_state)}
+                elif not isinstance(partial_state, dict):
+                    partial_state = {"_raw_output": str(partial_state)}
+
                 if session_id in _active_sessions:
                     _active_sessions[session_id]["state"].update(partial_state)
                     current_agent = partial_state.get("current_agent", node_name)
                     _active_sessions[session_id]["status"] = partial_state.get("status", "RUNNING")
 
-                # Dispatch SSE event
+                # Build JSON-safe SSE event payload
+                safe_state = _make_json_safe(partial_state)
                 event_payload = {
                     "session_id": session_id,
                     "node": node_name,
-                    "state": partial_state,
+                    "state": safe_state,
                 }
                 await _broadcast_event(session_id, event_payload)
 
@@ -109,6 +123,18 @@ async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
             _active_sessions[session_id]["status"] = "FAILED"
             _active_sessions[session_id]["state"]["error"] = str(e)
         await _broadcast_event(session_id, {"session_id": session_id, "error": str(e), "status": "FAILED"})
+
+
+def _make_json_safe(obj: Any) -> Any:
+    """Recursively convert an object to a JSON-serializable structure."""
+    if isinstance(obj, dict):
+        return {k: _make_json_safe(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_make_json_safe(item) for item in obj]
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    else:
+        return str(obj)
 
 
 async def _broadcast_event(session_id: str, payload: dict[str, Any]) -> None:
@@ -163,10 +189,8 @@ async def submit_human_feedback(session_id: str, request: HumanFeedbackRequest) 
     session_data["state"]["human_action"] = request.action
     session_data["state"]["human_feedback"] = request.feedback_text
 
-    config = {"configurable": {"thread_id": session_id}}
-
-    # Resume the graph
-    asyncio.create_task(_run_workflow_task(session_id, session_data["state"]))
+    # Resume the graph from the interrupt checkpoint (pass None to continue, not full state)
+    asyncio.create_task(_resume_workflow_task(session_id, session_data["state"]))
 
     return {
         "success": True,
@@ -174,6 +198,59 @@ async def submit_human_feedback(session_id: str, request: HumanFeedbackRequest) 
         "action": request.action,
         "message": f"Human feedback '{request.action}' applied. Workflow resuming.",
     }
+
+
+async def _resume_workflow_task(session_id: str, state: BlendPilotState) -> None:
+    """Resume an interrupted workflow from the LangGraph checkpoint.
+
+    LangGraph's interrupt_before pauses execution and saves to the checkpointer.
+    To resume, we update the checkpoint state with feedback values, then call
+    astream(None) which tells LangGraph to continue from the checkpoint.
+    """
+    config = {"configurable": {"thread_id": session_id}}
+    try:
+        # Update the checkpointed state with human feedback values
+        # by calling update_state before resuming
+        feedback_update = {
+            "human_action": state.get("human_action", "APPROVE"),
+            "human_feedback": state.get("human_feedback"),
+        }
+        await _compiled_app.aupdate_state(config, feedback_update)
+
+        # Resume from checkpoint by passing None as input
+        async for output in _compiled_app.astream(None, config=config):
+            for node_name, partial_state in output.items():
+                # Normalize partial_state (same as _run_workflow_task)
+                if isinstance(partial_state, tuple):
+                    if len(partial_state) > 0 and isinstance(partial_state[0], dict):
+                        partial_state = partial_state[0]
+                    else:
+                        partial_state = {"_raw_output": str(partial_state)}
+                elif not isinstance(partial_state, dict):
+                    partial_state = {"_raw_output": str(partial_state)}
+
+                if session_id in _active_sessions:
+                    _active_sessions[session_id]["state"].update(partial_state)
+                    _active_sessions[session_id]["status"] = partial_state.get("status", "RUNNING")
+
+                safe_state = _make_json_safe(partial_state)
+                event_payload = {
+                    "session_id": session_id,
+                    "node": node_name,
+                    "state": safe_state,
+                }
+                await _broadcast_event(session_id, event_payload)
+
+        if session_id in _active_sessions:
+            current_status = _active_sessions[session_id]["state"].get("status", "COMPLETED")
+            _active_sessions[session_id]["status"] = current_status
+
+    except Exception as e:
+        logger.exception("Resume workflow error in session %s: %s", session_id, e)
+        if session_id in _active_sessions:
+            _active_sessions[session_id]["status"] = "FAILED"
+            _active_sessions[session_id]["state"]["error"] = str(e)
+        await _broadcast_event(session_id, {"session_id": session_id, "error": str(e), "status": "FAILED"})
 
 
 @router.get("/{session_id}/status")
