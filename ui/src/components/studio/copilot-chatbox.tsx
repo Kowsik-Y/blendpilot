@@ -84,6 +84,7 @@ import {
   Command,
   WandSparkles,
   Maximize2,
+  ChevronDown,
 } from "lucide-react";
 
 export interface CopilotMessage {
@@ -187,6 +188,17 @@ export function CopilotChatbox({
   const [runPrompt, setRunPrompt] = useState<string | null>(null);
   const [runActivities, setRunActivities] = useState<PipelineActivity[]>([]);
   const [activeStage, setActiveStage] = useState<string | null>(null);
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
+
+  // Auto-collapse thinking block when completed/finished, auto-expand on new prompt
+  useEffect(() => {
+    const isFinished = runActivities.some((activity) => activity.id === "workflow-complete");
+    if (isFinished) {
+      setThinkingExpanded(false);
+    } else if (runPrompt) {
+      setThinkingExpanded(true);
+    }
+  }, [runActivities, runPrompt]);
 
   const nextMessageId = (prefix: string) => {
     messageIdRef.current += 1;
@@ -675,105 +687,104 @@ export function CopilotChatbox({
                   <MessageScrollerViewport className="pr-2">
                     <MessageScrollerContent className="space-y-3 pb-2">
                       <MessageScrollerItem messageId="graph-console" scrollAnchor={false} className="order-0">
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                <Command className="size-3.5" />
-                                LangGraph Console
-                              </div>
-                              <div className="mt-1 text-sm font-medium text-foreground">
-                                {runComplete ? "Asset ready" : runFailed ? "Run stopped" : runPrompt || "Awaiting workflow input"}
-                              </div>
-                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                {runComplete
-                                  ? "The graph finished its production path and exported the asset."
-                                  : runFailed
-                                    ? "A node failed or the graph terminated early. Inspect the activity trail below."
-                                    : "Live LangGraph nodes, tool calls, and repair loops stream here as execution advances."}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.18em]">
-                                {activeStage || "idle"}
-                              </Badge>
-                              <Badge variant="secondary" className="text-[10px] uppercase tracking-[0.18em]">
-                                {runActivities.length} events
-                              </Badge>
-                            </div>
-                          </div>
+                        <div className="border-l-2 border-primary/30 pl-3 py-1 my-2">
+                          <button
+                            onClick={() => setThinkingExpanded(!thinkingExpanded)}
+                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors font-medium focus:outline-none"
+                          >
+                            {!runFinished ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                            ) : runFailed ? (
+                              <span className="w-2 h-2 rounded-full bg-red-400" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                            )}
+                            <span>
+                              {!runFinished
+                                ? `Thinking... (${activeStage ? activeStage.replaceAll("_", " ") : "initializing"})`
+                                : runFailed
+                                ? "Thought process (stopped)"
+                                : "Thought process"}
+                            </span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                thinkingExpanded ? "transform rotate-180" : ""
+                              }`}
+                            />
+                          </button>
 
-                          <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-3">
-                            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                              <span>Trace</span>
-                              <span>Node by node</span>
-                            </div>
-                            <div className="space-y-1.5">
-                              {liveStages.map((stage, index) => (
-                                <div
-                                  key={stage.id}
-                                  className={`flex items-start gap-3 rounded-xl border px-3 py-2 transition-colors ${stage.status === "running"
-                                    ? "border-cyan-500/40 bg-cyan-500/10"
-                                    : stage.status === "done"
-                                      ? "border-emerald-500/20 bg-emerald-500/5"
-                                      : stage.status === "failed"
-                                        ? "border-red-500/30 bg-red-500/5"
-                                        : "border-transparent bg-muted/10"
-                                    }`}
-                                >
-                                  <div className="mt-0.5 flex shrink-0 flex-col items-center">
-                                    <span
-                                      className={`size-2 rounded-full ${stage.status === "running"
-                                        ? "bg-cyan-400"
+                          {thinkingExpanded && (
+                            <div className="mt-3 space-y-3 rounded-xl border border-border/60 bg-background/60 p-3 max-w-lg">
+                              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.22em] text-muted-foreground border-b border-border/40 pb-1.5">
+                                <span>10-Agent Pipeline</span>
+                                <span>{runActivities.length} events</span>
+                              </div>
+                              
+                              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                                {liveStages.map((stage, index) => (
+                                  <div
+                                    key={stage.id}
+                                    className={`flex items-start gap-2.5 rounded-lg border px-2.5 py-1.5 transition-colors ${
+                                      stage.status === "running"
+                                        ? "border-cyan-500/20 bg-cyan-500/5 text-cyan-300"
                                         : stage.status === "done"
-                                          ? "bg-emerald-400"
-                                          : stage.status === "failed"
-                                            ? "bg-red-400"
-                                            : "bg-muted-foreground/50"
-                                        }`}
-                                    />
-                                    {index < liveStages.length - 1 && (
-                                      <span className="mt-1 h-5 w-px bg-border/70" />
-                                    )}
-                                  </div>
-
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-sm font-medium text-foreground">{stage.title}</span>
-                                      <Badge variant="outline" className="text-[9px] uppercase tracking-[0.16em]">
-                                        {stage.status}
-                                      </Badge>
-                                    </div>
-                                    <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                                      {stage.detail}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="mt-3">
-                            <ChainOfThought autoCloseOnAllComplete={false}>
-                              <ChainOfThoughtTrigger icon={<BrainCircuit />}>
-                                {runComplete ? "Workflow finished" : runFailed ? "Workflow halted" : "Live graph trace"}
-                              </ChainOfThoughtTrigger>
-                              <ChainOfThoughtContent>
-                                {runActivities.map((activity) => (
-                                  <ChainOfThoughtStep
-                                    key={activity.id}
-                                    status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}
+                                        ? "border-emerald-500/10 bg-emerald-500/5 text-emerald-400"
+                                        : stage.status === "failed"
+                                        ? "border-red-500/20 bg-red-500/5 text-red-400"
+                                        : "border-transparent bg-muted/5 opacity-60"
+                                    }`}
                                   >
-                                    <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench /> : undefined}>
-                                      {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
-                                    </ChainOfThoughtStepTitle>
-                                    <p className="text-muted-foreground">{activity.detail}</p>
-                                  </ChainOfThoughtStep>
+                                    <div className="mt-1 flex shrink-0 flex-col items-center">
+                                      <span
+                                        className={`size-1.5 rounded-full ${
+                                          stage.status === "running"
+                                            ? "bg-cyan-400 animate-pulse"
+                                            : stage.status === "done"
+                                            ? "bg-emerald-400"
+                                            : stage.status === "failed"
+                                            ? "bg-red-400"
+                                            : "bg-muted-foreground/30"
+                                        }`}
+                                      />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[11px] font-medium">{stage.title}</span>
+                                        <span className="text-[9px] uppercase tracking-wider opacity-60">
+                                          {stage.status}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] leading-relaxed opacity-80 mt-0.5">
+                                        {stage.detail}
+                                      </div>
+                                    </div>
+                                  </div>
                                 ))}
-                                {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
-                              </ChainOfThoughtContent>
-                            </ChainOfThought>
-                          </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-border/40">
+                                <ChainOfThought autoCloseOnAllComplete={false}>
+                                  <ChainOfThoughtTrigger icon={<BrainCircuit className="w-3.5 h-3.5 text-primary" />}>
+                                    Live activity log
+                                  </ChainOfThoughtTrigger>
+                                  <ChainOfThoughtContent>
+                                    {runActivities.map((activity) => (
+                                      <ChainOfThoughtStep
+                                        key={activity.id}
+                                        status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}
+                                      >
+                                        <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench className="w-3 h-3 text-cyan-400" /> : undefined}>
+                                          {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
+                                        </ChainOfThoughtStepTitle>
+                                        <p className="text-[11px] text-muted-foreground">{activity.detail}</p>
+                                      </ChainOfThoughtStep>
+                                    ))}
+                                    {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
+                                  </ChainOfThoughtContent>
+                                </ChainOfThought>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </MessageScrollerItem>
 
