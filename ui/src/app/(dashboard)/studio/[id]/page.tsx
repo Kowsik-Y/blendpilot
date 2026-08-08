@@ -8,33 +8,11 @@ import { toast } from "sonner";
 import {
   Box,
   Download,
-  Sparkles,
-  Sliders,
 } from "lucide-react";
 import { ThreeViewport, type WorkflowSceneObject } from "@/components/studio/three-viewport";
-import { QAMetricsCard } from "@/components/studio/qa-metrics-card";
 import { HumanReviewModal } from "@/components/studio/human-review-modal";
 import { CopilotChatbox } from "@/components/studio/copilot-chatbox";
 import { connectWorkflowStream, type WorkflowStreamPayload } from "@/lib/workflow-stream";
-
-const PRESETS = [
-  {
-    label: "📦 Sci-Fi Crate",
-    prompt: "Create a low-poly sci-fi supply crate for Unity. Dimensions: 1.0m x 0.7m x 0.6m. Under 8,000 triangles. Dark metal with blue emissive strips.",
-  },
-  {
-    label: "🪑 Dining Table",
-    prompt: "Create a wooden dining table for Unity. Dimensions: 1.2m x 0.8m x 0.75m. Triangle limit: 5,000. Stylized wood finish.",
-  },
-  {
-    label: "🛢️ Medieval Barrel",
-    prompt: "Create a medieval wooden barrel with metal hoops. Dimensions: 0.5m x 0.5m x 0.8m. Triangle budget: 4,000.",
-  },
-  {
-    label: "⚡ Energy Pylon",
-    prompt: "Create a sci-fi energy pylon tower. Dimensions: 0.6m x 0.6m x 2.2m. Under 9,000 triangles. Glowing core.",
-  },
-];
 
 interface StudioAssetSpec {
   asset_type: string;
@@ -83,9 +61,7 @@ export default function StudioPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
-  
-  // Collapsible QA Metrics Drawer
-  const [metricsOpen, setMetricsOpen] = useState(false);
+
 
   const [assetSpec, setAssetSpec] = useState<StudioAssetSpec>({
     asset_type: "crate",
@@ -202,10 +178,10 @@ export default function StudioPage() {
         prev.map((item) =>
           item.name === name
             ? {
-                ...item,
-                location: params.location ? readNumberTuple(params.location, item.location) : item.location,
-                rotation: params.rotation ? readNumberTuple(params.rotation, item.rotation || [0, 0, 0]) : item.rotation,
-              }
+              ...item,
+              location: params.location ? readNumberTuple(params.location, item.location) : item.location,
+              rotation: params.rotation ? readNumberTuple(params.rotation, item.rotation || [0, 0, 0]) : item.rotation,
+            }
             : item
         )
       );
@@ -299,11 +275,11 @@ export default function StudioPage() {
         toast.warning("WebSocket reconnect failed. Using SSE fallback.");
       },
       onMessage: (payload: WorkflowStreamPayload) => {
-      try {
-        handleWorkflowStreamPayload(payload);
-      } catch (e) {
-        console.error("Workflow stream parse error", e);
-      }
+        try {
+          handleWorkflowStreamPayload(payload);
+        } catch (e) {
+          console.error("Workflow stream parse error", e);
+        }
       },
       onClose: () => {
         setRunning(false);
@@ -386,17 +362,6 @@ export default function StudioPage() {
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant="ghost"
-            className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setMetricsOpen((prev) => !prev)}
-            title="Toggle QA Telemetry Drawer"
-          >
-            <Sliders className="w-3.5 h-3.5 mr-1 text-cyan-400" />
-            <span>QA Metrics</span>
-          </Button>
-
-          <Button
-            size="sm"
             variant="outline"
             onClick={handleDownload}
             className="text-xs border-border text-foreground gap-1.5 h-8 hover:border-cyan-500/50"
@@ -407,22 +372,6 @@ export default function StudioPage() {
         </div>
       </div>
 
-      {/* Quick Presets Bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-primary" /> Presets:
-        </span>
-        {PRESETS.map((p, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleStartPipeline(p.prompt)}
-            className="text-xs px-2.5 py-1 rounded-lg bg-card border border-border hover:border-primary/50 text-foreground transition-all hover:bg-muted/30"
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       {/* Main Studio 2-Column Split: Viewport (Left 7-cols) + Unified Copilot Chatbox (Right 5-cols) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch overflow-hidden">
         {/* Left Column: Full-Height 3D Viewport (No bottom text box) */}
@@ -430,19 +379,6 @@ export default function StudioPage() {
           <div className="flex-1 min-h-0 flex flex-col">
             <ThreeViewport assetSpec={assetSpec} sceneObjects={sceneObjects} />
           </div>
-
-          {/* Optional Collapsible Metrics Drawer */}
-          {metricsOpen && (
-            <div className="shrink-0 animate-in fade-in duration-200">
-              <QAMetricsCard
-                geometryScore={qaState.geometryScore}
-                geometryStatus={qaState.geometryStatus}
-                visualScore={qaState.visualScore}
-                repairCount={qaState.repairCount}
-                revisionCount={qaState.revisionCount}
-              />
-            </div>
-          )}
         </div>
 
         {/* Right Column: Unified Copilot Chatbox (All Prompts, Plans & Agents Flow Here) */}
