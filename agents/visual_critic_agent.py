@@ -47,18 +47,18 @@ class VisualCriticAgent:
                     logger.info("Vision LLM critique: score=%.2f approved=%s", critique.overall_score, critique.approved)
                     return critique
             except Exception as e:
-                logger.warning("Vision LLM critique failed (%s), using heuristic evaluation", e)
+                logger.warning("Vision LLM critique failed (%s), falling back to text-only LLM", e)
 
-            # Fallback: text-only LLM critique (no image)
-            try:
-                critique = await self._llm_text_critique(spec, revision_count)
-                if critique:
-                    return critique
-            except Exception as e:
-                logger.warning("Text-only LLM critique also failed (%s)", e)
+        # Fallback: text-only LLM critique (no image)
+        try:
+            critique = await self._llm_text_critique(spec, revision_count)
+            if critique:
+                return critique
+        except Exception as e:
+            logger.error("Text-only LLM critique failed (%s)", e)
+            raise RuntimeError(f"Failed to generate VisualCritiqueResult via LLM: {e}")
 
-        # Final fallback: heuristic
-        return self._heuristic_critique(spec, revision_count)
+        raise RuntimeError("LLM failed to return a valid VisualCritiqueResult and no heuristic fallback is permitted.")
 
     async def _llm_vision_critique(
         self,
@@ -139,32 +139,4 @@ class VisualCriticAgent:
             logger.warning("Failed to parse text critique response: %s", e)
             return None
 
-    def _heuristic_critique(self, spec: DesignSpec, revision_count: int) -> VisualCritiqueResult:
-        """Evaluate aesthetic fidelity, silhouette clarity, and material accuracy."""
-        # Simulated quality score increases with revisions
-        base_score = 0.88 + (revision_count * 0.05)
-        score = min(0.98, base_score)
-        approved = score >= self.APPROVAL_THRESHOLD
 
-        issues: list[str] = []
-        strengths: list[str] = [
-            f"Accurate bounding proportion ({spec.dimensions.width}m × {spec.dimensions.depth}m × {spec.dimensions.height}m)",
-            f"Materials aligned with requested {spec.style} aesthetic",
-            "Bevel edge highlights provide clear silhouette readability",
-        ]
-
-        if score < self.APPROVAL_THRESHOLD and revision_count < self.MAX_VISUAL_REVISIONS:
-            issues.append("Slightly low contrast on secondary trim materials")
-            suggested_actions = ["Increase rim light power by 20%", "Boost emission strength on accent trims"]
-        else:
-            suggested_actions = ["Asset meets all visual fidelity and aesthetic criteria"]
-
-        return VisualCritiqueResult(
-            approved=approved,
-            overall_score=score,
-            aesthetic_score=score,
-            spec_compliance_score=0.95,
-            strengths=strengths,
-            issues=issues,
-            suggested_actions=suggested_actions,
-        )

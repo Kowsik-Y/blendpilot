@@ -158,98 +158,7 @@ export default function StudioPage() {
     }
   };
 
-  const applyToolResultToViewport = useCallback((payload: WorkflowStreamPayload) => {
-    const eventKey =
-      typeof payload.event_id === "number"
-        ? `event:${payload.event_id}`
-        : `${payload.tool}:${payload.step_id}:${JSON.stringify(payload.parameters || {})}`;
-    if (handledSceneEventsRef.current.has(eventKey)) {
-      return;
-    }
-    handledSceneEventsRef.current.add(eventKey);
 
-    const params = payload.parameters || {};
-    const response = payload.response || {};
-    const tool = payload.tool;
-
-    if (tool === "create_primitive") {
-      const name = readString(params.name, readString(response.object_name, "Object"));
-      const object: WorkflowSceneObject = {
-        name,
-        primitiveType: readString(params.primitive_type, "cube"),
-        dimensions: readNumberTuple(params.dimensions, [1, 1, 1]),
-        location: readNumberTuple(params.location, [0, 0, 0]),
-        rotation: readNumberTuple(params.rotation, [0, 0, 0]),
-        modifiers: [],
-      };
-      setSceneObjects((prev) => [...prev.filter((item) => item.name !== name), object]);
-      setSelectedObjectName(name);
-      setRightPanelTab("inspector");
-      return;
-    }
-
-    if (tool === "duplicate_object") {
-      const sourceName = readString(params.name);
-      const newName = readString(params.new_name, readString(response.new_object, `${sourceName}_copy`));
-      const offset = readNumberTuple(params.offset, [0, 0, 0]);
-      setSceneObjects((prev) => {
-        const source = prev.find((item) => item.name === sourceName);
-        if (!source) return prev;
-        const copy: WorkflowSceneObject = {
-          ...source,
-          name: newName,
-          location: [
-            source.location[0] + offset[0],
-            source.location[1] + offset[1],
-            source.location[2] + offset[2],
-          ],
-        };
-        return [...prev.filter((item) => item.name !== newName), copy];
-      });
-      setSelectedObjectName(newName);
-      setRightPanelTab("inspector");
-      return;
-    }
-
-    if (tool === "set_transform") {
-      const name = readString(params.name);
-      setSceneObjects((prev) =>
-        prev.map((item) =>
-          item.name === name
-            ? {
-              ...item,
-              location: params.location ? readNumberTuple(params.location, item.location) : item.location,
-              rotation: params.rotation ? readNumberTuple(params.rotation, item.rotation || [0, 0, 0]) : item.rotation,
-            }
-            : item
-        )
-      );
-      return;
-    }
-
-    if (tool === "add_modifier") {
-      const name = readString(params.object_name);
-      const modifier = readString(params.modifier_type);
-      setSceneObjects((prev) =>
-        prev.map((item) =>
-          item.name === name
-            ? { ...item, modifiers: [...(item.modifiers || []), modifier] }
-            : item
-        )
-      );
-      return;
-    }
-
-    if (tool === "assign_material") {
-      const name = readString(params.object_name);
-      const materialName = readString(params.material_name);
-      setSceneObjects((prev) =>
-        prev.map((item) =>
-          item.name === name ? { ...item, materialName } : item
-        )
-      );
-    }
-  }, []);
 
   const handleWorkflowStreamPayload = useCallback((payload: WorkflowStreamPayload) => {
     const payloads =
@@ -265,9 +174,7 @@ export default function StudioPage() {
         setActiveNode("modeling_agent");
       }
 
-      if (currentPayload.event === "tool_result" && currentPayload.status === "COMPLETED") {
-        applyToolResultToViewport(currentPayload);
-      }
+
 
       if (node) {
         setCompletedNodes((prev) => (prev.includes(node) ? prev : [...prev, node]));
@@ -301,7 +208,7 @@ export default function StudioPage() {
         toast.success("3D Asset generated successfully!");
       }
     });
-  }, [applyToolResultToViewport]);
+  }, []);
 
   const connectStream = useCallback((sid: string) => {
     const stream = connectWorkflowStream({
@@ -311,9 +218,7 @@ export default function StudioPage() {
           toast.success("Live workflow socket connected");
         }
       },
-      onFallback: () => {
-        toast.warning("WebSocket reconnect failed. Using SSE fallback.");
-      },
+
       onMessage: (payload: WorkflowStreamPayload) => {
         try {
           handleWorkflowStreamPayload(payload);

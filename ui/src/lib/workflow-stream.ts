@@ -4,23 +4,14 @@ export interface WorkflowStreamPayload {
   node?: string;
   status?: string;
   session_id?: string;
-  step_id?: number;
-  total_steps?: number;
-  step_count?: number;
-  description?: string;
-  tool?: string;
-  error?: string;
-  reasoning?: string;
-  parameters?: Record<string, unknown>;
-  response?: Record<string, unknown>;
   state?: Record<string, unknown>;
+  error?: string;
 }
 
 interface WorkflowStreamOptions {
   sessionId: string;
   onMessage: (payload: WorkflowStreamPayload) => void;
-  onOpen?: (transport: "websocket" | "sse") => void;
-  onFallback?: () => void;
+  onOpen?: (transport: "websocket") => void;
   onClose?: () => void;
 }
 
@@ -45,12 +36,10 @@ export function connectWorkflowStream({
   sessionId,
   onMessage,
   onOpen,
-  onFallback,
   onClose,
 }: WorkflowStreamOptions): WorkflowStreamHandle {
   let closed = false;
   let socket: WebSocket | null = null;
-  let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let lastEventId = 0;
@@ -58,20 +47,21 @@ export function connectWorkflowStream({
 
   const dispatch = (payload: WorkflowStreamPayload) => {
     const eventId = payload.event_id;
-    if (typeof eventId === "number" && payload.event !== "snapshot" && payload.event !== "ping") {
+    if (typeof eventId === "number" && payload.event !== "ping" && payload.event !== "connected") {
       if (seenEventIds.has(eventId)) return;
       seenEventIds.add(eventId);
       lastEventId = Math.max(lastEventId, eventId);
     }
+    
     onMessage(payload);
+    
     if (
       payload.event === "workflow_complete" ||
       payload.event === "workflow_missing" ||
-      (payload.status === "FAILED" && payload.event !== "tool_result")
+      payload.status === "FAILED"
     ) {
       closed = true;
       closeSocket();
-      eventSource?.close();
       onClose?.();
     }
   };
@@ -87,35 +77,13 @@ export function connectWorkflowStream({
     }
   };
 
-  const startSseFallback = () => {
-    if (closed || eventSource) return;
-    closeSocket();
-    onFallback?.();
-    eventSource = new EventSource(`/api/pipeline/${sessionId}/stream`);
-    eventSource.onopen = () => onOpen?.("sse");
-    eventSource.onmessage = (event) => {
-      try {
-        dispatch(JSON.parse(event.data) as WorkflowStreamPayload);
-      } catch {
-        // Ignore malformed stream frames.
-      }
-    };
-    eventSource.onerror = () => {
-      eventSource?.close();
-      eventSource = null;
-      if (!closed) {
-        reconnectTimer = setTimeout(startWebSocket, 1500);
-      }
-    };
-  };
-
   const startWebSocket = () => {
     if (closed) return;
     try {
       closeSocket();
       socket = new WebSocket(buildWorkflowWsUrl(sessionId, lastEventId));
     } catch {
-      startSseFallback();
+      console.error("Failed to construct WebSocket");
       return;
     }
 
@@ -140,10 +108,6 @@ export function connectWorkflowStream({
       closeSocket();
       if (closed || event.code === 4404) return;
       reconnectAttempts += 1;
-      if (reconnectAttempts >= 3) {
-        startSseFallback();
-        return;
-      }
       const delay = Math.min(5000, 500 * 2 ** (reconnectAttempts - 1));
       reconnectTimer = setTimeout(startWebSocket, delay);
     };
@@ -156,7 +120,6 @@ export function connectWorkflowStream({
       closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       closeSocket();
-      eventSource?.close();
       onClose?.();
     },
   };

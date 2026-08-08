@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.llm import LLMService
@@ -84,31 +84,24 @@ async def chat_with_copilot(req: CopilotChatRequest) -> CopilotChatResponse:
 
     context_str = "\n".join(context_parts)
 
-    # If real API key is provided, use LangChain for real LLM reasoning
-    if llm_service.config.api_key:
-        try:
-            reply = await _llm_chat(llm_service, context_str, req.conversation_history or [])
-            if reply:
-                return CopilotChatResponse(
-                    reply=reply,
-                    suggested_actions=_extract_suggested_actions(req.message, reply),
-                    provider_used=req.provider,
-                    is_live_llm=True,
-                )
-        except Exception as e:
-            logger.warning("Copilot LLM call failed (%s), falling back to heuristic assistant", e)
+    # Ensure API key is configured
+    if not llm_service.config.api_key:
+        raise HTTPException(status_code=401, detail="API Key Required. Please configure your LLM API Key to enable Copilot.")
 
-    # No API key — return a helpful prompt
-    return CopilotChatResponse(
-        reply=(
-            "⚠️ **API Key Required**\n\n"
-            "To enable real-time AI chat and 3D agent execution, please configure your LLM API Key.\n\n"
-            "Click **🔑 Configure LLM Key** or go to **⚙️ Settings** to link your OpenAI or Anthropic key."
-        ),
-        suggested_actions=["🔑 Configure LLM Key"],
-        provider_used="none",
-        is_live_llm=False,
-    )
+    # Execute LLM chat
+    try:
+        reply = await _llm_chat(llm_service, context_str, req.conversation_history or [])
+        if not reply:
+            raise RuntimeError("LLM returned an empty response")
+        return CopilotChatResponse(
+            reply=reply,
+            suggested_actions=[],
+            provider_used=req.provider,
+            is_live_llm=True,
+        )
+    except Exception as e:
+        logger.error("Copilot LLM call failed (%s)", e)
+        raise HTTPException(status_code=500, detail=f"LLM call failed: {e}")
 
 
 async def _llm_chat(
@@ -138,28 +131,3 @@ async def _llm_chat(
     return str(response.content) if response.content else ""
 
 
-def _extract_suggested_actions(user_msg: str, reply: str) -> list[str]:
-    """Contextually extract suggested action chips from the conversation."""
-    lower = (user_msg + " " + reply).lower()
-    actions: list[str] = []
-
-    # Detect modeling-related actions
-    if any(kw in lower for kw in ["bevel", "edge", "chamfer", "smooth"]):
-        actions.append("🛠️ Add 0.02m Bevel Modifier")
-    if any(kw in lower for kw in ["dimension", "scale", "size", "resize", "wider", "taller"]):
-        actions.append("📐 Adjust Dimensions")
-    if any(kw in lower for kw in ["material", "shader", "color", "texture", "pbr", "metallic", "roughness"]):
-        actions.append("🎨 Tune PBR Shader Nodes")
-    if any(kw in lower for kw in ["plan", "step", "workflow", "pipeline"]):
-        actions.append("📋 Generate Step-by-Step Plan")
-    if any(kw in lower for kw in ["create", "make", "build", "generate", "design", "model"]):
-        actions.append("🚀 Launch 10-Agent Pipeline")
-    if any(kw in lower for kw in ["export", "download", "fbx", "glb", "blend"]):
-        actions.append("📦 Export Production Bundle")
-    if any(kw in lower for kw in ["topology", "manifold", "quality", "check", "validate"]):
-        actions.append("🔍 Run Topology QA")
-
-    if not actions:
-        actions = ["🚀 Launch 10-Agent Pipeline", "📋 Generate Modeling Plan", "🛠️ Add 0.02m Bevel Modifier"]
-
-    return actions[:3]

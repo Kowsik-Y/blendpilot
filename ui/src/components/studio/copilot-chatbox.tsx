@@ -101,13 +101,7 @@ export interface CopilotMessage {
   citations?: CopilotCitation[];
 }
 
-interface PipelineActivity {
-  id: string;
-  title: string;
-  detail: string;
-  status: "running" | "done" | "failed";
-  tool?: string;
-}
+
 
 interface StudioAssetSpec {
   asset_type?: string;
@@ -122,68 +116,30 @@ interface StudioAssetSpec {
   };
 }
 
-interface PipelineStatePayload {
-  current_agent?: string;
-  design_spec?: StudioAssetSpec;
-  geometry_score?: number;
-  visual_score?: number;
-  events?: Array<Record<string, unknown>>;
-  stream_events?: WorkflowStreamPayload[];
-}
 
-interface StageStatus {
-  id: string;
-  title: string;
-  detail: string;
-  status: "pending" | "running" | "done" | "failed";
-}
-
-const AGENT_NODE_ALIASES: Record<string, string> = {
-  intent_agent: "intent",
-  scene_agent: "scene",
-  research_agent: "research",
-  planning_agent: "planning",
-  modeling_agent: "modeling",
-  material_agent: "material",
-  geometry_qa_agent: "geometry_qa",
-  geometry_repair: "geometry_qa",
-  visual_critic_agent: "visual_critic",
-  visual_repair: "visual_critic",
-  feedback_agent: "human_feedback",
-  export_agent: "export",
-};
-
-function toStageId(node?: string | null) {
-  if (!node) return null;
-  return AGENT_NODE_ALIASES[node] || node;
-}
 
 interface CopilotChatboxProps {
-  assetSpec?: StudioAssetSpec;
-  onApplyAction?: (actionText: string) => void;
+  assetSpec?: any;
+  onApplyAction?: (action: string) => void;
   onStartPipeline?: (prompt: string) => void;
   onWorkflowEvent?: (payload: WorkflowStreamPayload) => void;
   pipelineSessionId?: string | null;
   pipelineRunning?: boolean;
 }
 
-function createStageStatuses(): StageStatus[] {
-  return AGENT_DEFINITIONS.map((agent) => ({
-    id: agent.id,
-    title: agent.name,
-    detail: agent.desc,
-    status: "pending",
-  }));
+interface LiveThinkingState {
+  active: boolean;
+  content: string;
+  tools: { id: string; name: string; status: "running" | "done" | "failed" }[];
 }
 
-const COPILOT_STORE_KEY = "blendpilot:studio-copilot:v1";
 export function CopilotChatbox({
   assetSpec,
   onApplyAction,
   onStartPipeline,
   onWorkflowEvent,
   pipelineSessionId,
-  pipelineRunning = false,
+  pipelineRunning,
 }: CopilotChatboxProps) {
   const messageIdRef = useRef(0);
   const handledWorkflowEventsRef = useRef<Set<string>>(new Set());
@@ -202,261 +158,17 @@ export function CopilotChatbox({
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
 
-  // In-chat LangGraph Execution Progress
-  const [stageStatuses, setStageStatuses] = useState<StageStatus[]>(createStageStatuses());
-  const [runPrompt, setRunPrompt] = useState<string | null>(null);
-  const [runActivities, setRunActivities] = useState<PipelineActivity[]>([]);
-  const [activeStage, setActiveStage] = useState<string | null>(null);
-
+  const [liveThinking, setLiveThinking] = useState<LiveThinkingState>({
+    active: false,
+    content: "",
+    tools: [],
+  });
   const nextMessageId = (prefix: string) => {
     messageIdRef.current += 1;
     return `${prefix}-${messageIdRef.current}`;
   };
 
-  const setPipelineStepStatus = useCallback((nodeId: string, status: StageStatus["status"], detail?: string) => {
-    const stageId = toStageId(nodeId);
-    if (!stageId) return;
-    setStageStatuses((prev) =>
-      prev.map((step) => {
-        if (step.id === stageId) {
-          return { ...step, status, detail: detail || step.detail };
-        }
-        if (status === "running" && step.status === "running") {
-          return { ...step, status: "done" };
-        }
-        return step;
-      })
-    );
-    setActiveStage(stageId);
-  }, []);
 
-  const markWorkflowEventHandled = useCallback((payload: WorkflowStreamPayload) => {
-    const key =
-      typeof payload.event_id === "number"
-        ? `id:${payload.event_id}`
-        : `${payload.event || "node"}:${payload.node || ""}:${payload.step_id || ""}:${payload.status || ""}`;
-    if (handledWorkflowEventsRef.current.has(key)) {
-      return false;
-    }
-    handledWorkflowEventsRef.current.add(key);
-    return true;
-  }, []);
-
-  const upsertRunActivity = useCallback((activity: PipelineActivity) => {
-    setRunActivities((prev) => {
-      const existingIndex = prev.findIndex((item) => item.id === activity.id);
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        next[existingIndex] = { ...next[existingIndex], ...activity };
-        return next;
-      }
-      return [...prev, activity].slice(-32);
-    });
-  }, []);
-
-  const describeNodeActivity = useCallback((node: string, state: PipelineStatePayload): PipelineActivity | null => {
-    if (node === "intent" && state.design_spec) {
-      const spec = state.design_spec;
-      return {
-        id: "node:intent",
-        title: "Intent understood",
-        detail: `${spec.asset_type || "asset"} · ${spec.dimensions?.width || 1}m x ${spec.dimensions?.depth || 1}m x ${spec.dimensions?.height || 1}m · target < ${spec.budget?.target_triangles || 8000} tris`,
-        status: "done",
-      };
-    }
-    if (node === "scene") {
-      return { id: "node:scene", title: "Scene scanned", detail: "Workspace checked and origin calibrated", status: "done" };
-    }
-    if (node === "research") {
-      return { id: "node:research", title: "Constraints grounded", detail: "Engine profile, PBR rules, and topology constraints applied", status: "done" };
-    }
-    if (node === "planning") {
-      return { id: "node:planning", title: "Plan synthesized", detail: "Executable Blender operations prepared", status: "done" };
-    }
-    if (node === "modeling") {
-      return { id: "node:modeling", title: "Geometry built", detail: "Primitive operations completed and modifiers applied", status: "done" };
-    }
-    if (node === "material") {
-      return { id: "node:material", title: "Materials assigned", detail: "PBR material and preview lighting configured", status: "done" };
-    }
-    if (node === "geometry_qa") {
-      const score = state.geometry_score !== undefined ? Math.round(state.geometry_score * 100) : 100;
-      return { id: "node:geometry_qa", title: "Topology checked", detail: `${score}% geometry pass rate`, status: "done" };
-    }
-    if (node === "visual_critic") {
-      const score = state.visual_score !== undefined ? Math.round(state.visual_score * 100) : 88;
-      return { id: "node:visual_critic", title: "Visual critique complete", detail: `${score}% visual quality score`, status: "done" };
-    }
-    if (node === "export") {
-      return { id: "node:export", title: "Export packaged", detail: ".blend, .fbx, and .glb bundle ready", status: "done" };
-    }
-    return null;
-  }, []);
-
-  const hydrateGraphStagesFromSnapshot = useCallback((state: PipelineStatePayload) => {
-    const completed = new Set<string>();
-    const events = Array.isArray(state.events) ? state.events : [];
-    for (const event of events) {
-      if (!event || typeof event !== "object") continue;
-      const agentName = "agent_name" in event ? String(event.agent_name) : "";
-      const status = "status" in event ? String(event.status) : "";
-      if (status !== "COMPLETED") continue;
-      if (agentName === "intent_agent") completed.add("intent");
-      if (agentName === "scene_agent") completed.add("scene");
-      if (agentName === "research_agent") completed.add("research");
-      if (agentName === "planning_agent") completed.add("planning");
-      if (agentName === "modeling_agent") completed.add("modeling");
-      if (agentName === "material_agent") completed.add("material");
-      if (agentName === "geometry_qa_agent") completed.add("geometry_qa");
-      if (agentName === "visual_critic_agent") completed.add("visual_critic");
-      if (agentName === "feedback_agent") completed.add("human_feedback");
-      if (agentName === "export_agent") completed.add("export");
-    }
-    setStageStatuses((prev) =>
-      prev.map((step) => {
-        if (completed.has(step.id)) {
-          return { ...step, status: "done" };
-        }
-        if (step.id === toStageId(state.current_agent)) {
-          return { ...step, status: "running" };
-        }
-        return step;
-      })
-    );
-    const currentStage = toStageId(state.current_agent);
-    if (currentStage) {
-      setActiveStage(currentStage);
-    }
-  }, []);
-
-  const handlePipelineEvent = useCallback((payload: WorkflowStreamPayload, fromSnapshot = false) => {
-    if (!fromSnapshot && !markWorkflowEventHandled(payload)) {
-      return;
-    }
-
-    if (payload.event === "agent_state" && payload.node) {
-      const status =
-        payload.status === "FAILED" ? "failed" :
-          payload.status === "COMPLETED" ? "done" :
-            "running";
-      setPipelineStepStatus(payload.node, status, payload.description);
-      upsertRunActivity({
-        id: `agent:${payload.node}`,
-        title:
-          status === "running"
-            ? `Working on ${payload.node.replaceAll("_", " ")}`
-            : `Finished ${payload.node.replaceAll("_", " ")}`,
-        detail: payload.description || "Working through the next stage",
-        status,
-      });
-      return;
-    }
-
-    if (payload.event === "plan_ready") {
-      setPipelineStepStatus("planning", "done");
-      upsertRunActivity({
-        id: "plan-ready",
-        title: "Execution plan ready",
-        detail: `${payload.step_count || 0} Blender operations queued`,
-        status: "done",
-      });
-      return;
-    }
-
-    if (payload.event === "tool_start") {
-      setPipelineStepStatus(payload.node || "modeling", "running", payload.description);
-      upsertRunActivity({
-        id: `tool:${payload.step_id}`,
-        title: `Running step ${payload.step_id}/${payload.total_steps}`,
-        detail: payload.description || "Executing Blender tool",
-        status: "running",
-        tool: payload.tool,
-      });
-      return;
-    }
-
-    if (payload.event === "tool_result") {
-      const ok = payload.status === "COMPLETED";
-      upsertRunActivity({
-        id: `tool:${payload.step_id}`,
-        title: ok ? `Step ${payload.step_id} complete` : `Step ${payload.step_id} failed`,
-        detail: ok
-          ? `Completed via ${payload.tool}`
-          : payload.error || "Unknown Blender tool error",
-        status: ok ? "done" : "failed",
-        tool: payload.tool,
-      });
-      return;
-    }
-
-    if (payload.event === "tool_recovered") {
-      upsertRunActivity({
-        id: `tool:${payload.step_id}`,
-        title: `Step ${payload.step_id} recovered`,
-        detail: payload.reasoning || "Recovered and completed",
-        status: "done",
-      });
-      return;
-    }
-
-    if (payload.event === "workflow_complete") {
-      const completed = String(payload.status || "").toUpperCase() === "COMPLETED";
-      setStageStatuses((prev) =>
-        prev.map((step) =>
-          completed
-            ? { ...step, status: "done" }
-            : step.status === "running"
-              ? { ...step, status: "failed" }
-              : step
-        )
-      );
-      upsertRunActivity({
-        id: "workflow-complete",
-        title: completed ? "Run complete" : "Run stopped",
-        detail: completed
-          ? "All confirmed orchestration stages finished"
-          : payload.error || "The workflow ended before every stage could complete",
-        status: completed ? "done" : "failed",
-      });
-      return;
-    }
-
-    if (payload.event === "workflow_missing" || payload.status === "FAILED") {
-      setStageStatuses((prev) =>
-        prev.map((step) =>
-          step.id === toStageId(payload.node) || step.status === "running"
-            ? { ...step, status: "failed" }
-            : step
-        )
-      );
-      upsertRunActivity({
-        id: "workflow-error",
-        title: "Workflow connection failed",
-        detail: payload.error || "The workflow could not continue. Re-run the request to start a new session.",
-        status: "failed",
-      });
-      return;
-    }
-
-    if (payload.node) {
-      const stageId = toStageId(payload.node) || payload.node;
-      setStageStatuses((prev) =>
-        prev.map((s) => s.id === stageId ? { ...s, status: "done" } : s)
-      );
-      const state = (payload.state || {}) as PipelineStatePayload;
-      const activity = describeNodeActivity(stageId, state);
-      if (activity) {
-        upsertRunActivity(activity);
-      }
-      setActiveStage(toStageId(state.current_agent) || stageId);
-    }
-  }, [describeNodeActivity, markWorkflowEventHandled, setPipelineStepStatus, upsertRunActivity]);
-
-  const replayPipelineEvents = useCallback((events: WorkflowStreamPayload[]) => {
-    for (const event of events) {
-      handlePipelineEvent(event, true);
-    }
-  }, [handlePipelineEvent]);
 
   // Auto-fetch user settings on mount
   const loadSettings = async () => {
@@ -513,25 +225,44 @@ export function CopilotChatbox({
     if (!pipelineSessionId) return;
 
     handledWorkflowEventsRef.current.clear();
+    setLiveThinking({ active: true, content: "", tools: [] });
+
     const stream = connectWorkflowStream({
       sessionId: pipelineSessionId,
-      onFallback: () => {
-        toast.warning("Workflow WebSocket dropped. Reconnected through SSE.");
-      },
       onMessage: (payload: WorkflowStreamPayload) => {
         try {
-          onWorkflowEvent?.(payload);
-          const state = (payload.state || {}) as PipelineStatePayload;
-
-          if (payload.event === "snapshot") {
-            hydrateGraphStagesFromSnapshot(state);
-            if (Array.isArray(state.stream_events)) {
-              replayPipelineEvents(state.stream_events);
-            }
-            return;
+          if (payload.event === "on_chat_model_stream" && payload.state?.chunk) {
+             const chunk = payload.state.chunk as { content?: string };
+             if (chunk.content) {
+               setLiveThinking(prev => ({ ...prev, content: prev.content + chunk.content }));
+             }
+          } else if (payload.event === "on_tool_start" && payload.node) {
+             const toolId = payload.state?.run_id as string || payload.node;
+             setLiveThinking(prev => ({ 
+               ...prev, 
+               tools: [...prev.tools, { id: toolId, name: payload.node!, status: "running" }] 
+             }));
+          } else if (payload.event === "on_tool_end" && payload.node) {
+             const toolId = payload.state?.run_id as string || payload.node;
+             setLiveThinking(prev => ({
+               ...prev,
+               tools: prev.tools.map(t => t.id === toolId ? { ...t, status: "done" } : t)
+             }));
+          } else if (payload.event === "workflow_complete") {
+             setLiveThinking(prev => {
+                if (prev.content) {
+                   setMessages(m => [...m, {
+                     id: nextMessageId("copilot"),
+                     role: "copilot",
+                     content: prev.content,
+                     time: "Just now"
+                   }]);
+                }
+                return { active: false, content: "", tools: [] };
+             });
           }
 
-          handlePipelineEvent(payload);
+          onWorkflowEvent?.(payload);
         } catch (e) {
           console.error("Workflow stream parse error", e);
         }
@@ -540,13 +271,11 @@ export function CopilotChatbox({
 
     return () => {
       stream.close();
+      setLiveThinking({ active: false, content: "", tools: [] });
     };
   }, [
     pipelineSessionId,
     onWorkflowEvent,
-    handlePipelineEvent,
-    hydrateGraphStagesFromSnapshot,
-    replayPipelineEvents,
   ]);
 
 
@@ -593,17 +322,6 @@ export function CopilotChatbox({
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setAttachments([]);
-      setRunPrompt(text);
-      setRunActivities([
-        {
-          id: "run-start",
-          title: "Request received",
-          detail: "Preparing the 10-agent Blender workflow",
-          status: "running",
-        },
-      ]);
-      setStageStatuses(createStageStatuses().map((step, idx) => (idx === 0 ? { ...step, status: "running" } : step)));
-      setActiveStage("intent");
       handledWorkflowEventsRef.current.clear();
       onStartPipeline(text);
       return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
@@ -672,12 +390,7 @@ export function CopilotChatbox({
     }
   };
 
-  const runFinished = runActivities.some((activity) => activity.id === "workflow-complete");
-  const runFailed = runActivities.some(
-    (activity) => activity.id === "workflow-complete" && activity.status === "failed"
-  );
-  const runComplete = runFinished && !runFailed;
-  const liveStages = stageStatuses;
+
 
   return (
     <>
@@ -715,108 +428,6 @@ export function CopilotChatbox({
                 <MessageScroller>
                   <MessageScrollerViewport className="pr-2">
                     <MessageScrollerContent className="space-y-3 pb-2">
-                      <MessageScrollerItem messageId="graph-console" scrollAnchor={false} className="order-0">
-                        <div className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                                <Command className="size-3.5" />
-                                LangGraph Console
-                              </div>
-                              <div className="mt-1 text-sm font-medium text-foreground">
-                                {runComplete ? "Asset ready" : runFailed ? "Run stopped" : runPrompt || "Awaiting workflow input"}
-                              </div>
-                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                {runComplete
-                                  ? "The graph finished its production path and exported the asset."
-                                  : runFailed
-                                    ? "A node failed or the graph terminated early. Inspect the activity trail below."
-                                    : "Live LangGraph nodes, tool calls, and repair loops stream here as execution advances."}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.18em]">
-                                {activeStage || "idle"}
-                              </Badge>
-                              <Badge variant="secondary" className="text-[10px] uppercase tracking-[0.18em]">
-                                {runActivities.length} events
-                              </Badge>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-3">
-                            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                              <span>Trace</span>
-                              <span>Node by node</span>
-                            </div>
-                            <div className="space-y-1.5">
-                              {liveStages.map((stage, index) => (
-                                <div
-                                  key={stage.id}
-                                  className={`flex items-start gap-3 rounded-xl border px-3 py-2 transition-colors ${stage.status === "running"
-                                    ? "border-cyan-500/40 bg-cyan-500/10"
-                                    : stage.status === "done"
-                                      ? "border-emerald-500/20 bg-emerald-500/5"
-                                      : stage.status === "failed"
-                                        ? "border-red-500/30 bg-red-500/5"
-                                        : "border-transparent bg-muted/10"
-                                    }`}
-                                >
-                                  <div className="mt-0.5 flex shrink-0 flex-col items-center">
-                                    <span
-                                      className={`size-2 rounded-full ${stage.status === "running"
-                                        ? "bg-cyan-400"
-                                        : stage.status === "done"
-                                          ? "bg-emerald-400"
-                                          : stage.status === "failed"
-                                            ? "bg-red-400"
-                                            : "bg-muted-foreground/50"
-                                        }`}
-                                    />
-                                    {index < liveStages.length - 1 && (
-                                      <span className="mt-1 h-5 w-px bg-border/70" />
-                                    )}
-                                  </div>
-
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-sm font-medium text-foreground">{stage.title}</span>
-                                      <Badge variant="outline" className="text-[9px] uppercase tracking-[0.16em]">
-                                        {stage.status}
-                                      </Badge>
-                                    </div>
-                                    <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                                      {stage.detail}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="mt-3">
-                            <ChainOfThought autoCloseOnAllComplete={false}>
-                              <ChainOfThoughtTrigger icon={<BrainCircuit />}>
-                                {runComplete ? "Workflow finished" : runFailed ? "Workflow halted" : "Live graph trace"}
-                              </ChainOfThoughtTrigger>
-                              <ChainOfThoughtContent>
-                                {runActivities.map((activity) => (
-                                  <ChainOfThoughtStep
-                                    key={activity.id}
-                                    status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}
-                                  >
-                                    <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench /> : undefined}>
-                                      {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
-                                    </ChainOfThoughtStepTitle>
-                                    <p className="text-muted-foreground">{activity.detail}</p>
-                                  </ChainOfThoughtStep>
-                                ))}
-                                {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
-                              </ChainOfThoughtContent>
-                            </ChainOfThought>
-                          </div>
-                        </div>
-                      </MessageScrollerItem>
 
                       {/* Message Flow */}
                       {messages.map((m) => {
@@ -897,6 +508,53 @@ export function CopilotChatbox({
                           </MessageScrollerItem>
                         );
                       })}
+
+                      {liveThinking.active && (
+                        <MessageScrollerItem messageId="live-thinking" className="order-1 animate-in fade-in slide-in-from-bottom-2">
+                          <Message align="start" className="my-2">
+                            <MessageAvatar>
+                              <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </div>
+                            </MessageAvatar>
+                            <MessageContent>
+                              <Bubble variant="outline" align="start">
+                                <BubbleContent>
+                                  <div className="flex flex-col gap-3">
+                                    <div className="text-xs font-semibold flex items-center gap-2 text-cyan-400">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Agent is thinking...
+                                    </div>
+                                    {liveThinking.content && (
+                                      <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                          {liveThinking.content}
+                                        </ReactMarkdown>
+                                      </div>
+                                    )}
+                                    {liveThinking.tools.length > 0 && (
+                                      <div className="mt-2 border-t border-border/40 pt-2">
+                                        <ChainOfThought autoCloseOnAllComplete={false}>
+                                          <ChainOfThoughtTrigger icon={<BrainCircuit className="w-4 h-4" />}>
+                                            Tool Execution Trace
+                                          </ChainOfThoughtTrigger>
+                                          <ChainOfThoughtContent>
+                                            {liveThinking.tools.map((t, idx) => (
+                                              <ChainOfThoughtStep key={idx} status={t.status === "done" ? "completed" : "running"}>
+                                                <ChainOfThoughtStepTitle icon={<Wrench className="w-4 h-4" />}>{t.name}</ChainOfThoughtStepTitle>
+                                              </ChainOfThoughtStep>
+                                            ))}
+                                          </ChainOfThoughtContent>
+                                        </ChainOfThought>
+                                      </div>
+                                    )}
+                                  </div>
+                                </BubbleContent>
+                              </Bubble>
+                            </MessageContent>
+                          </Message>
+                        </MessageScrollerItem>
+                      )}
 
                       {loading && (
                         <div className="order-2 flex items-center gap-2 p-2 text-xs text-muted-foreground">
