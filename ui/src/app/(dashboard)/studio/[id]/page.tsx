@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -61,6 +62,8 @@ interface WorkflowStreamHandle {
   close: () => void;
 }
 
+const PROJECT_WORKFLOW_SESSIONS_KEY = "blendpilot:project-workflow-sessions:v1";
+
 function readNumberTuple(value: unknown, fallback: [number, number, number]): [number, number, number] {
   if (!Array.isArray(value) || value.length < 3) return fallback;
   const numbers = value.slice(0, 3).map((item) => Number(item));
@@ -73,6 +76,7 @@ function readString(value: unknown, fallback = "") {
 }
 
 export default function StudioPage() {
+  const { id: projectId } = useParams<{ id: string }>();
   const workflowStreamRef = useRef<WorkflowStreamHandle | null>(null);
   const handledSceneEventsRef = useRef<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
@@ -120,6 +124,7 @@ export default function StudioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_prompt: promptToRun,
+          project_id: projectId,
           enable_human_interrupt: false,
         }),
       });
@@ -130,6 +135,9 @@ export default function StudioPage() {
       }
 
       setSessionId(data.session_id);
+      const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
+      sessions[projectId] = data.session_id;
+      window.localStorage.setItem(PROJECT_WORKFLOW_SESSIONS_KEY, JSON.stringify(sessions));
       connectStream(data.session_id);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start workflow";
@@ -279,7 +287,7 @@ export default function StudioPage() {
     });
   }, [applyToolResultToViewport]);
 
-  const connectStream = (sid: string) => {
+  const connectStream = useCallback((sid: string) => {
     const stream = connectWorkflowStream({
       sessionId: sid,
       onOpen: (transport) => {
@@ -298,14 +306,35 @@ export default function StudioPage() {
       }
       },
       onClose: () => {
-        if (running) {
-          setRunning(false);
-          setActiveNode(null);
-        }
+        setRunning(false);
+        setActiveNode(null);
       },
     });
     workflowStreamRef.current = stream;
-  };
+  }, [handleWorkflowStreamPayload]);
+
+  useEffect(() => {
+    workflowStreamRef.current?.close();
+    workflowStreamRef.current = null;
+
+    const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
+    const restoredSessionId = sessions[projectId] || null;
+    queueMicrotask(() => {
+      setSessionId(restoredSessionId);
+      setRunning(false);
+      setActiveNode(null);
+      setCompletedNodes([]);
+      setSceneObjects([]);
+    });
+    if (restoredSessionId) {
+      connectStream(restoredSessionId);
+    }
+
+    return () => {
+      workflowStreamRef.current?.close();
+      workflowStreamRef.current = null;
+    };
+  }, [projectId, connectStream]);
 
   const handleFeedbackSubmit = async (action: "APPROVE" | "REQUEST_CHANGE", feedbackText?: string) => {
     setHumanReviewOpen(false);

@@ -4,6 +4,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes shimmer {
+  100% {
+    mask-position: -200% 0;
+  }
+}
+
+@keyframes nexus-text-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility shimmer {
+  animation: shimmer 1.5s linear infinite;
+}
+
 @layer base {
   :root {
     --background: oklch(1 0 0);
@@ -199,4 +215,31 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer utilities {
+
+@keyframes reasoning-expand {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height);
+    }
+  }
+
+@keyframes reasoning-collapse {
+  from {
+    height: var(--radix-collapsible-content-height);
+    }
+  to {
+    height: 0;
+    }
+  }
+  .animate-collapsible-down {
+    animation: reasoning-expand 0.2s ease-out;
+  }
+  .animate-collapsible-up {
+    animation: reasoning-collapse 0.2s ease-out;
+  }
 }

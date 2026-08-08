@@ -7,6 +7,7 @@ leverage the full MCP tool registry. Falls back to enhanced procedural plans.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -86,10 +87,16 @@ class PlanningAgent:
                 scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
                 research_results=json.dumps(research or []),
             )
-            response = await self.llm_service.generate(
-                prompt=user_msg,
-                system_prompt=system_prompt,
-                response_format={"type": "json_object"},
+            # Tool planning must never hold the workflow indefinitely. A
+            # timeout falls through to the validated procedural fallback so
+            # the modeler can start creating the requested asset.
+            response = await asyncio.wait_for(
+                self.llm_service.generate(
+                    prompt=user_msg,
+                    system_prompt=system_prompt,
+                    response_format={"type": "json_object"},
+                ),
+                timeout=20,
             )
 
             if not response:

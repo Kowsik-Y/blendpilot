@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await auth();
     const body = await req.json().catch(() => ({}));
-    const { message, asset_spec, current_plan, conversation_history = [], api_key: inlineApiKey, provider: inlineProvider, model: inlineModel } = body;
+    const { message, asset_spec, current_plan, conversation_history = [], attachments = [], api_key: inlineApiKey, provider: inlineProvider, model: inlineModel } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
@@ -96,6 +96,14 @@ export async function POST(req: NextRequest) {
     }
     if (current_plan && current_plan.length > 0) {
       enrichedSystemPrompt += `\n- Current Step Plan: ${JSON.stringify(current_plan)}`;
+    }
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      const attachmentSummary = attachments
+        .filter((attachment) => attachment && typeof attachment.name === "string")
+        .slice(0, 4)
+        .map((attachment) => `${attachment.name}${attachment.type ? ` (${attachment.type})` : ""}`)
+        .join(", ");
+      enrichedSystemPrompt += `\n- User attached: ${attachmentSummary}. These are client-side references; do not claim to have inspected their contents unless they are supplied separately.`;
     }
 
     // Format conversation history for context window

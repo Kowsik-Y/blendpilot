@@ -1,0 +1,31 @@
+{
+  "asset_name": "mobile phone",
+  "timestamp": "2026-08-08T05:26:11.233777+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 0.075,
+    "depth": 0.007,
+    "height": 0.15000000000000002
+  },
+  "triangle_budget": 10000,
+  "created_objects": [
+    "Cube",
+    "PhoneBody",
+    "Button",
+    "PhoneMaterial"
+  ],
+  "materials": [],
+  "files": {
+    "blend": "output/mobile phone/mobile phone.blend",
+    "fbx": "output/mobile phone/mobile phone.fbx",
+    "glb": "output/mobile phone/mobile phone.glb",
+    "preview": "output/mobile phone/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "FAIL",
+    "geometry_score": 0.30000000000000004,
+    "visual_score": 0.4,
+    "approved": true
+  }
+}

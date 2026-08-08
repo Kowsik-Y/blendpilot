@@ -59,8 +59,30 @@ elif command -v blender >/dev/null 2>&1; then
     BLENDER_BIN="$(command -v blender)"
 fi
 
-# Track child PIDs for clean exit
+# Track only processes started by this invocation. Existing healthy services are
+# reused and are never killed when this launcher exits.
 PIDS=()
+
+is_healthy() {
+    curl --silent --show-error --fail --max-time 2 "$1" >/dev/null 2>&1
+}
+
+wait_for_service() {
+    local url="$1"
+    local label="$2"
+    local attempts=20
+
+    while [ "$attempts" -gt 0 ]; do
+        if is_healthy "$url"; then
+            return 0
+        fi
+        sleep 0.5
+        attempts=$((attempts - 1))
+    done
+
+    echo -e "${RED}[✘] ${label} did not become healthy at ${url}.${NC}"
+    return 1
+}
 
 cleanup() {
     echo -e "\n${YELLOW}[*] Shutting down all BlendPilot services...${NC}"
@@ -75,31 +97,48 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 # ── 4. Start Blender Bridge Server ───────────────────────────
-if [ -n "$BLENDER_BIN" ]; then
+if is_healthy "http://127.0.0.1:9876/health"; then
+    echo -e "${GREEN}[✔] Reusing Blender Bridge at http://127.0.0.1:9876${NC}"
+elif [ -n "$BLENDER_BIN" ]; then
     echo -e "${GREEN}[+] Starting Blender Bridge Server (${BLENDER_BIN})...${NC}"
     "$VENV_PYTHON" "$PROJECT_DIR/scripts/start_blender_bridge.py" --host 127.0.0.1 --port 9876 &
     BLENDER_PID=$!
     PIDS+=($BLENDER_PID)
+    if ! wait_for_service "http://127.0.0.1:9876/health" "Blender Bridge"; then
+        exit 1
+    fi
     echo -e "${GREEN}[✔] Blender Bridge running on http://127.0.0.1:9876 (PID: ${BLENDER_PID})${NC}"
 else
     echo -e "${YELLOW}[!] Blender not found in standard paths. Operating in simulated fallback mode.${NC}"
 fi
 
 # ── 5. Start FastAPI Backend API ────────────────────────────
-echo -e "${GREEN}[+] Starting BlendPilot FastAPI Backend API on port 8000...${NC}"
-"$VENV_PYTHON" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
-BACKEND_PID=$!
-PIDS+=($BACKEND_PID)
+if is_healthy "http://127.0.0.1:8000/api/health"; then
+    echo -e "${GREEN}[✔] Reusing FastAPI Backend at http://localhost:8000${NC}"
+else
+    echo -e "${GREEN}[+] Starting BlendPilot FastAPI Backend API on port 8000...${NC}"
+    "$VENV_PYTHON" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+    BACKEND_PID=$!
+    PIDS+=($BACKEND_PID)
+    if ! wait_for_service "http://127.0.0.1:8000/api/health" "FastAPI Backend"; then
+        exit 1
+    fi
+fi
 
 # ── 6. Start Next.js Frontend ───────────────────────────────
 if [ -d "$PROJECT_DIR/ui" ]; then
-    echo -e "${GREEN}[+] Starting Next.js Frontend Dev Server on port 3000...${NC}"
-    (cd "$PROJECT_DIR/ui" && npm run dev) &
-    NEXT_PID=$!
-    PIDS+=($NEXT_PID)
+    if is_healthy "http://127.0.0.1:3000"; then
+        echo -e "${GREEN}[✔] Reusing Next.js Frontend at http://localhost:3000${NC}"
+    else
+        echo -e "${GREEN}[+] Starting Next.js Frontend Dev Server on port 3000...${NC}"
+        (cd "$PROJECT_DIR/ui" && npm run dev) &
+        NEXT_PID=$!
+        PIDS+=($NEXT_PID)
+        if ! wait_for_service "http://127.0.0.1:3000" "Next.js Frontend"; then
+            exit 1
+        fi
+    fi
 fi
-
-sleep 2
 
 echo -e "\n${BOLD}${GREEN}===============================================================${NC}"
 echo -e "${BOLD}${GREEN} ✔ All BlendPilot Services are Live and Connected!${NC}"

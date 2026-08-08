@@ -2,7 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, Sparkles, Wand2 } from "lucide-react";
+import {
+  PromptInput,
+  PromptInputAction,
+  PromptInputActionGroup,
+  PromptInputActions,
+  PromptInputTextarea,
+} from "@/components/nexus-ui/prompt-input";
+import { ArrowUp, LoaderCircle, Paperclip, Sparkles } from "lucide-react";
 
 interface MessageInputProps {
   onSend: (message: string) => void;
@@ -27,25 +34,17 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
     }
   }, [content]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!content.trim() || disabled) return;
-    onSend(content.trim());
+  const handleSubmit = (value = content) => {
+    if (!value.trim() || disabled) return;
+    onSend(value.trim());
     setContent("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
-
   return (
-    <div className="p-4 border-t border-border bg-background/80 backdrop-blur-md">
+    <div className="border-t border-border bg-background/80 p-4 backdrop-blur-md">
       {/* Quick Prompt Pills */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-none">
         <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 shrink-0">
@@ -53,40 +52,52 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
           Templates:
         </span>
         {QUICK_PROMPTS.map((prompt, idx) => (
-          <button
+          <Button
             key={idx}
             type="button"
             onClick={() => onSend(prompt.replace(/^[^a-zA-Z0-9]+/, ""))}
             disabled={disabled}
-            className="px-2.5 py-1 rounded-full bg-muted hover:bg-muted/80 border border-border text-[11px] text-muted-foreground hover:text-foreground shrink-0 transition-colors cursor-pointer"
+            variant="outline"
+            size="xs"
+            className="shrink-0 rounded-full"
           >
             {prompt}
-          </button>
+          </Button>
         ))}
       </div>
 
-      {/* Input Box */}
-      <form onSubmit={handleSubmit} className="relative flex items-end gap-2 bg-card border border-input rounded-2xl p-2 shadow-sm transition-colors">
-        <textarea
+      <PromptInput onSubmit={handleSubmit}>
+        <PromptInputTextarea
           ref={textareaRef}
-          rows={1}
           placeholder="Describe a 3D asset to model, modify, or validate in Blender... (e.g. 'Create a low-poly chest')"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          onKeyDown={handleKeyDown}
           disabled={disabled}
-          className="flex-1 max-h-45 bg-transparent border-0 resize-none text-sm text-foreground placeholder:text-muted-foreground focus:outline-none px-3 py-1.5"
         />
-
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!content.trim() || disabled}
-          className="h-9 w-9 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 shadow-sm transition-all disabled:opacity-40"
-        >
-          {disabled ? <Wand2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
-        </Button>
-      </form>
+        <PromptInputActions>
+          <PromptInputActionGroup>
+            <PromptInputAction asChild>
+              <Button type="button" variant="ghost" size="icon-sm" disabled={disabled} aria-label="Add attachment">
+                <Paperclip />
+              </Button>
+            </PromptInputAction>
+            <span className="text-xs text-muted-foreground">Blender context enabled</span>
+          </PromptInputActionGroup>
+          <PromptInputActionGroup>
+            <PromptInputAction asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                disabled={!content.trim() || disabled}
+                onClick={() => handleSubmit()}
+                aria-label={disabled ? "Generating response" : "Send message"}
+              >
+                {disabled ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
+              </Button>
+            </PromptInputAction>
+          </PromptInputActionGroup>
+        </PromptInputActions>
+      </PromptInput>
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground px-1">
         <span>Press <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-muted-foreground">Enter</kbd> to generate, <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-muted-foreground">Shift + Enter</kbd> for newline</span>
         <span>RAG Context Active</span>
