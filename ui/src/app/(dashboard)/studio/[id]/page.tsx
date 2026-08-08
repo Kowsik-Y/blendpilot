@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Box,
@@ -53,14 +56,22 @@ function readString(value: unknown, fallback = "") {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
+function readNumber(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export default function StudioPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const workflowStreamRef = useRef<WorkflowStreamHandle | null>(null);
   const handledSceneEventsRef = useRef<Set<string>>(new Set());
+  const liveWorkflowRef = useRef(false);
   const [running, setRunning] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
+  const [selectedObjectName, setSelectedObjectName] = useState<string | null>(null);
+  const [rightPanelTab, setRightPanelTab] = useState<"chat" | "inspector">("chat");
 
 
   const [assetSpec, setAssetSpec] = useState<StudioAssetSpec>({
@@ -83,12 +94,35 @@ export default function StudioPage() {
   });
   const [humanReviewOpen, setHumanReviewOpen] = useState(false);
 
+  const resolvedSelectedObjectName =
+    (selectedObjectName && sceneObjects.some((item) => item.name === selectedObjectName)
+      ? selectedObjectName
+      : sceneObjects[0]?.name) || null;
+  const selectedObject = sceneObjects.find((item) => item.name === resolvedSelectedObjectName) || null;
+
+  const updateSceneObject = useCallback(
+    (name: string, updater: (item: WorkflowSceneObject) => WorkflowSceneObject) => {
+      setSceneObjects((prev) => prev.map((item) => (item.name === name ? updater(item) : item)));
+    },
+    []
+  );
+
+  const updateSelectedObject = useCallback(
+    (updater: (item: WorkflowSceneObject) => WorkflowSceneObject) => {
+      if (!selectedObjectName) return;
+      updateSceneObject(selectedObjectName, updater);
+    },
+    [selectedObjectName, updateSceneObject]
+  );
+
   const handleStartPipeline = async (promptToRun: string) => {
     if (!promptToRun.trim()) return;
 
+    liveWorkflowRef.current = true;
     setRunning(true);
     setActiveNode("intent");
     setCompletedNodes([]);
+    setHumanReviewOpen(false);
     setSceneObjects([]);
     handledSceneEventsRef.current.clear();
     workflowStreamRef.current?.close();
@@ -120,6 +154,7 @@ export default function StudioPage() {
       toast.error(`Workflow Error: ${message}`);
       setRunning(false);
       setActiveNode(null);
+      liveWorkflowRef.current = false;
     }
   };
 
@@ -148,6 +183,8 @@ export default function StudioPage() {
         modifiers: [],
       };
       setSceneObjects((prev) => [...prev.filter((item) => item.name !== name), object]);
+      setSelectedObjectName(name);
+      setRightPanelTab("inspector");
       return;
     }
 
@@ -169,6 +206,8 @@ export default function StudioPage() {
         };
         return [...prev.filter((item) => item.name !== newName), copy];
       });
+      setSelectedObjectName(newName);
+      setRightPanelTab("inspector");
       return;
     }
 
@@ -249,7 +288,7 @@ export default function StudioPage() {
         });
       }
 
-      if (state.current_agent === "human_feedback") {
+      if (state.current_agent === "human_feedback" && liveWorkflowRef.current) {
         setHumanReviewOpen(true);
       }
 
@@ -258,6 +297,7 @@ export default function StudioPage() {
         workflowStreamRef.current = null;
         setRunning(false);
         setActiveNode(null);
+        liveWorkflowRef.current = false;
         toast.success("3D Asset generated successfully!");
       }
     });
@@ -284,6 +324,7 @@ export default function StudioPage() {
       onClose: () => {
         setRunning(false);
         setActiveNode(null);
+        liveWorkflowRef.current = false;
       },
     });
     workflowStreamRef.current = stream;
@@ -292,19 +333,14 @@ export default function StudioPage() {
   useEffect(() => {
     workflowStreamRef.current?.close();
     workflowStreamRef.current = null;
-
-    const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
-    const restoredSessionId = sessions[projectId] || null;
     queueMicrotask(() => {
-      setSessionId(restoredSessionId);
+      setSessionId(null);
       setRunning(false);
       setActiveNode(null);
       setCompletedNodes([]);
+      setHumanReviewOpen(false);
       setSceneObjects([]);
     });
-    if (restoredSessionId) {
-      connectStream(restoredSessionId);
-    }
 
     return () => {
       workflowStreamRef.current?.close();
@@ -334,6 +370,25 @@ export default function StudioPage() {
     window.open(`/api/export/${asset}/download`, "_blank");
     toast.success(`Downloading ${asset} bundle`);
   };
+
+  const handleDuplicateSelected = () => {
+    if (!selectedObject) return;
+    const newName = `${selectedObject.name}_copy`;
+    const copy: WorkflowSceneObject = {
+      ...selectedObject,
+      name: newName,
+      location: [selectedObject.location[0] + 0.25, selectedObject.location[1] + 0.25, selectedObject.location[2]],
+    };
+    setSceneObjects((prev) => [...prev.filter((item) => item.name !== newName), copy]);
+    setSelectedObjectName(newName);
+  };
+
+  const handleSelectObject = useCallback((name: string | null) => {
+    setSelectedObjectName(name);
+    if (name) {
+      setRightPanelTab("inspector");
+    }
+  }, []);
 
   return (
     <div className="h-full flex flex-col gap-3 p-4 sm:p-6 min-h-[calc(100vh-4rem)]">
@@ -372,35 +427,236 @@ export default function StudioPage() {
         </div>
       </div>
 
-      {/* Main Studio 2-Column Split: Viewport (Left 7-cols) + Unified Copilot Chatbox (Right 5-cols) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch overflow-hidden">
-        {/* Left Column: Full-Height 3D Viewport (No bottom text box) */}
-        <div className="lg:col-span-7 flex flex-col gap-3 min-w-0 h-full overflow-hidden">
-          <div className="flex-1 min-h-0 flex flex-col">
-            <ThreeViewport assetSpec={assetSpec} sceneObjects={sceneObjects} />
-          </div>
-        </div>
-
-        {/* Right Column: Unified Copilot Chatbox (All Prompts, Plans & Agents Flow Here) */}
-        <div className="lg:col-span-5 flex flex-col gap-3 min-w-0 h-full overflow-hidden">
+      {/* Main Studio Workspace: viewport + editor rail + chat */}
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)] gap-4 items-stretch overflow-hidden">
+        <div className="flex min-w-0 h-full flex-col gap-4 overflow-hidden">
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <CopilotChatbox
+            <ThreeViewport
               assetSpec={assetSpec}
-              onApplyAction={(action) => {
-                if (action.includes("Pipeline")) {
-                  handleStartPipeline(
-                    `Create a low-poly ${assetSpec?.asset_type || "sci-fi crate"} with beveled edges and PBR materials.`
-                  );
-                }
-              }}
-              onStartPipeline={(p) => handleStartPipeline(p)}
-              onWorkflowEvent={handleWorkflowStreamPayload}
-              pipelineSessionId={sessionId}
-              pipelineRunning={running}
+              sceneObjects={sceneObjects}
+              selectedObjectName={resolvedSelectedObjectName}
+              onObjectSelect={handleSelectObject}
             />
           </div>
 
+          <Card className="border-border/70 bg-card/80 backdrop-blur-xl shadow-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center justify-between gap-2">
+                <span>Live Workflow</span>
+                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
+                  {running ? activeNode || "running" : "idle"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                <div className="text-muted-foreground">Objects</div>
+                <div className="mt-1 text-lg font-semibold text-foreground">{sceneObjects.length}</div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                <div className="text-muted-foreground">Completed</div>
+                <div className="mt-1 text-lg font-semibold text-foreground">{completedNodes.length}</div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                <div className="text-muted-foreground">Geometry</div>
+                <div className="mt-1 text-lg font-semibold text-foreground">{Math.round(qaState.geometryScore * 100)}%</div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                <div className="text-muted-foreground">Visual</div>
+                <div className="mt-1 text-lg font-semibold text-foreground">{Math.round(qaState.visualScore * 100)}%</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
+        <div className="flex min-w-0 h-full flex-col overflow-hidden">
+          <Tabs
+            value={rightPanelTab}
+            onValueChange={(value) => setRightPanelTab(value as "chat" | "inspector")}
+            className="h-full flex flex-col gap-3"
+          >
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+              <TabsTrigger value="inspector">Scene Inspector</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
+              <div className="h-full min-h-0 overflow-hidden">
+                <CopilotChatbox
+                  key={projectId}
+                  assetSpec={assetSpec}
+                  onApplyAction={(action) => {
+                    if (action.includes("Pipeline")) {
+                      handleStartPipeline(
+                        `Create a low-poly ${assetSpec?.asset_type || "sci-fi crate"} with beveled edges and PBR materials.`
+                      );
+                    }
+                  }}
+                  onStartPipeline={(p) => handleStartPipeline(p)}
+                  onWorkflowEvent={handleWorkflowStreamPayload}
+                  pipelineSessionId={sessionId}
+                  pipelineRunning={running}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="inspector" className="min-h-0 flex-1 overflow-hidden">
+              <Card className="border-border/70 bg-card/80 backdrop-blur-xl shadow-lg h-full flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center justify-between gap-2">
+                    <span>Scene Inspector</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {selectedObject ? selectedObject.name : "No selection"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0">
+                  <div className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-background/60 p-2">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                      Scene Outliner
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {sceneObjects.length === 0 ? (
+                        <div className="px-2 py-3 text-sm text-muted-foreground">Waiting for workflow-generated geometry.</div>
+                      ) : (
+                        sceneObjects.map((object) => (
+                          <Button
+                            key={object.name}
+                            type="button"
+                            variant={object.name === resolvedSelectedObjectName ? "secondary" : "ghost"}
+                            className="justify-start gap-2 text-left"
+                            onClick={() => handleSelectObject(object.name)}
+                          >
+                            <span className="truncate">{object.name}</span>
+                            <Badge variant="outline" className="ml-auto text-[10px]">
+                              {object.primitiveType}
+                            </Badge>
+                          </Button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedObject ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/60 p-3 overflow-auto">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Properties</div>
+                          <div className="text-sm font-medium text-foreground">Selected object</div>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={handleDuplicateSelected}>
+                          Duplicate
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-3">
+                        <div className="grid gap-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Name</label>
+                          <Input
+                            value={selectedObject.name}
+                            onChange={(event) => {
+                              const nextName = event.target.value.trim();
+                              if (!nextName) return;
+                              updateSceneObject(selectedObject.name, (item) => ({ ...item, name: nextName }));
+                              setSelectedObjectName(nextName);
+                            }}
+                          />
+                        </div>
+
+                        <div className="grid gap-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Material</label>
+                          <Input
+                            value={selectedObject.materialName || ""}
+                            onChange={(event) => updateSelectedObject((item) => ({ ...item, materialName: event.target.value }))}
+                            placeholder="e.g. brushed_metal"
+                          />
+                        </div>
+
+                        <div className="grid gap-2">
+                          <label className="text-xs font-medium text-muted-foreground">Dimensions</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {["X", "Y", "Z"].map((axis, index) => (
+                              <Input
+                                key={axis}
+                                inputMode="decimal"
+                                value={selectedObject.dimensions[index]}
+                                onChange={(event) => {
+                                  const nextValue = readNumber(event.target.value, selectedObject.dimensions[index]);
+                                  updateSelectedObject((item) => {
+                                    const nextDimensions: [number, number, number] = [...item.dimensions] as [number, number, number];
+                                    nextDimensions[index] = nextValue;
+                                    return { ...item, dimensions: nextDimensions };
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2">
+                          <label className="text-xs font-medium text-muted-foreground">Location</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {["X", "Y", "Z"].map((axis, index) => (
+                              <Input
+                                key={axis}
+                                inputMode="decimal"
+                                value={selectedObject.location[index]}
+                                onChange={(event) => {
+                                  const nextValue = readNumber(event.target.value, selectedObject.location[index]);
+                                  updateSelectedObject((item) => {
+                                    const nextLocation: [number, number, number] = [...item.location] as [number, number, number];
+                                    nextLocation[index] = nextValue;
+                                    return { ...item, location: nextLocation };
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2">
+                          <label className="text-xs font-medium text-muted-foreground">Rotation</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {["X", "Y", "Z"].map((axis, index) => (
+                              <Input
+                                key={axis}
+                                inputMode="decimal"
+                                value={selectedObject.rotation?.[index] ?? 0}
+                                onChange={(event) => {
+                                  const nextValue = readNumber(event.target.value, selectedObject.rotation?.[index] ?? 0);
+                                  updateSelectedObject((item) => {
+                                    const nextRotation: [number, number, number] = [...(item.rotation || [0, 0, 0])] as [number, number, number];
+                                    nextRotation[index] = nextValue;
+                                    return { ...item, rotation: nextRotation };
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedObject.modifiers || []).length > 0 ? (
+                            selectedObject.modifiers?.map((modifier) => (
+                              <Badge key={modifier} variant="outline" className="text-[10px]">
+                                {modifier}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No modifiers assigned yet.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border/60 bg-background/60 p-4 text-sm text-muted-foreground">
+                      Select an object in the outliner or viewport to inspect and edit its properties.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 

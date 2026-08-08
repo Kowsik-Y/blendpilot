@@ -63,6 +63,7 @@ import {
   ChainOfThoughtStepTitle,
   ChainOfThoughtTrigger,
 } from "@/components/nexus-ui/chain-of-thought";
+import { AGENT_DEFINITIONS } from "@/components/studio/agent-timeline";
 import { toast } from "sonner";
 import Link from "next/link";
 import { connectWorkflowStream, type WorkflowStreamPayload } from "@/lib/workflow-stream";
@@ -72,16 +73,17 @@ import {
   User,
   Send,
   Sparkles,
-  CheckCircle2,
   BotMessageSquare,
   Key,
   Wrench,
   Eye,
   EyeOff,
   Loader2,
-  Circle,
   Copy,
   Check,
+  Command,
+  WandSparkles,
+  Maximize2,
 } from "lucide-react";
 
 export interface CopilotMessage {
@@ -97,13 +99,6 @@ export interface CopilotMessage {
   eventKey?: string;
   attachments?: CopilotAttachment[];
   citations?: CopilotCitation[];
-}
-
-export interface PipelineStep {
-  id: string;
-  name: string;
-  status: "pending" | "running" | "done" | "failed";
-  detail?: string;
 }
 
 interface PipelineActivity {
@@ -136,6 +131,13 @@ interface PipelineStatePayload {
   stream_events?: WorkflowStreamPayload[];
 }
 
+interface StageStatus {
+  id: string;
+  title: string;
+  detail: string;
+  status: "pending" | "running" | "done" | "failed";
+}
+
 interface CopilotChatboxProps {
   assetSpec?: StudioAssetSpec;
   onApplyAction?: (actionText: string) => void;
@@ -145,21 +147,16 @@ interface CopilotChatboxProps {
   pipelineRunning?: boolean;
 }
 
-const INITIAL_10_STEPS: PipelineStep[] = [
-  { id: "intent", name: "1. Intent Parser", status: "pending", detail: "Extract dimensions & quotas" },
-  { id: "scene", name: "2. Scene Scanner", status: "pending", detail: "Blender workspace check" },
-  { id: "research", name: "3. Research Agent", status: "pending", detail: "Engine & topology rules" },
-  { id: "planning", name: "4. Step Planner", status: "pending", detail: "Synthesize atomic plan" },
-  { id: "modeling", name: "5. 3D Modeler", status: "pending", detail: "Execute bmesh primitives" },
-  { id: "material", name: "6. PBR Shader", status: "pending", detail: "Principled BSDF & lighting" },
-  { id: "geometry_qa", name: "7. Topology QA", status: "pending", detail: "Manifold & non-manifold check" },
-  { id: "visual_critic", name: "8. Visual Critic", status: "pending", detail: "Render critique score" },
-  { id: "human_feedback", name: "9. Human Review", status: "pending", detail: "Approval gate" },
-  { id: "export", name: "10. Export Agent", status: "pending", detail: "Generate production bundles" },
-];
+function createStageStatuses(): StageStatus[] {
+  return AGENT_DEFINITIONS.map((agent) => ({
+    id: agent.id,
+    title: agent.name,
+    detail: agent.desc,
+    status: "pending",
+  }));
+}
 
 const COPILOT_STORE_KEY = "blendpilot:studio-copilot:v1";
-
 export function CopilotChatbox({
   assetSpec,
   onApplyAction,
@@ -170,25 +167,11 @@ export function CopilotChatbox({
 }: CopilotChatboxProps) {
   const messageIdRef = useRef(0);
   const handledWorkflowEventsRef = useRef<Set<string>>(new Set());
-  const [messages, setMessages] = useState<CopilotMessage[]>([
-    {
-      id: "welcome",
-      role: "copilot",
-      content:
-        "👋 **Hi! I'm your AI 3D Copilot.**\n\nI coordinate **10 autonomous Blender agents** with RAG knowledge grounding and multi-turn memory. Ask any modeling question, request modifier tweaks, or type any 3D asset to build!",
-      actions: [
-        "🚀 Launch 10-Agent Pipeline",
-        "🔑 Configure LLM Key",
-        "🛠️ Add 0.02m Bevel Modifier",
-      ],
-      time: "Just now",
-    },
-  ]);
+  const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
-  const [storeHydrated, setStoreHydrated] = useState(false);
 
   // User LLM Settings loaded from Settings Store (/api/settings)
   const [llmProvider, setLlmProvider] = useState<string>("openai");
@@ -199,19 +182,19 @@ export function CopilotChatbox({
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
 
-  // In-chat 10-Agent Execution Progress
-  const [, setAgentSteps] = useState<PipelineStep[]>(INITIAL_10_STEPS);
-  const [showProgressGrid, setShowProgressGrid] = useState(false);
+  // In-chat LangGraph Execution Progress
+  const [stageStatuses, setStageStatuses] = useState<StageStatus[]>(createStageStatuses());
   const [runPrompt, setRunPrompt] = useState<string | null>(null);
   const [runActivities, setRunActivities] = useState<PipelineActivity[]>([]);
+  const [activeStage, setActiveStage] = useState<string | null>(null);
 
   const nextMessageId = (prefix: string) => {
     messageIdRef.current += 1;
     return `${prefix}-${messageIdRef.current}`;
   };
 
-  const setPipelineStepStatus = useCallback((nodeId: string, status: PipelineStep["status"], detail?: string) => {
-    setAgentSteps((prev) =>
+  const setPipelineStepStatus = useCallback((nodeId: string, status: StageStatus["status"], detail?: string) => {
+    setStageStatuses((prev) =>
       prev.map((step) => {
         if (step.id === nodeId) {
           return { ...step, status, detail: detail || step.detail };
@@ -222,6 +205,7 @@ export function CopilotChatbox({
         return step;
       })
     );
+    setActiveStage(nodeId);
   }, []);
 
   const markWorkflowEventHandled = useCallback((payload: WorkflowStreamPayload) => {
@@ -287,7 +271,7 @@ export function CopilotChatbox({
     return null;
   }, []);
 
-  const hydrateProgressFromSnapshot = useCallback((state: PipelineStatePayload) => {
+  const hydrateGraphStagesFromSnapshot = useCallback((state: PipelineStatePayload) => {
     const completed = new Set<string>();
     const events = Array.isArray(state.events) ? state.events : [];
     for (const event of events) {
@@ -306,10 +290,20 @@ export function CopilotChatbox({
       if (agentName === "feedback_agent") completed.add("human_feedback");
       if (agentName === "export_agent") completed.add("export");
     }
-    if (completed.size === 0) return;
-    setAgentSteps((prev) =>
-      prev.map((step) => completed.has(step.id) ? { ...step, status: "done" } : step)
+    setStageStatuses((prev) =>
+      prev.map((step) => {
+        if (completed.has(step.id)) {
+          return { ...step, status: "done" };
+        }
+        if (step.id === state.current_agent) {
+          return { ...step, status: "running" };
+        }
+        return step;
+      })
     );
+    if (state.current_agent) {
+      setActiveStage(state.current_agent);
+    }
   }, []);
 
   const handlePipelineEvent = useCallback((payload: WorkflowStreamPayload, fromSnapshot = false) => {
@@ -320,8 +314,8 @@ export function CopilotChatbox({
     if (payload.event === "agent_state" && payload.node) {
       const status =
         payload.status === "FAILED" ? "failed" :
-        payload.status === "COMPLETED" ? "done" :
-        "running";
+          payload.status === "COMPLETED" ? "done" :
+            "running";
       setPipelineStepStatus(payload.node, status, payload.description);
       upsertRunActivity({
         id: `agent:${payload.node}`,
@@ -347,7 +341,7 @@ export function CopilotChatbox({
     }
 
     if (payload.event === "tool_start") {
-      setPipelineStepStatus("modeling", "running", payload.description);
+      setPipelineStepStatus(payload.node || "modeling", "running", payload.description);
       upsertRunActivity({
         id: `tool:${payload.step_id}`,
         title: `Running step ${payload.step_id}/${payload.total_steps}`,
@@ -384,7 +378,7 @@ export function CopilotChatbox({
 
     if (payload.event === "workflow_complete") {
       const completed = String(payload.status || "").toUpperCase() === "COMPLETED";
-      setAgentSteps((prev) =>
+      setStageStatuses((prev) =>
         prev.map((step) =>
           completed
             ? { ...step, status: "done" }
@@ -405,7 +399,7 @@ export function CopilotChatbox({
     }
 
     if (payload.node) {
-      setAgentSteps((prev) =>
+      setStageStatuses((prev) =>
         prev.map((s) => s.id === payload.node ? { ...s, status: "done" } : s)
       );
       const state = (payload.state || {}) as PipelineStatePayload;
@@ -413,6 +407,7 @@ export function CopilotChatbox({
       if (activity) {
         upsertRunActivity(activity);
       }
+      setActiveStage(payload.node);
     }
   }, [describeNodeActivity, markWorkflowEventHandled, setPipelineStepStatus, upsertRunActivity]);
 
@@ -440,52 +435,6 @@ export function CopilotChatbox({
   useEffect(() => {
     void Promise.resolve().then(loadSettings);
   }, []);
-
-  // Keep the visible Studio transcript available across a page refresh. Live
-  // pipeline state remains authoritative on the workflow WebSocket/SSE stream.
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(COPILOT_STORE_KEY);
-      const parsed = stored ? JSON.parse(stored) as CopilotMessage[] : [];
-      queueMicrotask(() => {
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const seen = new Set<string>();
-          const uniqueMessages = parsed.slice(-60).map((message, index) => {
-            if (!seen.has(message.id)) {
-              seen.add(message.id);
-              return message;
-            }
-            const id = `${message.id}-restored-${index}`;
-            seen.add(id);
-            return { ...message, id };
-          });
-          const restoredSequence = uniqueMessages.reduce((maximum, message) => {
-            const suffix = Number(message.id.split("-").at(-1));
-            return Number.isFinite(suffix) ? Math.max(maximum, suffix) : maximum;
-          }, 0);
-          messageIdRef.current = Math.max(messageIdRef.current, restoredSequence);
-          setMessages(uniqueMessages);
-        }
-        setStoreHydrated(true);
-      });
-    } catch {
-      window.localStorage.removeItem(COPILOT_STORE_KEY);
-      queueMicrotask(() => setStoreHydrated(true));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!storeHydrated) return;
-    try {
-      const persistable = messages.map((message) => ({
-        ...message,
-        attachments: message.attachments?.map(({ id, name, type }) => ({ id, name, type })),
-      }));
-      window.localStorage.setItem(COPILOT_STORE_KEY, JSON.stringify(persistable.slice(-60)));
-    } catch {
-      // Storage may be unavailable in private browsing; chat remains usable.
-    }
-  }, [messages, storeHydrated]);
 
   // Save API Key & Model Configuration directly from Studio
   const handleSaveKeySettings = async () => {
@@ -522,7 +471,6 @@ export function CopilotChatbox({
   useEffect(() => {
     if (!pipelineSessionId) return;
 
-    queueMicrotask(() => setShowProgressGrid(true));
     handledWorkflowEventsRef.current.clear();
     const stream = connectWorkflowStream({
       sessionId: pipelineSessionId,
@@ -530,22 +478,22 @@ export function CopilotChatbox({
         toast.warning("Workflow WebSocket dropped. Reconnected through SSE.");
       },
       onMessage: (payload: WorkflowStreamPayload) => {
-      try {
-        onWorkflowEvent?.(payload);
-        const state = (payload.state || {}) as PipelineStatePayload;
+        try {
+          onWorkflowEvent?.(payload);
+          const state = (payload.state || {}) as PipelineStatePayload;
 
-        if (payload.event === "snapshot") {
-          hydrateProgressFromSnapshot(state);
-          if (Array.isArray(state.stream_events)) {
-            replayPipelineEvents(state.stream_events);
+          if (payload.event === "snapshot") {
+            hydrateGraphStagesFromSnapshot(state);
+            if (Array.isArray(state.stream_events)) {
+              replayPipelineEvents(state.stream_events);
+            }
+            return;
           }
-          return;
-        }
 
-        handlePipelineEvent(payload);
-      } catch (e) {
-        console.error("Workflow stream parse error", e);
-      }
+          handlePipelineEvent(payload);
+        } catch (e) {
+          console.error("Workflow stream parse error", e);
+        }
       },
     });
 
@@ -556,7 +504,7 @@ export function CopilotChatbox({
     pipelineSessionId,
     onWorkflowEvent,
     handlePipelineEvent,
-    hydrateProgressFromSnapshot,
+    hydrateGraphStagesFromSnapshot,
     replayPipelineEvents,
   ]);
 
@@ -604,7 +552,6 @@ export function CopilotChatbox({
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setAttachments([]);
-      setShowProgressGrid(true);
       setRunPrompt(text);
       setRunActivities([
         {
@@ -614,8 +561,9 @@ export function CopilotChatbox({
           status: "running",
         },
       ]);
+      setStageStatuses(createStageStatuses().map((step, idx) => (idx === 0 ? { ...step, status: "running" } : step)));
+      setActiveStage("intent");
       handledWorkflowEventsRef.current.clear();
-      setAgentSteps(INITIAL_10_STEPS.map((s, idx) => (idx === 0 ? { ...s, status: "running" } : { ...s, status: "pending" })));
       onStartPipeline(text);
       return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
     }
@@ -649,8 +597,8 @@ export function CopilotChatbox({
         body: JSON.stringify({
           message: text,
           asset_spec: assetSpec,
-        conversation_history: history,
-        attachments: attachments.map(({ name, type }) => ({ name, type })),
+          conversation_history: history,
+          attachments: attachments.map(({ name, type }) => ({ name, type })),
         }),
       });
 
@@ -688,119 +636,166 @@ export function CopilotChatbox({
     (activity) => activity.id === "workflow-complete" && activity.status === "failed"
   );
   const runComplete = runFinished && !runFailed;
+  const liveStages = stageStatuses;
 
   return (
     <>
       <Card className="bg-card border-border py-0 flex flex-col h-full overflow-hidden">
         {/* Header Bar with Store Connection & Key Config Dialog */}
         <CardHeader className="p-3 pb-2 bg-muted/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div>
-                <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  3D Copilot & 10 Agents
-                  {pipelineRunning && (
-                    <Badge variant="outline" className="text-[9px]">
-                      Running
-                    </Badge>
-                  )}
-                </CardTitle>
-                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-primary" />
-                  <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
-                  <span>({llmModel})</span>
-                  {hasApiKey ? (
-                    <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Connected
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-0.5 text-orange-400 font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                      No Key
-                    </span>
-                  )}
-                </div>
-              </div>
+          <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
+              <span>({llmModel})</span>
+              {hasApiKey ? (
+                <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Connected
+                </span>
+              ) : (
+                <span className="flex items-center gap-0.5 text-orange-400 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                  No Key
+                </span>
+              )}
             </div>
-          </div>
+            {pipelineRunning && (
+              <Badge variant="outline" className="text-[9px]">
+                Running
+              </Badge>
+            )}
+          </CardTitle>
         </CardHeader>
 
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
-          <div className="flex-1 min-h-0 relative">
+            <div className="flex-1 min-h-0 relative">
               <MessageScrollerProvider autoScroll>
                 <MessageScroller>
                   <MessageScrollerViewport className="pr-2">
                     <MessageScrollerContent className="space-y-3 pb-2">
-                      {/* One chronological assistant run, fed only by live workflow events. */}
-                      {showProgressGrid && (
-                        <MessageScrollerItem messageId="agent-run" scrollAnchor className="order-2">
-                          <Message align="start" className="my-4">
-                            <MessageAvatar>
-                              <div className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                                {runComplete ? (
-                                  <CheckCircle2 className="size-3.5" />
-                                ) : runFailed ? (
-                                  <Circle className="size-3.5" />
-                                ) : (
-                                  <Loader2 className="size-3.5 animate-spin" />
-                                )}
+                      <MessageScrollerItem messageId="graph-console" scrollAnchor={false} className="order-0">
+                        <div className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                <Command className="size-3.5" />
+                                LangGraph Console
                               </div>
-                            </MessageAvatar>
-                            <MessageContent className="min-w-0 max-w-full">
-                              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                                <span>{runComplete ? "Asset ready" : runFailed ? "Run stopped" : "Building your asset"}</span>
+                              <div className="mt-1 text-sm font-medium text-foreground">
+                                {runComplete ? "Asset ready" : runFailed ? "Run stopped" : runPrompt || "Awaiting workflow input"}
                               </div>
                               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                {runPrompt || "Coordinating Blender agents"}
+                                {runComplete
+                                  ? "The graph finished its production path and exported the asset."
+                                  : runFailed
+                                    ? "A node failed or the graph terminated early. Inspect the activity trail below."
+                                    : "Live LangGraph nodes, tool calls, and repair loops stream here as execution advances."}
                               </p>
-                              <div className="mt-3">
-                                <ChainOfThought autoCloseOnAllComplete={false}>
-                                  <ChainOfThoughtTrigger icon={<BrainCircuit />}>
-                                    {runComplete ? "Created asset and completed workflow" : runActivities.at(-1)?.title || "Preparing asset creation"}
-                                  </ChainOfThoughtTrigger>
-                                  <ChainOfThoughtContent>
-                                    {runActivities.map((activity) => (
-                                      <ChainOfThoughtStep key={activity.id} status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}>
-                                        <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench /> : undefined}>
-                                          {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
-                                        </ChainOfThoughtStepTitle>
-                                        <p className="text-muted-foreground">{activity.detail}</p>
-                                      </ChainOfThoughtStep>
-                                    ))}
-                                    {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
-                                  </ChainOfThoughtContent>
-                                </ChainOfThought>
-                              </div>
-                            </MessageContent>
-                          </Message>
-                        </MessageScrollerItem>
-                      )}
-      
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.18em]">
+                                {activeStage || "idle"}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[10px] uppercase tracking-[0.18em]">
+                                {runActivities.length} events
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 rounded-xl border border-border/60 bg-background/60 p-3">
+                            <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                              <span>Trace</span>
+                              <span>Node by node</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {liveStages.map((stage, index) => (
+                                <div
+                                  key={stage.id}
+                                  className={`flex items-start gap-3 rounded-xl border px-3 py-2 transition-colors ${stage.status === "running"
+                                    ? "border-cyan-500/40 bg-cyan-500/10"
+                                    : stage.status === "done"
+                                      ? "border-emerald-500/20 bg-emerald-500/5"
+                                      : stage.status === "failed"
+                                        ? "border-red-500/30 bg-red-500/5"
+                                        : "border-transparent bg-muted/10"
+                                    }`}
+                                >
+                                  <div className="mt-0.5 flex shrink-0 flex-col items-center">
+                                    <span
+                                      className={`size-2 rounded-full ${stage.status === "running"
+                                        ? "bg-cyan-400"
+                                        : stage.status === "done"
+                                          ? "bg-emerald-400"
+                                          : stage.status === "failed"
+                                            ? "bg-red-400"
+                                            : "bg-muted-foreground/50"
+                                        }`}
+                                    />
+                                    {index < liveStages.length - 1 && (
+                                      <span className="mt-1 h-5 w-px bg-border/70" />
+                                    )}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-sm font-medium text-foreground">{stage.title}</span>
+                                      <Badge variant="outline" className="text-[9px] uppercase tracking-[0.16em]">
+                                        {stage.status}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                                      {stage.detail}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="mt-3">
+                            <ChainOfThought autoCloseOnAllComplete={false}>
+                              <ChainOfThoughtTrigger icon={<BrainCircuit />}>
+                                {runComplete ? "Workflow finished" : runFailed ? "Workflow halted" : "Live graph trace"}
+                              </ChainOfThoughtTrigger>
+                              <ChainOfThoughtContent>
+                                {runActivities.map((activity) => (
+                                  <ChainOfThoughtStep
+                                    key={activity.id}
+                                    status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}
+                                  >
+                                    <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench /> : undefined}>
+                                      {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
+                                    </ChainOfThoughtStepTitle>
+                                    <p className="text-muted-foreground">{activity.detail}</p>
+                                  </ChainOfThoughtStep>
+                                ))}
+                                {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
+                              </ChainOfThoughtContent>
+                            </ChainOfThought>
+                          </div>
+                        </div>
+                      </MessageScrollerItem>
+
                       {/* Message Flow */}
                       {messages.map((m) => {
                         const isUser = m.role === "user";
                         const isAgent = m.role === "agent";
-      
+
                         return (
                           <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser} className="order-1">
                             <Message align={isUser ? "end" : "start"} className="my-2">
                               <MessageAvatar>
                                 <div
-                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${
-                                    isAgent
-                                      ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
-                                      : "bg-primary text-primary-foreground"
-                                  }`}
+                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${isAgent
+                                    ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                                    : "bg-primary text-primary-foreground"
+                                    }`}
                                 >
                                   {isUser ? <User className="w-3.5 h-3.5" /> : isAgent ? <Sparkles className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                                 </div>
                               </MessageAvatar>
-      
+
                               <MessageContent>
                                 <Bubble variant={isUser ? "default" : "outline"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
                                   <BubbleContent>
@@ -812,7 +807,7 @@ export function CopilotChatbox({
                                     >
                                       {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                                     </button>
-            
+
                                     <AttachmentList attachments={m.attachments} />
 
                                     {/* Markdown Body */}
@@ -821,7 +816,20 @@ export function CopilotChatbox({
                                     </div>
 
                                     <Citations sources={m.citations} />
-            
+
+                                    {m.role !== "user" && (
+                                      <div className="mt-3 grid gap-2 rounded-xl border border-border/60 bg-background/70 p-2 sm:grid-cols-2">
+                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                          <WandSparkles className="size-3.5 text-cyan-400" />
+                                          Graph-aware reply
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                          <Maximize2 className="size-3.5 text-primary" />
+                                          Production operator console
+                                        </div>
+                                      </div>
+                                    )}
+
                                     {/* Suggested actions are executable Studio prompts. */}
                                     {m.actions && m.actions.length > 0 && (
                                       <div className="mt-2.5 border-t border-border/40 pt-2">
@@ -876,36 +884,40 @@ export function CopilotChatbox({
                 <PromptInputActionGroup>
                   <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={loading || pipelineRunning} />
                   <ImageStatus count={attachments.filter((attachment) => attachment.type.startsWith("image/")).length} />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setKeyDialogOpen(true)}
-              title="Configure the model that automatically selects the workflow tools"
-            >
-              <BotMessageSquare data-icon="inline-start" />
-              Auto
-            </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setKeyDialogOpen(true)}
+                    title="Configure the model that automatically selects the workflow tools"
+                  >
+                    <BotMessageSquare data-icon="inline-start" />
+                    Auto
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setInput("Generate a LangGraph-driven Blender asset with live tool feedback, repair loops, and export readiness.");
+                    }}
+                  >
+                    <Command data-icon="inline-start" />
+                    Graph prompt
+                  </Button>
                 </PromptInputActionGroup>
                 <PromptInputActionGroup>
-            <Button
-              type="button"
-              size="icon-sm"
-              onClick={() => handleSend()}
-              disabled={!input.trim() || loading || pipelineRunning}
-              aria-label="Send message"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : <Send />}
-            </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    onClick={() => handleSend()}
+                    disabled={!input.trim() || loading || pipelineRunning}
+                    aria-label="Send message"
+                  >
+                    {loading ? <Loader2 className="animate-spin" /> : <Send />}
+                  </Button>
                 </PromptInputActionGroup>
               </PromptInputActions>
             </PromptInput>
-            <div className="mt-2">
-              <Suggestions
-                disabled={loading || pipelineRunning}
-                items={["Create a game-ready prop", "Inspect scene topology", "Export the current asset"]}
-                onSelect={(suggestion) => setInput(suggestion)}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -927,61 +939,61 @@ export function CopilotChatbox({
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground font-medium">Provider</Label>
-              <Select value={llmProvider} onValueChange={(val) => {
-                if (!val) return;
-                setLlmProvider(val);
-                if (val === "anthropic") setLlmModel("claude-3-5-sonnet-20241022");
-                else if (val === "openai") setLlmModel("gpt-4o");
-                else if (val === "custom") setLlmModel("gemini-1.5-pro");
-              }}>
-                <SelectTrigger className="h-9 text-xs bg-background">
-                  <SelectValue placeholder="Select LLM Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="openai">OpenAI (GPT-4o, GPT-4o-mini)</SelectItem>
-                  <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet)</SelectItem>
-                  <SelectItem value="custom">Google Gemini / Custom Endpoint</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-foreground font-medium">Model Name</Label>
-              <Input
-                value={llmModel}
-                onChange={(e) => setLlmModel(e.target.value)}
-                placeholder="gpt-4o or claude-3-5-sonnet-20241022"
-                className="h-9 text-xs bg-background"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-foreground font-medium">
-                API Key {hasApiKey && <span className="text-emerald-400 font-mono">(Key Already Configured)</span>}
-              </Label>
-              <div className="relative">
-                <Input
-                  type={showKeyText ? "text" : "password"}
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder={hasApiKey ? "••••••••••••••••••••••••" : "Paste sk-... or api key here"}
-                  className="h-9 text-xs bg-background pr-9"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKeyText(!showKeyText)}
-                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  {showKeyText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                <Select value={llmProvider} onValueChange={(val) => {
+                  if (!val) return;
+                  setLlmProvider(val);
+                  if (val === "anthropic") setLlmModel("claude-3-5-sonnet-20241022");
+                  else if (val === "openai") setLlmModel("gpt-4o");
+                  else if (val === "custom") setLlmModel("gemini-1.5-pro");
+                }}>
+                  <SelectTrigger className="h-9 text-xs bg-background">
+                    <SelectValue placeholder="Select LLM Provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI (GPT-4o, GPT-4o-mini)</SelectItem>
+                    <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet)</SelectItem>
+                    <SelectItem value="custom">Google Gemini / Custom Endpoint</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Keys are AES-256 encrypted server-side in your local database.
-              </p>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-foreground font-medium">Model Name</Label>
+                <Input
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                  placeholder="gpt-4o or claude-3-5-sonnet-20241022"
+                  className="h-9 text-xs bg-background"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-foreground font-medium">
+                  API Key {hasApiKey && <span className="text-emerald-400 font-mono">(Key Already Configured)</span>}
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showKeyText ? "text" : "password"}
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder={hasApiKey ? "••••••••••••••••••••••••" : "Paste sk-... or api key here"}
+                    className="h-9 text-xs bg-background pr-9"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyText(!showKeyText)}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    {showKeyText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Keys are AES-256 encrypted server-side in your local database.
+                </p>
+              </div>
             </div>
-            </div>
-            
+
             <DialogFooter className="flex items-center justify-between sm:justify-between">
               <Link href="/settings" className="text-xs text-cyan-400 hover:underline">
                 Advanced Settings →

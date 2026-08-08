@@ -24,6 +24,8 @@ interface ThreeViewportProps {
   };
   sceneObjects?: WorkflowSceneObject[];
   wireframeMode?: boolean;
+  selectedObjectName?: string | null;
+  onObjectSelect?: (name: string | null) => void;
 }
 
 function createGeometry(object: WorkflowSceneObject) {
@@ -39,17 +41,17 @@ function createGeometry(object: WorkflowSceneObject) {
   return new THREE.BoxGeometry(w, h, d);
 }
 
-function createMaterial(object: WorkflowSceneObject, wireframe: boolean) {
+function createMaterial(object: WorkflowSceneObject, wireframe: boolean, selected: boolean) {
   const isAccent = /accent|strip|core|emissive|glow/i.test(object.name + object.materialName);
   const isMetal = /metal|hoop|bevel|dark/i.test(object.name + object.materialName);
   const isWood = /wood|barrel|table|leg/i.test(object.name + object.materialName);
 
   return new THREE.MeshStandardMaterial({
-    color: isAccent ? 0x06b6d4 : isWood ? 0x8b5a2b : isMetal ? 0x1f2937 : 0x334155,
-    metalness: isMetal || isAccent ? 0.75 : 0.2,
-    roughness: isWood ? 0.65 : 0.35,
-    emissive: isAccent ? 0x06b6d4 : 0x000000,
-    emissiveIntensity: isAccent ? 1.6 : 0,
+    color: selected ? 0x38bdf8 : isAccent ? 0x06b6d4 : isWood ? 0x8b5a2b : isMetal ? 0x1f2937 : 0x334155,
+    metalness: selected || isMetal || isAccent ? 0.78 : 0.2,
+    roughness: isWood ? 0.65 : selected ? 0.25 : 0.35,
+    emissive: selected ? 0x0f172a : isAccent ? 0x06b6d4 : 0x000000,
+    emissiveIntensity: selected ? 0.4 : isAccent ? 1.6 : 0,
     wireframe,
   });
 }
@@ -67,6 +69,8 @@ export function ThreeViewport({
   assetSpec,
   sceneObjects = [],
   wireframeMode = false,
+  selectedObjectName = null,
+  onObjectSelect,
 }: ThreeViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -188,10 +192,12 @@ export function ThreeViewport({
         }
       });
     };
-  }, []);
+  }, [onObjectSelect]);
 
   useEffect(() => {
     const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
     if (!scene) return;
 
     if (meshGroupRef.current) {
@@ -210,9 +216,10 @@ export function ThreeViewport({
 
     const group = new THREE.Group();
     sceneObjects.forEach((object) => {
+      const selected = object.name === selectedObjectName;
       const mesh = new THREE.Mesh(
         createGeometry(object),
-        createMaterial(object, effectiveWireframe)
+        createMaterial(object, effectiveWireframe, selected)
       );
       const [x, y, z] = object.location;
       mesh.position.set(x, z, y);
@@ -224,15 +231,41 @@ export function ThreeViewport({
         mesh.rotation.x = Math.PI / 2;
       }
       mesh.name = object.name;
+      mesh.userData = { objectName: object.name };
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       addEdges(mesh);
+      if (selected) {
+        mesh.scale.setScalar(1.02);
+      }
       group.add(mesh);
     });
 
     scene.add(group);
     meshGroupRef.current = group;
-  }, [sceneObjects, effectiveWireframe]);
+
+    if (renderer && camera) {
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      const handlePointerDown = (event: PointerEvent) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+        raycaster.setFromCamera(pointer, camera);
+
+        const intersections = raycaster.intersectObjects(group.children, true);
+        const hit = intersections.find((intersection) => intersection.object instanceof THREE.Mesh)?.object;
+        onObjectSelect?.(hit?.name || null);
+      };
+
+      renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+      return () => {
+        renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+      };
+    }
+  }, [sceneObjects, effectiveWireframe, selectedObjectName, onObjectSelect]);
 
   const handleSetView = (view: "iso" | "front" | "top") => {
     setCameraView(view);
@@ -252,7 +285,7 @@ export function ThreeViewport({
   };
 
   return (
-    <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-border bg-card shadow-2xl flex flex-col">
+    <div className="relative w-full h-full min-h-120 rounded-2xl overflow-hidden border border-border bg-card shadow-2xl flex flex-col">
       <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-2 pointer-events-auto">
           <Badge variant="outline" className="bg-background/85 backdrop-blur-md border-cyan-500/40 text-cyan-300 text-xs px-2.5 py-1 font-semibold">
@@ -318,7 +351,7 @@ export function ThreeViewport({
         </div>
       )}
 
-      <div ref={containerRef} className="w-full flex-1 min-h-[440px] cursor-grab active:cursor-grabbing" />
+      <div ref={containerRef} className="w-full flex-1 min-h-110 cursor-grab active:cursor-grabbing" />
 
       <div className="px-4 py-2 bg-card/70 backdrop-blur-md border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
         <div className="flex items-center gap-3">

@@ -104,7 +104,7 @@ export function AppSidebar() {
       {/* Navigation Links */}
       <div className="px-3 py-1 space-y-1">
         {/* 3D Studio link removed as it is now project-specific and accessed via Projects */}
-        <Link
+        {/* <Link
           href="/chat"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
             pathname === "/chat" || pathname.startsWith("/chat/")
@@ -114,7 +114,7 @@ export function AppSidebar() {
         >
           <MessageSquare className="w-4 h-4" />
           <span>Chat Workspace</span>
-        </Link>
+        </Link> */}
         <Link
           href="/projects"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
