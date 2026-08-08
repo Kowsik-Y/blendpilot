@@ -80,7 +80,7 @@ def _safe_model_dump(obj: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def node_intent(state: BlendPilotState) -> dict[str, Any]:
-    """Parse the user's natural language request into a structured DesignSpec."""
+    """Parse the user's natural language request into a structured DesignSpec / IntentSpec."""
     logger.info("[Node] Intent Agent")
     try:
         agent = IntentAgent(llm_service=_get_llm_service(state))
@@ -91,104 +91,170 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
         spec_dict = _safe_model_dump(spec)
         asset_type = getattr(spec, 'asset_type', getattr(spec, 'object_type', 'unknown'))
         _record_event(state, "intent_agent", "COMPLETED",
-                      f"Parsed DesignSpec for asset_type='{asset_type}'",
+                      f"Parsed IntentSpec for object_type='{asset_type}'",
                       {"spec": spec_dict})
-        return {"current_agent": "planning_agent", "design_spec": spec_dict}
+        return {
+            "current_agent": "planner",
+            "intent": spec_dict,
+            "design_spec": spec_dict
+        }
     except Exception as exc:
         logger.exception("[Node] Intent Agent failed: %s", exc)
         _record_event(state, "intent_agent", "FAILED", f"Intent parsing failed: {exc}")
         return {
-            "current_agent": "planning_agent",
+            "current_agent": "planner",
+            "intent": {
+                "object_type": "generic_prop",
+                "style": "low-poly",
+                "dimensions": {"width": 1.0, "depth": 1.0, "height": 1.0},
+                "materials": ["base_gray_pbr"],
+                "description": state.get("user_prompt", ""),
+            },
             "design_spec": {
                 "asset_type": "generic_prop",
                 "style": "low-poly",
                 "dimensions": {"width": 1.0, "depth": 1.0, "height": 1.0},
-                "triangle_limit": 8000,
-                "target_platform": "Unity",
                 "materials": ["base_gray_pbr"],
-                "export_format": "FBX",
                 "description": state.get("user_prompt", ""),
             },
+            "error": str(exc)
         }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 2: Planning Agent
+# Node 2: Planner Agent
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def node_planning(state: BlendPilotState) -> dict[str, Any]:
-    """Generate an atomic, step-by-step DesignPlan from the DesignSpec."""
-    logger.info("[Node] Planning Agent")
+async def node_planner(state: BlendPilotState) -> dict[str, Any]:
+    """Generate modeling plan from intent spec."""
+    logger.info("[Node] Planner Agent")
     try:
         agent = PlanningAgent(llm_service=_get_llm_service(state))
-        spec = DesignSpec.model_validate(state["design_spec"])
-        plan = await agent.execute(spec=spec)
+        spec_dict = state.get("intent") or state.get("design_spec")
+        from schemas.intent import IntentSpec
+        spec = IntentSpec.model_validate(spec_dict)
+        plan = await agent.execute(intent=spec)
         plan_dict = _safe_model_dump(plan)
         _record_event(state, "planning_agent", "COMPLETED",
                       f"Generated {len(plan.steps)}-step modeling plan",
                       {"plan": plan_dict})
-        return {"current_agent": "generation_agent", "design_plan": plan_dict}
+        return {
+            "current_agent": "generator",
+            "plan": plan_dict,
+            "design_plan": plan_dict
+        }
     except Exception as exc:
-        logger.exception("[Node] Planning Agent failed: %s", exc)
+        logger.exception("[Node] Planner Agent failed: %s", exc)
         _record_event(state, "planning_agent", "FAILED", f"Planning failed: {exc}")
         return {
-            "current_agent": "generation_agent",
-            "design_plan": {
-                "spec_id": "fallback",
-                "steps": [],
-                "current_step_index": 0,
-                "status": "pending",
-            },
+            "current_agent": "generator",
+            "plan": {"steps": []},
+            "design_plan": {"steps": []},
+            "error": str(exc),
         }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 3: Generation Agent
+# Node 3: Generator Agent
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def node_generation(
+async def node_generator(state: BlendPilotState) -> dict[str, Any]:
+    """Translate ModelingPlan into list of executable operations."""
+    logger.info("[Node] Generator Agent")
+    try:
+        agent = GenerationAgent(llm_service=_get_llm_service(state))
+        plan_dict = state.get("plan") or state.get("design_plan")
+        from schemas.plan_state import ModelingPlan
+        plan = ModelingPlan.model_validate(plan_dict)
+        
+        ops = agent.translate(plan)
+        _record_event(state, "generation_agent", "COMPLETED",
+                      f"Translated modeling plan to {len(ops)} executable operations",
+                      {"operations": ops})
+        return {
+            "current_agent": "executor",
+            "executable_operations": ops,
+        }
+    except Exception as exc:
+        logger.exception("[Node] Generator Agent failed: %s", exc)
+        _record_event(state, "generation_agent", "FAILED", f"Translation failed: {exc}")
+        return {
+            "current_agent": "executor",
+            "executable_operations": [],
+            "error": str(exc),
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 4: Executor Agent
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_executor(
     state: BlendPilotState,
     mcp_server: BlenderMCPServer | None = None,
 ) -> dict[str, Any]:
-    """Execute mesh modeling, apply PBR materials, set up lighting, render preview."""
-    logger.info("[Node] Generation Agent")
+    """Execute the list of operations in the Blender context."""
+    logger.info("[Node] Executor Agent")
     try:
+        try:
+            import bpy
+            mock_mode = False
+        except ImportError:
+            mock_mode = True
+
         agent = GenerationAgent(
             mcp_server=mcp_server,
             llm_service=_get_llm_service(state),
+            mock_mode=mock_mode,
         )
-        spec = DesignSpec.model_validate(state["design_spec"])
-        plan = DesignPlan.model_validate(state["design_plan"])
-        preview_path = f"output/{spec.asset_type}/preview.png"
-
+        
+        spec_dict = state.get("intent") or state.get("design_spec")
+        plan_dict = state.get("plan") or state.get("design_plan")
+        from schemas.intent import IntentSpec
+        from schemas.plan_state import ModelingPlan
+        spec = IntentSpec.model_validate(spec_dict)
+        plan = ModelingPlan.model_validate(plan_dict)
+        
+        preview_path = f"output/{spec.object_type}/preview.png"
         result = await agent.execute(spec=spec, plan=plan, output_image_path=preview_path)
+        
+        status = "COMPLETED" if result["success"] else "FAILED"
         _record_event(
-            state, "generation_agent",
-            "COMPLETED" if result["success"] else "FAILED",
-            f"Generated {len(result['created_objects'])} objects with {len(result['materials_created'])} materials",
+            state, "executor_agent",
+            status,
+            f"Executed {len(plan.steps)} operations: {len(result['created_objects'])} objects, {len(result['materials_created'])} materials",
             {"created_objects": result["created_objects"]},
         )
+        
         return {
-            "current_agent": "scene_state",
+            "current_agent": "scene_state_node",
             "created_objects": result["created_objects"],
             "materials_created": result["materials_created"],
-            "modeling_logs": result["modeling_logs"],
+            "modeling_logs": _safe_model_dump(result["step_executions"]),
             "preview_image_path": result["preview_image_path"],
+            "execution_result": result,
+            "status": status,
+            "error": None if result["success"] else "Some operations failed to execute",
+            "iteration_count": state.get("iteration_count", 0) + 1,
         }
     except Exception as exc:
-        logger.exception("[Node] Generation Agent failed: %s", exc)
-        _record_event(state, "generation_agent", "FAILED", f"Generation failed: {exc}")
+        logger.exception("[Node] Executor Agent failed: %s", exc)
+        _record_event(state, "executor_agent", "FAILED", f"Execution failed: {exc}")
         return {
-            "current_agent": "scene_state",
+            "current_agent": "scene_state_node",
             "created_objects": [],
             "materials_created": [],
             "modeling_logs": [{"error": str(exc)}],
             "preview_image_path": None,
+            "execution_result": {"success": False, "step_executions": []},
+            "status": "FAILED",
+            "error": str(exc),
+            "iteration_count": state.get("iteration_count", 0) + 1,
         }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 4: Scene State (post-generation Blender snapshot)
+# Node 5: Scene State (post-generation Blender snapshot)
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def node_scene_state(
@@ -198,20 +264,28 @@ async def node_scene_state(
     """Query Blender for the current scene state (objects, stats) after generation."""
     logger.info("[Node] Scene State")
     try:
-        mcp = mcp_server or BlenderMCPServer()
-        scene_result = await mcp.call_tool("get_scene_summary", {"include_mesh_stats": True})
-        scene_dict = scene_result if isinstance(scene_result, dict) else {}
-        obj_count = len(scene_dict.get("objects", []))
+        from core.scene_inspector import inspect_scene
+        scene_summary = inspect_scene()
+        scene_dict = _safe_model_dump(scene_summary)
+        obj_count = len(scene_summary.objects)
         _record_event(state, "scene_state", "COMPLETED",
                       f"Captured scene snapshot: {obj_count} objects",
                       {"scene": scene_dict})
-        return {"current_agent": "geometry_qa", "scene_summary": scene_dict}
+        return {
+            "current_agent": "END",
+            "scene_summary": scene_dict,
+            "scene_state": scene_dict,
+            "status": "COMPLETED",
+        }
     except Exception as exc:
         logger.exception("[Node] Scene State failed: %s", exc)
         _record_event(state, "scene_state", "FAILED", f"Scene snapshot failed: {exc}")
         return {
-            "current_agent": "geometry_qa",
-            "scene_summary": {"objects": [], "materials": [], "lights": [], "camera": None},
+            "current_agent": "END",
+            "scene_summary": {"objects": [], "materials": [], "lighting": [], "camera": None},
+            "scene_state": {"objects": [], "materials": [], "lighting": [], "camera": None},
+            "status": "FAILED",
+            "error": str(exc),
         }
 
 

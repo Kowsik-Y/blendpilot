@@ -34,18 +34,13 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from graph.nodes import (
-    node_decision,
-    node_export,
-    node_generation,
-    node_geometry_qa,
     node_intent,
-    node_planning,
-    node_repair,
+    node_planner,
+    node_generator,
+    node_executor,
     node_scene_state,
-    node_visual_critic,
 )
 from graph.persistence import get_checkpointer
-from graph.routes import route_after_decision
 from graph.state import BlendPilotState, create_initial_state
 
 logger = logging.getLogger("blendpilot.graph")
@@ -70,40 +65,19 @@ def build_blendpilot_graph(
     workflow = StateGraph(BlendPilotState)
 
     # ── Register Nodes ───────────────────────────────────────────────────────
-    workflow.add_node("intent",        node_intent)
-    workflow.add_node("planning",      node_planning)
-    workflow.add_node("generation",    node_generation)
-    workflow.add_node("scene_state",   node_scene_state)
-    workflow.add_node("geometry_qa",   node_geometry_qa)
-    workflow.add_node("visual_critic", node_visual_critic)
-    workflow.add_node("decision_node", node_decision)
-    workflow.add_node("repair",        node_repair)
-    workflow.add_node("export",        node_export)
+    workflow.add_node("intent_node",      node_intent)
+    workflow.add_node("planner_node",     node_planner)
+    workflow.add_node("generator_node",   node_generator)
+    workflow.add_node("executor_node",    node_executor)
+    workflow.add_node("scene_state_node", node_scene_state)
 
     # ── Sequential Edges (linear spine) ─────────────────────────────────────
-    workflow.add_edge(START,          "intent")
-    workflow.add_edge("intent",       "planning")
-    workflow.add_edge("planning",     "generation")
-    workflow.add_edge("generation",   "scene_state")
-    workflow.add_edge("scene_state",  "geometry_qa")
-    workflow.add_edge("geometry_qa",  "visual_critic")
-    workflow.add_edge("visual_critic","decision_node")
-
-    # ── Conditional Routing: Decision → repair or export ─────────────────────
-    workflow.add_conditional_edges(
-        "decision_node",
-        route_after_decision,
-        {
-            "repair": "repair",
-            "export": "export",
-        },
-    )
-
-    # ── Self-Correction Loop: repair → scene_state (re-validation) ───────────
-    workflow.add_edge("repair", "scene_state")
-
-    # ── Terminal Edge ─────────────────────────────────────────────────────────
-    workflow.add_edge("export", END)
+    workflow.add_edge(START,              "intent_node")
+    workflow.add_edge("intent_node",       "planner_node")
+    workflow.add_edge("planner_node",      "generator_node")
+    workflow.add_edge("generator_node",    "executor_node")
+    workflow.add_edge("executor_node",     "scene_state_node")
+    workflow.add_edge("scene_state_node",  END)
 
     # ── Compile ───────────────────────────────────────────────────────────────
     cp = checkpointer or get_checkpointer()

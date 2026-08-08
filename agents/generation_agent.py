@@ -31,6 +31,24 @@ class GenerationAgent:
         if mcp_server and getattr(getattr(mcp_server, "client", None), "mock_mode", False):
             self.mock_mode = True
 
+    def translate(self, plan: ModelingPlan | Any) -> list[dict[str, Any]]:
+        """Translate a ModelingPlan into a list of serialized core operations."""
+        if not isinstance(plan, ModelingPlan):
+            steps = []
+            for step in getattr(plan, "steps", []):
+                steps.append(
+                    ModelingStep(
+                        step_id=step.step_id,
+                        operation=step.tool or step.required_tool or step.operation,
+                        target=step.target_object or step.target or "",
+                        parameters=step.parameters or {},
+                        dependencies=step.dependencies or [],
+                    )
+                )
+            plan = ModelingPlan(steps=steps)
+
+        return [step.model_dump() for step in plan.steps]
+
     async def execute(
         self,
         spec: Any,
@@ -174,7 +192,7 @@ class GenerationAgent:
             if isinstance(sc, list):
                 sc = tuple(sc)
             return core.objects.set_transform(
-                object_name=name,
+                name=name,
                 location=loc,
                 rotation=rot,
                 scale=sc,
@@ -187,14 +205,14 @@ class GenerationAgent:
             if isinstance(offset, list):
                 offset = tuple(offset)
             return core.objects.duplicate_object(
-                object_name=name,
+                name=name,
                 new_name=new_name,
                 offset=offset,
             )
 
         elif op == "delete_object":
             name = params.get("object_name") or step.target
-            return core.objects.delete_object(object_name=name)
+            return core.objects.delete_object(name=name)
 
         elif op == "create_material":
             name = params.get("name") or step.target

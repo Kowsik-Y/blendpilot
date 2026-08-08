@@ -85,6 +85,15 @@ class BlendPilotState(TypedDict, total=False):
     events: list[dict[str, Any]]
     checkpoint_path: str | None
 
+    # ── Stage 8 LangGraph Orchestration Additions ───────────────────────────
+    intent: dict[str, Any] | None
+    plan: dict[str, Any] | None
+    executable_operations: list[dict[str, Any]]
+    execution_result: dict[str, Any] | None
+    scene_state: dict[str, Any] | None
+    errors: list[str]
+    iteration_count: int
+
 
 def create_initial_state(
     user_prompt: str,
@@ -146,6 +155,14 @@ def create_initial_state(
         # Events
         "events": [],
         "checkpoint_path": None,
+        # Stage 8 Orchestration Additions
+        "intent": None,
+        "plan": None,
+        "executable_operations": [],
+        "execution_result": None,
+        "scene_state": None,
+        "errors": [],
+        "iteration_count": 0,
     }
 
     if overrides:
