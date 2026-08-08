@@ -808,8 +808,14 @@ export function CopilotChatbox({
                               </MessageAvatar>
 
                               <MessageContent>
-                                <Bubble variant={isUser ? "default" : "outline"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
-                                  <BubbleContent>
+                                <Bubble
+                                  variant={isUser ? "default" : "ghost"}
+                                  align={isUser ? "end" : "start"}
+                                  className={`group relative transition-all duration-300 ${
+                                    !isUser ? "bg-transparent border-none shadow-none px-0 py-1" : "border-none"
+                                  }`}
+                                >
+                                  <BubbleContent className={!isUser ? "p-0" : ""}>
                                     {/* Copy Action Button */}
                                     <button
                                       onClick={() => handleCopy(m.id, m.content)}
@@ -827,19 +833,6 @@ export function CopilotChatbox({
                                     </div>
 
                                     <Citations sources={m.citations} />
-
-                                    {m.role !== "user" && (
-                                      <div className="mt-3 grid gap-2 rounded-xl border border-border/60 bg-background/70 p-2 sm:grid-cols-2">
-                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                          <WandSparkles className="size-3.5 text-cyan-400" />
-                                          Graph-aware reply
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                          <Maximize2 className="size-3.5 text-primary" />
-                                          Production operator console
-                                        </div>
-                                      </div>
-                                    )}
 
                                     {/* Suggested actions are executable Studio prompts. */}
                                     {m.actions && m.actions.length > 0 && (
