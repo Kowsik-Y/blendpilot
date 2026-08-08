@@ -1,0 +1,33 @@
+{
+  "asset_name": "phone charger",
+  "timestamp": "2026-08-08T06:10:16.552307+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 0.07,
+    "depth": 0.03,
+    "height": 0.12
+  },
+  "triangle_budget": 10000,
+  "created_objects": [
+    "Phone charger_Main",
+    "Phone charger_Accent"
+  ],
+  "materials": [
+    "plastic",
+    "metal",
+    "circuit board"
+  ],
+  "files": {
+    "blend": "output/phone charger/phone charger.blend",
+    "fbx": "output/phone charger/phone charger.fbx",
+    "glb": "output/phone charger/phone charger.glb",
+    "preview": "output/phone charger/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "FAIL",
+    "geometry_score": 0.8,
+    "visual_score": 0.35,
+    "approved": true
+  }
+}

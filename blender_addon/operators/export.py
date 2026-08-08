@@ -15,12 +15,17 @@ from blender_addon.operators import register_command
 logger = logging.getLogger("blendpilot.addon.operators.export")
 
 
+def _read_path(params: dict[str, Any]) -> str:
+    """Read a path parameter from the bridge payload."""
+    return str(params.get("path") or params.get("filepath") or "")
+
+
 def handle_save_checkpoint(params: dict[str, Any]) -> dict[str, Any]:
     """Handle save_checkpoint command."""
     from core.project import save_checkpoint
 
     return save_checkpoint(
-        path=params["path"],
+        path=_read_path(params),
         copy=params.get("copy", True),
     )
 
@@ -29,14 +34,14 @@ def handle_restore_checkpoint(params: dict[str, Any]) -> dict[str, Any]:
     """Handle restore_checkpoint command."""
     from core.project import restore_checkpoint
 
-    return restore_checkpoint(path=params["path"])
+    return restore_checkpoint(path=_read_path(params))
 
 
 def handle_save_project(params: dict[str, Any]) -> dict[str, Any]:
     """Handle save_project command."""
     from core.project import save_project
 
-    return save_project(path=params["path"])
+    return save_project(path=_read_path(params))
 
 
 def handle_export_asset(params: dict[str, Any]) -> dict[str, Any]:

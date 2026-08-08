@@ -1,6 +1,6 @@
 {
   "asset_name": "barrel",
-  "timestamp": "2026-08-08T05:47:36.033804+00:00",
+  "timestamp": "2026-08-08T05:56:48.578137+00:00",
   "target_platform": "Unity",
   "style": "low-poly",
   "dimensions": {
@@ -16,7 +16,8 @@
     "Barrel_Hoop_3"
   ],
   "materials": [
-    "base_gray_pbr"
+    "wood",
+    "metal"
   ],
   "files": {
     "blend": "output\\barrel\\barrel.blend",
@@ -25,9 +26,9 @@
     "preview": "output\\barrel\\preview.png"
   },
   "quality_assurance": {
-    "geometry_status": "PASS",
-    "geometry_score": 1.0,
-    "visual_score": 0.88,
+    "geometry_status": "FAIL",
+    "geometry_score": 0.30000000000000016,
+    "visual_score": 0.3,
     "approved": true
   }
 }
