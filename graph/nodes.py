@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from agents.export_agent import ExportAgent
 from agents.feedback_agent import FeedbackAgent
@@ -23,12 +23,52 @@ from agents.scene_agent import SceneAgent
 from agents.visual_critic_agent import VisualCriticAgent
 from graph.state import BlendPilotState
 from mcp_servers.blender.server import BlenderMCPServer
+from services.blender_client import BlenderClient
 from schemas.design import DesignSpec
 from schemas.plan import DesignPlan
 from schemas.scene import SceneSummary
 from schemas.validation import ValidationResult, VisualCritiqueResult
 
 logger = logging.getLogger("blendpilot.graph.nodes")
+
+RuntimeEventSink = Callable[[dict[str, Any]], Awaitable[None]]
+_runtime_event_sinks: dict[str, RuntimeEventSink] = {}
+
+
+def register_runtime_event_sink(session_id: str, sink: RuntimeEventSink) -> None:
+    """Register a transient event sink for live, in-node progress updates."""
+    _runtime_event_sinks[session_id] = sink
+
+
+def unregister_runtime_event_sink(session_id: str) -> None:
+    """Remove a transient event sink after a workflow finishes."""
+    _runtime_event_sinks.pop(session_id, None)
+
+
+async def _emit_runtime_event(state: BlendPilotState, payload: dict[str, Any]) -> None:
+    """Publish live progress for the active session when an SSE listener exists."""
+    session_id = state.get("session_id")
+    if not session_id:
+        return
+    sink = _runtime_event_sinks.get(session_id)
+    if sink is None:
+        return
+    event = {
+        "session_id": session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **payload,
+    }
+    await sink(event)
+
+
+async def _emit_agent_state(state: BlendPilotState, node: str, agent_name: str, status: str, description: str) -> None:
+    await _emit_runtime_event(state, {
+        "event": "agent_state",
+        "node": node,
+        "agent_name": agent_name,
+        "status": status,
+        "description": description,
+    })
 
 
 def _record_event(state: BlendPilotState, agent_name: str, status: str, description: str, details: dict[str, Any] | None = None) -> None:
@@ -49,7 +89,11 @@ def _get_llm_service(state: BlendPilotState) -> Any:
     from services.llm import LLMService
     return LLMService(
         api_key=state.get("api_key"),
-        provider=state.get("provider") or "openai"
+        provider=state.get("provider") or "openai",
+        model=state.get("model") or "gpt-4o",
+        base_url=state.get("base_url"),
+        temperature=state.get("temperature", 0.0),
+        max_tokens=state.get("max_tokens", 4096),
     )
 
 
@@ -62,10 +106,18 @@ def _safe_model_dump(obj: Any) -> Any:
     return str(obj)
 
 
+def _get_mcp_server(state: BlendPilotState, provided: BlenderMCPServer | None = None) -> BlenderMCPServer:
+    """Use a real Blender bridge by default; mocks are test-only state overrides."""
+    if provided is not None:
+        return provided
+    return BlenderMCPServer(client=BlenderClient(mock_mode=state.get("blender_mock_mode", False)))
+
+
 # ── Workflow 1: Intent Understanding Node ───────────────────
 async def node_intent(state: BlendPilotState) -> dict[str, Any]:
     """Parse user request into structured DesignSpec."""
     logger.info("[Node] Running Intent Agent")
+    await _emit_agent_state(state, "intent", "intent_agent", "RUNNING", "Parsing prompt into structured design spec")
     try:
         agent = IntentAgent(llm_service=_get_llm_service(state))
         spec = await agent.execute(
@@ -101,8 +153,9 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
 async def node_scene(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Inspect active Blender scene state."""
     logger.info("[Node] Running Scene Agent")
+    await _emit_agent_state(state, "scene", "scene_agent", "RUNNING", "Scanning active Blender scene")
     try:
-        agent = SceneAgent(mcp_server=mcp_server)
+        agent = SceneAgent(mcp_server=_get_mcp_server(state, mcp_server))
         scene = await agent.execute()
         scene_dict = _safe_model_dump(scene)
         _record_event(state, "scene_agent", "COMPLETED", f"Scanned scene: {len(scene.objects)} objects present", {"scene": scene_dict})
@@ -123,6 +176,7 @@ async def node_scene(state: BlendPilotState, mcp_server: BlenderMCPServer | None
 async def node_research(state: BlendPilotState) -> dict[str, Any]:
     """Perform reference and technical specification research."""
     logger.info("[Node] Running Research Agent")
+    await _emit_agent_state(state, "research", "research_agent", "RUNNING", "Collecting technical constraints")
     try:
         agent = ResearchAgent(llm_service=_get_llm_service(state))
         spec = DesignSpec.model_validate(state["design_spec"])
@@ -145,6 +199,7 @@ async def node_research(state: BlendPilotState) -> dict[str, Any]:
 async def node_planning(state: BlendPilotState) -> dict[str, Any]:
     """Generate atomic, step-by-step DesignPlan."""
     logger.info("[Node] Running Planning Agent")
+    await _emit_agent_state(state, "planning", "planning_agent", "RUNNING", "Generating executable modeling plan")
     try:
         agent = PlanningAgent(llm_service=_get_llm_service(state))
         spec = DesignSpec.model_validate(state["design_spec"])
@@ -152,6 +207,14 @@ async def node_planning(state: BlendPilotState) -> dict[str, Any]:
         plan = await agent.execute(spec=spec, scene=scene, research=state.get("research_results"))
         plan_dict = _safe_model_dump(plan)
         _record_event(state, "planning_agent", "COMPLETED", f"Generated {len(plan.steps)}-step modeling plan", {"plan": plan_dict})
+        await _emit_runtime_event(state, {
+            "event": "plan_ready",
+            "node": "planning",
+            "agent_name": "planning_agent",
+            "status": "COMPLETED",
+            "step_count": len(plan.steps),
+            "plan": plan_dict,
+        })
         return {
             "current_agent": "modeling_agent",
             "design_plan": plan_dict,
@@ -169,8 +232,19 @@ async def node_planning(state: BlendPilotState) -> dict[str, Any]:
 async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Execute modeling steps and track objects."""
     logger.info("[Node] Running Modeling Agent")
+    await _emit_agent_state(state, "modeling", "modeling_agent", "RUNNING", "Executing Blender tool calls")
     try:
-        agent = ModelingAgent(mcp_server=mcp_server, llm_service=_get_llm_service(state))
+        async def event_callback(payload: dict[str, Any]) -> None:
+            await _emit_runtime_event(state, {
+                "node": "modeling",
+                **payload,
+            })
+
+        agent = ModelingAgent(
+            mcp_server=_get_mcp_server(state, mcp_server),
+            llm_service=_get_llm_service(state),
+            event_callback=event_callback,
+        )
         plan = DesignPlan.model_validate(state["design_plan"])
         res = await agent.execute(plan=plan)
         plan_dict = _safe_model_dump(res["plan"])
@@ -195,8 +269,9 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
 async def node_material(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Apply PBR shaders, studio lighting, camera framing, and render initial preview."""
     logger.info("[Node] Running Material & Lighting Agent")
+    await _emit_agent_state(state, "material", "material_agent", "RUNNING", "Applying materials, lighting, and preview camera")
     try:
-        agent = MaterialAgent(mcp_server=mcp_server)
+        agent = MaterialAgent(mcp_server=_get_mcp_server(state, mcp_server))
         spec = DesignSpec.model_validate(state["design_spec"])
         created_objs = state.get("created_objects", [])
         preview_path = f"output/{spec.asset_type}/preview.png"
@@ -221,8 +296,9 @@ async def node_material(state: BlendPilotState, mcp_server: BlenderMCPServer | N
 async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Inspect geometry topology, normals, manifolds, and triangle count."""
     logger.info("[Node] Running Geometry QA Agent")
+    await _emit_agent_state(state, "geometry_qa", "geometry_qa_agent", "RUNNING", "Validating topology and triangle budget")
     try:
-        agent = GeometryQAAgent(mcp_server=mcp_server)
+        agent = GeometryQAAgent(mcp_server=_get_mcp_server(state, mcp_server))
         spec = DesignSpec.model_validate(state["design_spec"])
         created_objs = state.get("created_objects", [])
         repairs = state.get("geometry_repair_count", 0)
@@ -260,8 +336,9 @@ async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer 
 async def node_geometry_repair(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Execute automated repair steps to fix topology/triangle/transform issues."""
     logger.info("[Node] Running Geometry Repair Loop")
+    await _emit_agent_state(state, "geometry_repair", "geometry_qa_agent", "RUNNING", "Applying geometry repair steps")
     try:
-        mcp = mcp_server or BlenderMCPServer()
+        mcp = _get_mcp_server(state, mcp_server)
         repair_steps = state.get("_repair_steps", [])
         for step in repair_steps:
             await mcp.call_tool(step["tool"], step.get("parameters", {}))
@@ -284,6 +361,7 @@ async def node_geometry_repair(state: BlendPilotState, mcp_server: BlenderMCPSer
 async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
     """Evaluate rendered image with Vision model against design spec."""
     logger.info("[Node] Running Visual Critic Agent")
+    await _emit_agent_state(state, "visual_critic", "visual_critic_agent", "RUNNING", "Evaluating preview render against design goal")
     try:
         agent = VisualCriticAgent(llm_service=_get_llm_service(state))
         spec = DesignSpec.model_validate(state["design_spec"])
@@ -319,8 +397,9 @@ async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
 async def node_visual_repair(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Apply aesthetic refinement and boost contrast/materials."""
     logger.info("[Node] Running Visual Self-Repair Loop")
+    await _emit_agent_state(state, "visual_repair", "visual_critic_agent", "RUNNING", "Applying visual refinements")
     try:
-        mcp = mcp_server or BlenderMCPServer()
+        mcp = _get_mcp_server(state, mcp_server)
         # Refine lighting and material
         await mcp.call_tool("setup_studio_lighting", {"key_energy": 1400.0, "fill_energy": 550.0, "rim_energy": 900.0})
         revs = state.get("visual_revision_count", 0) + 1
@@ -341,6 +420,7 @@ async def node_visual_repair(state: BlendPilotState, mcp_server: BlenderMCPServe
 async def node_human_feedback(state: BlendPilotState) -> dict[str, Any]:
     """Process human review decision."""
     logger.info("[Node] Running Human Feedback Agent")
+    await _emit_agent_state(state, "human_feedback", "feedback_agent", "RUNNING", "Waiting for or applying human review")
     try:
         agent = FeedbackAgent()
         spec = DesignSpec.model_validate(state["design_spec"])
@@ -367,8 +447,9 @@ async def node_human_feedback(state: BlendPilotState) -> dict[str, Any]:
 async def node_export(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
     """Export .blend, .fbx, .glb bundles and write asset_report.json."""
     logger.info("[Node] Running Export Agent")
+    await _emit_agent_state(state, "export", "export_agent", "RUNNING", "Packaging production export files")
     try:
-        agent = ExportAgent(mcp_server=mcp_server)
+        agent = ExportAgent(mcp_server=_get_mcp_server(state, mcp_server))
         spec = DesignSpec.model_validate(state["design_spec"])
         created_objs = state.get("created_objects", [])
 

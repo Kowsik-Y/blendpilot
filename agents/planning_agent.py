@@ -84,7 +84,7 @@ class PlanningAgent:
             user_msg = PLANNING_USER_PROMPT.format(
                 design_spec=spec.model_dump_json(indent=2),
                 scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
-                research_notes=json.dumps(research or []),
+                research_results=json.dumps(research or []),
             )
             response = await self.llm_service.generate(
                 prompt=user_msg,
@@ -210,6 +210,77 @@ class PlanningAgent:
             ))
             accent_objects.append(trim_name)
             step_id += 1
+
+        elif spec.asset_type == "notebook":
+            # Paper block just below the cover.
+            pages_name = "Notebook_Pages"
+            steps.append(PlanStep(
+                step_id=step_id,
+                description="Create visible paper block under the notebook cover",
+                tool="create_primitive",
+                parameters={
+                    "primitive_type": "cube",
+                    "name": pages_name,
+                    "dimensions": [w * 0.94, d * 0.92, h * 0.42],
+                    "location": [w * 0.02, 0.0, h * 0.48],
+                },
+                dependencies=[1],
+                expected_outcome="Off-white paper block visible below cover",
+            ))
+            accent_objects.append(pages_name)
+            step_id += 1
+
+            cover_name = "Notebook_Cover"
+            steps.append(PlanStep(
+                step_id=step_id,
+                description="Create thin top cover plate",
+                tool="create_primitive",
+                parameters={
+                    "primitive_type": "cube",
+                    "name": cover_name,
+                    "dimensions": [w * 1.04, d * 1.04, h * 0.16],
+                    "location": [0.0, 0.0, h * 0.98],
+                },
+                dependencies=[1],
+                expected_outcome="Hard cover plate slightly larger than pages",
+            ))
+            accent_objects.append(cover_name)
+            step_id += 1
+
+            spine_name = "Notebook_Spine"
+            steps.append(PlanStep(
+                step_id=step_id,
+                description="Create vertical binding spine strip",
+                tool="create_primitive",
+                parameters={
+                    "primitive_type": "cube",
+                    "name": spine_name,
+                    "dimensions": [w * 0.12, d * 1.08, h * 1.2],
+                    "location": [-w * 0.48, 0.0, h * 0.62],
+                },
+                dependencies=[1],
+                expected_outcome="Raised spine strip along notebook binding",
+            ))
+            accent_objects.append(spine_name)
+            step_id += 1
+
+            for i, y_frac in enumerate([-0.28, 0.0, 0.28]):
+                line_name = f"Notebook_Page_Line_{i + 1}"
+                steps.append(PlanStep(
+                    step_id=step_id,
+                    description=f"Create subtle page line {i + 1}",
+                    tool="create_primitive",
+                    parameters={
+                        "primitive_type": "cube",
+                        "name": line_name,
+                        "dimensions": [w * 0.62, d * 0.012, h * 0.04],
+                        "location": [w * 0.12, d * y_frac, h * 1.08],
+                    },
+                    dependencies=[1],
+                    expected_outcome=f"Subtle cover/page line '{line_name}'",
+                ))
+                accent_objects.append(line_name)
+                step_id += 1
 
         elif spec.asset_type in ("table", "desk"):
             # Table legs

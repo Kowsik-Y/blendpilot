@@ -122,13 +122,15 @@ async def run_pipeline(
     project_id: str | None = None,
     session_id: str | None = None,
     overrides: dict[str, Any] | None = None,
+    mock_mode: bool = False,
 ) -> BlendPilotState:
     """Convenience entry point to run the entire BlendPilot pipeline end-to-end."""
+    runtime_overrides = {**(overrides or {}), "blender_mock_mode": mock_mode}
     initial_state = create_initial_state(
         user_prompt=user_prompt,
         project_id=project_id,
         session_id=session_id,
-        overrides=overrides,
+        overrides=runtime_overrides,
     )
     graph = build_blendpilot_graph(enable_human_interrupt=False)
     config = {"configurable": {"thread_id": initial_state["session_id"]}}

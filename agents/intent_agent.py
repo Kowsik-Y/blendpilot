@@ -77,7 +77,7 @@ class IntentAgent:
             )
             user_msg = INTENT_USER_PROMPT.format(
                 user_prompt=user_prompt,
-                reference_info=f"Reference images: {len(reference_images)}",
+                reference_images=len(reference_images),
             )
 
             from langchain_core.messages import SystemMessage, HumanMessage
@@ -106,7 +106,7 @@ class IntentAgent:
             )
             user_msg = INTENT_USER_PROMPT.format(
                 user_prompt=user_prompt,
-                reference_info=f"Reference images: {len(reference_images)}",
+                reference_images=len(reference_images),
             )
             response = await self.llm_service.generate(
                 prompt=user_msg,
@@ -141,6 +141,7 @@ class IntentAgent:
             "pylon": "pylon", "tower": "pylon", "antenna": "pylon", "beacon": "pylon",
             "pedestal": "pedestal", "pillar": "pedestal", "column": "pedestal",
             "shelf": "bookshelf", "bookshelf": "bookshelf", "cabinet": "bookshelf",
+            "notebook": "notebook", "journal": "notebook", "book": "notebook", "sketchbook": "notebook",
             "lamp": "street_lamp", "lantern": "street_lamp", "light": "street_lamp",
             "chest": "chest", "trunk": "chest", "coffer": "chest",
             "piston": "piston", "engine": "piston", "gear": "piston",
@@ -260,6 +261,7 @@ class IntentAgent:
             "barrel": Dimensions(width=0.5, depth=0.5, height=0.8),
             "door": Dimensions(width=0.9, depth=0.1, height=2.1),
             "bookshelf": Dimensions(width=0.8, depth=0.3, height=1.6),
+            "notebook": Dimensions(width=0.21, depth=0.30, height=0.035),
             "street_lamp": Dimensions(width=0.4, depth=0.4, height=2.8),
             "chest": Dimensions(width=0.8, depth=0.5, height=0.5),
             "barrier": Dimensions(width=1.5, depth=0.3, height=0.8),

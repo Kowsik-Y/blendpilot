@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderKanban, Plus, MessageSquare, Box } from "lucide-react";
+import { FolderKanban, Plus, Box } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -50,7 +50,7 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => {
-    fetchProjects();
+    void Promise.resolve().then(fetchProjects);
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {

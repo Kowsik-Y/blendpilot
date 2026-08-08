@@ -1,0 +1,31 @@
+{
+  "asset_name": "generic_prop",
+  "timestamp": "2026-08-08T04:19:06.403328+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 1.0,
+    "depth": 1.0,
+    "height": 1.0
+  },
+  "triangle_budget": 8000,
+  "created_objects": [
+    "Generic_prop_Main",
+    "Generic_prop_Accent"
+  ],
+  "materials": [
+    "base_gray_pbr"
+  ],
+  "files": {
+    "blend": "output/generic_prop/generic_prop.blend",
+    "fbx": "output/generic_prop/generic_prop.fbx",
+    "glb": "output/generic_prop/generic_prop.glb",
+    "preview": "output/generic_prop/preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "PASS",
+    "geometry_score": 1.0,
+    "visual_score": 0.88,
+    "approved": true
+  }
+}

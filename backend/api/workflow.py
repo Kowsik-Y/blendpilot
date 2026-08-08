@@ -13,11 +13,12 @@ import logging
 import uuid
 from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from graph.graph import build_blendpilot_graph
+from graph.nodes import register_runtime_event_sink, unregister_runtime_event_sink
 from graph.persistence import get_checkpointer
 from graph.state import BlendPilotState, create_initial_state
 
@@ -82,6 +83,21 @@ async def start_workflow(request: StartWorkflowRequest) -> dict[str, Any]:
 async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
     """Execute the StateGraph and dispatch SSE events to listeners."""
     config = {"configurable": {"thread_id": session_id}}
+
+    async def runtime_event_sink(payload: dict[str, Any]) -> None:
+        safe_payload = _make_json_safe(payload)
+        event_record = {
+            "timestamp": safe_payload.get("timestamp"),
+            "agent_name": safe_payload.get("agent_name"),
+            "status": safe_payload.get("status", safe_payload.get("event", "RUNNING")),
+            "step_description": safe_payload.get("description") or safe_payload.get("event"),
+            "details": safe_payload,
+        }
+        if session_id in _active_sessions:
+            _active_sessions[session_id]["state"].setdefault("events", []).append(event_record)
+        await _broadcast_event(session_id, safe_payload)
+
+    register_runtime_event_sink(session_id, runtime_event_sink)
     try:
         async for output in _compiled_app.astream(state, config=config):
             # LangGraph astream yields {node_name: partial_state}
@@ -116,6 +132,12 @@ async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
         if session_id in _active_sessions:
             current_status = _active_sessions[session_id]["state"].get("status", "COMPLETED")
             _active_sessions[session_id]["status"] = current_status
+            await _broadcast_event(session_id, {
+                "session_id": session_id,
+                "event": "workflow_complete",
+                "status": current_status,
+                "state": _make_json_safe(_active_sessions[session_id]["state"]),
+            })
 
     except Exception as e:
         logger.exception("Workflow error in session %s: %s", session_id, e)
@@ -123,6 +145,8 @@ async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
             _active_sessions[session_id]["status"] = "FAILED"
             _active_sessions[session_id]["state"]["error"] = str(e)
         await _broadcast_event(session_id, {"session_id": session_id, "error": str(e), "status": "FAILED"})
+    finally:
+        unregister_runtime_event_sink(session_id)
 
 
 def _make_json_safe(obj: Any) -> Any:
@@ -137,11 +161,36 @@ def _make_json_safe(obj: Any) -> Any:
         return str(obj)
 
 
+def _record_stream_event(session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Assign a durable event id and append the payload to the session replay log."""
+    if session_id not in _active_sessions:
+        return payload
+
+    state = _active_sessions[session_id]["state"]
+    next_event_id = int(state.get("stream_event_seq", 0)) + 1
+    safe_payload = _make_json_safe(payload)
+    event_payload = {
+        "event_id": next_event_id,
+        **safe_payload,
+    }
+    state["stream_event_seq"] = next_event_id
+    state.setdefault("stream_events", []).append(event_payload)
+    return event_payload
+
+
 async def _broadcast_event(session_id: str, payload: dict[str, Any]) -> None:
-    """Send event to all active SSE queues for this session."""
+    """Send event to all active stream queues and keep replay history."""
+    payload = _record_stream_event(session_id, payload)
     queues = _session_event_queues.get(session_id, [])
     for q in queues:
         await q.put(payload)
+
+
+def _is_terminal_stream_event(data: dict[str, Any]) -> bool:
+    """Only full workflow terminal events should close live transports."""
+    if data.get("event") == "workflow_complete":
+        return True
+    return data.get("status") == "FAILED" and data.get("event") != "tool_result"
 
 
 @router.get("/{session_id}/stream")
@@ -158,13 +207,15 @@ async def stream_workflow_progress(session_id: str) -> StreamingResponse:
     async def event_generator() -> AsyncGenerator[str, None]:
         # Send current state snapshot immediately
         current_state = _active_sessions[session_id]["state"]
-        yield f"data: {json.dumps({'event': 'snapshot', 'state': current_state})}\n\n"
+        yield f"data: {json.dumps({'event': 'snapshot', 'state': _make_json_safe(current_state)})}\n\n"
+        for stream_event in current_state.get("stream_events", []):
+            yield f"data: {json.dumps(_make_json_safe(stream_event))}\n\n"
 
         try:
             while True:
                 data = await queue.get()
                 yield f"data: {json.dumps(data)}\n\n"
-                if data.get("status") in ["COMPLETED", "FAILED"]:
+                if _is_terminal_stream_event(data):
                     break
         except asyncio.CancelledError:
             pass
@@ -177,6 +228,65 @@ async def stream_workflow_progress(session_id: str) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+@router.websocket("/{session_id}/ws")
+async def websocket_workflow_progress(websocket: WebSocket, session_id: str) -> None:
+    """Stream workflow progress over WebSocket with replay after reconnect."""
+    if session_id not in _active_sessions:
+        await websocket.accept()
+        await websocket.send_json({
+            "event": "workflow_missing",
+            "session_id": session_id,
+            "status": "FAILED",
+            "error": "Session not found",
+        })
+        await websocket.close(code=4404, reason="Session not found")
+        return
+
+    await websocket.accept()
+    after_event_id = 0
+    try:
+        after_event_id = int(websocket.query_params.get("after", "0"))
+    except ValueError:
+        after_event_id = 0
+
+    queue: asyncio.Queue = asyncio.Queue()
+    if session_id not in _session_event_queues:
+        _session_event_queues[session_id] = []
+    _session_event_queues[session_id].append(queue)
+
+    try:
+        current_state = _active_sessions[session_id]["state"]
+        await websocket.send_json({
+            "event": "snapshot",
+            "state": _make_json_safe(current_state),
+            "event_id": int(current_state.get("stream_event_seq", 0)),
+        })
+
+        for stream_event in current_state.get("stream_events", []):
+            if int(stream_event.get("event_id", 0)) > after_event_id:
+                await websocket.send_json(_make_json_safe(stream_event))
+
+        while True:
+            try:
+                data = await asyncio.wait_for(queue.get(), timeout=20)
+            except asyncio.TimeoutError:
+                await websocket.send_json({
+                    "event": "ping",
+                    "session_id": session_id,
+                    "event_id": int(_active_sessions[session_id]["state"].get("stream_event_seq", 0)),
+                })
+                continue
+
+            await websocket.send_json(_make_json_safe(data))
+            if _is_terminal_stream_event(data):
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if session_id in _session_event_queues and queue in _session_event_queues[session_id]:
+            _session_event_queues[session_id].remove(queue)
 
 
 @router.post("/{session_id}/feedback")
@@ -208,6 +318,21 @@ async def _resume_workflow_task(session_id: str, state: BlendPilotState) -> None
     astream(None) which tells LangGraph to continue from the checkpoint.
     """
     config = {"configurable": {"thread_id": session_id}}
+
+    async def runtime_event_sink(payload: dict[str, Any]) -> None:
+        safe_payload = _make_json_safe(payload)
+        event_record = {
+            "timestamp": safe_payload.get("timestamp"),
+            "agent_name": safe_payload.get("agent_name"),
+            "status": safe_payload.get("status", safe_payload.get("event", "RUNNING")),
+            "step_description": safe_payload.get("description") or safe_payload.get("event"),
+            "details": safe_payload,
+        }
+        if session_id in _active_sessions:
+            _active_sessions[session_id]["state"].setdefault("events", []).append(event_record)
+        await _broadcast_event(session_id, safe_payload)
+
+    register_runtime_event_sink(session_id, runtime_event_sink)
     try:
         # Update the checkpointed state with human feedback values
         # by calling update_state before resuming
@@ -244,6 +369,12 @@ async def _resume_workflow_task(session_id: str, state: BlendPilotState) -> None
         if session_id in _active_sessions:
             current_status = _active_sessions[session_id]["state"].get("status", "COMPLETED")
             _active_sessions[session_id]["status"] = current_status
+            await _broadcast_event(session_id, {
+                "session_id": session_id,
+                "event": "workflow_complete",
+                "status": current_status,
+                "state": _make_json_safe(_active_sessions[session_id]["state"]),
+            })
 
     except Exception as e:
         logger.exception("Resume workflow error in session %s: %s", session_id, e)
@@ -251,6 +382,8 @@ async def _resume_workflow_task(session_id: str, state: BlendPilotState) -> None
             _active_sessions[session_id]["status"] = "FAILED"
             _active_sessions[session_id]["state"]["error"] = str(e)
         await _broadcast_event(session_id, {"session_id": session_id, "error": str(e), "status": "FAILED"})
+    finally:
+        unregister_runtime_event_sink(session_id)
 
 
 @router.get("/{session_id}/status")

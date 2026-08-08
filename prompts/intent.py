@@ -27,6 +27,7 @@ You ONLY support these categories:
 - Common game props: barrels, crates, doors, chests, wells
 - Sci-fi props: crates, panels, pods, containers, terminals
 - Simple mechanical: gears, bolts, pipes, levers, pistons
+- Paper props: notebooks, journals, books, sketchbooks
 
 You DO NOT support: human characters, animals, sculpting, cloth/fluid \
 simulation, complex rigging, photorealistic humans, or large architectural \

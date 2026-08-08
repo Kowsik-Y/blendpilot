@@ -38,7 +38,7 @@ export function AppSidebar() {
   };
 
   useEffect(() => {
-    fetchSessions();
+    void Promise.resolve().then(fetchSessions);
   }, [pathname]);
 
   const handleNewChat = async () => {

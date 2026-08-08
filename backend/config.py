@@ -7,7 +7,7 @@ Pydantic settings for the FastAPI server, LLM providers, Blender bridge, and sto
 from __future__ import annotations
 
 import os
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: object) -> object:
+        """Accept common deployment environment strings for DEBUG."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod", "false", "0", "off", "no"}:
+                return False
+            if normalized in {"debug", "development", "dev", "true", "1", "on", "yes"}:
+                return True
+        return value
 
     # Blender Bridge
     blender_bridge_host: str = "127.0.0.1"

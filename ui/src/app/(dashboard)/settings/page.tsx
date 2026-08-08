@@ -77,8 +77,10 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    loadSettings();
-    loadRagStats();
+    void Promise.resolve().then(async () => {
+      await loadSettings();
+      await loadRagStats();
+    });
   }, []);
 
   const handleSave = async (shouldTest = false) => {

@@ -8,7 +8,7 @@ tracks created objects, and uses LLM for adaptive error recovery when steps fail
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from mcp_servers.blender.server import BlenderMCPServer
 from schemas.plan import DesignPlan, StepStatus
@@ -28,9 +28,20 @@ class ModelingAgent:
         self,
         mcp_server: BlenderMCPServer | None = None,
         llm_service: LLMService | None = None,
+        event_callback: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ):
         self.mcp_server = mcp_server or BlenderMCPServer()
         self.llm_service = llm_service
+        self.event_callback = event_callback
+
+    async def _emit(self, payload: dict[str, Any]) -> None:
+        """Emit live execution events without making modeling depend on transport."""
+        if self.event_callback is None:
+            return
+        try:
+            await self.event_callback(payload)
+        except Exception as e:
+            logger.warning("Modeling event callback failed: %s", e)
 
     async def execute(self, plan: DesignPlan) -> dict[str, Any]:
         """Execute all modeling steps in the DesignPlan with adaptive error recovery."""
@@ -44,6 +55,17 @@ class ModelingAgent:
             step.status = StepStatus.IN_PROGRESS
             plan.current_step_index = i
 
+            await self._emit({
+                "event": "tool_start",
+                "agent_name": "modeling_agent",
+                "step_id": step.step_id,
+                "step_index": i,
+                "total_steps": len(plan.steps),
+                "description": step.description,
+                "tool": step.tool,
+                "parameters": step.parameters,
+            })
+
             res = await self.mcp_server.call_tool(step.tool, step.parameters)
             success = res.get("success", False)
 
@@ -56,9 +78,33 @@ class ModelingAgent:
                     created_objects.append(res["new_object"])
                 elif "name" in step.parameters and step.parameters["name"] not in created_objects:
                     created_objects.append(step.parameters["name"])
+
+                await self._emit({
+                    "event": "tool_result",
+                    "agent_name": "modeling_agent",
+                    "step_id": step.step_id,
+                    "status": "COMPLETED",
+                    "tool": step.tool,
+                    "description": step.description,
+                    "parameters": step.parameters,
+                    "response": res,
+                    "created_objects": list(created_objects),
+                })
             else:
                 error_msg = res.get("error", "Unknown error during tool execution")
                 logger.error("Step %d failed: %s", step.step_id, error_msg)
+
+                await self._emit({
+                    "event": "tool_result",
+                    "agent_name": "modeling_agent",
+                    "step_id": step.step_id,
+                    "status": "FAILED",
+                    "tool": step.tool,
+                    "description": step.description,
+                    "parameters": step.parameters,
+                    "response": res,
+                    "error": error_msg,
+                })
 
                 # Attempt LLM-powered error recovery
                 recovered = await self._attempt_recovery(step, error_msg, created_objects)
@@ -67,6 +113,16 @@ class ModelingAgent:
                     if recovered.get("created_object"):
                         created_objects.append(recovered["created_object"])
                     logger.info("Step %d recovered via LLM adaptation", step.step_id)
+                    await self._emit({
+                        "event": "tool_recovered",
+                        "agent_name": "modeling_agent",
+                        "step_id": step.step_id,
+                        "status": "COMPLETED",
+                        "description": step.description,
+                        "parameters": step.parameters,
+                        "reasoning": recovered.get("reasoning", ""),
+                        "created_objects": list(created_objects),
+                    })
                 else:
                     step.status = StepStatus.FAILED
                     step.error_message = error_msg

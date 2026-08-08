@@ -41,6 +41,7 @@ class LLMService:
         provider: str = "openai",
         model: str = "gpt-4o",
         temperature: float = 0.0,
+        max_tokens: int = 4096,
         api_key: str | None = None,
         base_url: str | None = None,
     ):
@@ -61,6 +62,7 @@ class LLMService:
             provider=resolved_provider,
             model=model,
             temperature=temperature,
+            max_tokens=max_tokens,
             api_key=resolved_key,
             base_url=base_url or os.environ.get("LLM_BASE_URL"),
         )

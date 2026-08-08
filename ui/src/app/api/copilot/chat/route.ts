@@ -6,6 +6,11 @@ import { RAGService } from "@/lib/rag";
 import { type LLMProvider } from "@/types/llm";
 import { NextRequest, NextResponse } from "next/server";
 
+interface ConversationHistoryMessage {
+  role?: string;
+  content: string;
+}
+
 const COPILOT_SYSTEM_PROMPT = `You are BlendPilot AI Copilot, an elite 3D Technical Director and Blender specialist.
 You coordinate a 10-agent autonomous 3D pipeline:
 1. Intent Understanding (Dimensions, triangle quota, asset taxonomy)
@@ -95,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     // Format conversation history for context window
     const rawMessages = [
-      ...conversation_history.map((m: any) => ({
+      ...(conversation_history as ConversationHistoryMessage[]).map((m) => ({
         role: m.role === "user" ? ("user" as const) : ("assistant" as const),
         content: m.content,
         tokenCount: estimateTokens(m.content),
@@ -194,10 +199,11 @@ export async function POST(req: NextRequest) {
       provider_used: "none",
       is_live_llm: false,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Copilot API Exception:", error);
+    const message = error instanceof Error ? error.message : "Failed to process Copilot request";
     return NextResponse.json(
-      { error: error.message || "Failed to process Copilot request" },
+      { error: message },
       { status: 500 }
     );
   }

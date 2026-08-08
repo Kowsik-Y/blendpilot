@@ -43,6 +43,16 @@ async def test_intent_agent_parsing():
 
 
 @pytest.mark.asyncio
+async def test_notebook_uses_a_notebook_specific_plan():
+    spec = await IntentAgent().execute(user_prompt="Create a notebook")
+    plan = await PlanningAgent().execute(spec)
+
+    assert spec.asset_type == "notebook"
+    assert any(step.parameters.get("name") == "Notebook_Pages" for step in plan.steps)
+    assert any(step.parameters.get("name") == "Notebook_Cover" for step in plan.steps)
+
+
+@pytest.mark.asyncio
 async def test_scene_agent(mock_mcp_server):
     agent = SceneAgent(mcp_server=mock_mcp_server)
     scene = await agent.execute()
@@ -97,6 +107,45 @@ async def test_modeling_agent(mock_mcp_server):
 
     assert result["success"] is True
     assert len(result["created_objects"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_modeling_agent_emits_live_tool_events(mock_mcp_server):
+    events = []
+
+    async def collect_event(payload):
+        events.append(payload)
+
+    plan = DesignPlan(
+        spec_id="test_live_events",
+        steps=[
+            PlanStep(
+                step_id=1,
+                description="Create live preview cube",
+                tool="create_primitive",
+                parameters={"primitive_type": "cube", "name": "Live_Cube"},
+            ),
+            PlanStep(
+                step_id=2,
+                description="Add bevel to live preview cube",
+                tool="add_modifier",
+                parameters={"object_name": "Live_Cube", "modifier_type": "BEVEL"},
+                dependencies=[1],
+            ),
+        ],
+    )
+    model_agent = ModelingAgent(mcp_server=mock_mcp_server, event_callback=collect_event)
+    result = await model_agent.execute(plan)
+
+    assert result["success"] is True
+    assert [event["event"] for event in events] == [
+        "tool_start",
+        "tool_result",
+        "tool_start",
+        "tool_result",
+    ]
+    assert events[0]["tool"] == "create_primitive"
+    assert events[1]["status"] == "COMPLETED"
 
 
 @pytest.mark.asyncio
