@@ -38,6 +38,7 @@ class StartWorkflowRequest(BaseModel):
     user_prompt: str = Field(..., min_length=3, description="Natural-language description of the 3D asset")
     reference_images: list[str] = Field(default_factory=list, description="Base64 or URLs to reference images")
     overrides: dict[str, Any] | None = Field(default=None, description="Optional manual parameter overrides")
+    project_id: str | None = Field(default=None, description="Studio project that owns this workflow session")
     enable_human_interrupt: bool = Field(default=False, description="Whether to pause at human feedback stage")
 
 
@@ -50,7 +51,7 @@ class HumanFeedbackRequest(BaseModel):
 @router.post("/start")
 async def start_workflow(request: StartWorkflowRequest) -> dict[str, Any]:
     """Initiate a new 10-workflow agentic modeling pipeline."""
-    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    project_id = request.project_id or f"proj_{uuid.uuid4().hex[:8]}"
     session_id = f"sess_{uuid.uuid4().hex[:8]}"
 
     initial_state = create_initial_state(

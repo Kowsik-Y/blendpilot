@@ -253,7 +253,13 @@ def delete_object(name: str) -> dict[str, Any]:
 
     obj = bpy.data.objects.get(name)
     if obj is None:
-        raise ValueError(f"Object '{name}' not found in scene.")
+        # Initial-scene cleanup is idempotent: a generated plan can safely
+        # request deletion even when a previous run already removed it.
+        logger.info("Delete skipped; object '%s' is already absent", name)
+        return {
+            "success": True,
+            "message": f"Object '{name}' was already absent.",
+        }
 
     # Select the object and delete
     bpy.ops.object.select_all(action="DESELECT")

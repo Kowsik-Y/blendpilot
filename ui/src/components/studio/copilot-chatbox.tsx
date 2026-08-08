@@ -8,14 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -46,20 +38,44 @@ import {
   MessageFooter,
 } from "@/components/ui/message";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import {
+  PromptInput,
+  PromptInputActionGroup,
+  PromptInputActions,
+  PromptInputTextarea,
+} from "@/components/nexus-ui/prompt-input";
+import {
+  AttachmentList,
+  AttachmentPicker,
+  Citations,
+  FeedbackBar,
+  ImageStatus,
+  Suggestions,
+  TextShimmer,
+  type CopilotAttachment,
+  type CopilotCitation,
+} from "@/components/nexus-ui/copilot-parts";
+import {
+  ChainOfThought,
+  ChainOfThoughtComplete,
+  ChainOfThoughtContent,
+  ChainOfThoughtStep,
+  ChainOfThoughtStepTitle,
+  ChainOfThoughtTrigger,
+} from "@/components/nexus-ui/chain-of-thought";
 import { toast } from "sonner";
 import Link from "next/link";
 import { connectWorkflowStream, type WorkflowStreamPayload } from "@/lib/workflow-stream";
 import {
   Bot,
+  BrainCircuit,
   User,
   Send,
-  ChevronDown,
-  MessageCircleQuestion,
   Sparkles,
-  ListOrdered,
   CheckCircle2,
   BotMessageSquare,
   Key,
+  Wrench,
   Eye,
   EyeOff,
   Loader2,
@@ -79,6 +95,8 @@ export interface CopilotMessage {
   time: string;
   isLiveLLM?: boolean;
   eventKey?: string;
+  attachments?: CopilotAttachment[];
+  citations?: CopilotCitation[];
 }
 
 export interface PipelineStep {
@@ -96,8 +114,6 @@ interface PipelineActivity {
   tool?: string;
 }
 
-type CopilotMode = "ask" | "plan" | "agent";
-
 interface StudioAssetSpec {
   asset_type?: string;
   dimensions?: {
@@ -111,13 +127,6 @@ interface StudioAssetSpec {
   };
 }
 
-interface StudioPlanStep {
-  step_number?: number;
-  operation?: string;
-  agent?: string;
-  description?: string;
-}
-
 interface PipelineStatePayload {
   current_agent?: string;
   design_spec?: StudioAssetSpec;
@@ -127,24 +136,8 @@ interface PipelineStatePayload {
   stream_events?: WorkflowStreamPayload[];
 }
 
-const COPILOT_MODES: Record<CopilotMode, { label: string; description: string }> = {
-  agent: {
-    label: "Agent",
-    description: "Execute the workflow and edit the Blender scene",
-  },
-  ask: {
-    label: "Ask",
-    description: "Answer without changing the scene",
-  },
-  plan: {
-    label: "Plan",
-    description: "Draft steps before execution",
-  },
-};
-
 interface CopilotChatboxProps {
   assetSpec?: StudioAssetSpec;
-  currentPlan?: StudioPlanStep[];
   onApplyAction?: (actionText: string) => void;
   onStartPipeline?: (prompt: string) => void;
   onWorkflowEvent?: (payload: WorkflowStreamPayload) => void;
@@ -165,9 +158,10 @@ const INITIAL_10_STEPS: PipelineStep[] = [
   { id: "export", name: "10. Export Agent", status: "pending", detail: "Generate production bundles" },
 ];
 
+const COPILOT_STORE_KEY = "blendpilot:studio-copilot:v1";
+
 export function CopilotChatbox({
   assetSpec,
-  currentPlan = [],
   onApplyAction,
   onStartPipeline,
   onWorkflowEvent,
@@ -192,9 +186,9 @@ export function CopilotChatbox({
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "plan">("chat");
-  const [copilotMode, setCopilotMode] = useState<CopilotMode>("agent");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
+  const [storeHydrated, setStoreHydrated] = useState(false);
 
   // User LLM Settings loaded from Settings Store (/api/settings)
   const [llmProvider, setLlmProvider] = useState<string>("openai");
@@ -206,7 +200,7 @@ export function CopilotChatbox({
   const [savingKey, setSavingKey] = useState(false);
 
   // In-chat 10-Agent Execution Progress
-  const [agentSteps, setAgentSteps] = useState<PipelineStep[]>(INITIAL_10_STEPS);
+  const [, setAgentSteps] = useState<PipelineStep[]>(INITIAL_10_STEPS);
   const [showProgressGrid, setShowProgressGrid] = useState(false);
   const [runPrompt, setRunPrompt] = useState<string | null>(null);
   const [runActivities, setRunActivities] = useState<PipelineActivity[]>([]);
@@ -447,6 +441,52 @@ export function CopilotChatbox({
     void Promise.resolve().then(loadSettings);
   }, []);
 
+  // Keep the visible Studio transcript available across a page refresh. Live
+  // pipeline state remains authoritative on the workflow WebSocket/SSE stream.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(COPILOT_STORE_KEY);
+      const parsed = stored ? JSON.parse(stored) as CopilotMessage[] : [];
+      queueMicrotask(() => {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const seen = new Set<string>();
+          const uniqueMessages = parsed.slice(-60).map((message, index) => {
+            if (!seen.has(message.id)) {
+              seen.add(message.id);
+              return message;
+            }
+            const id = `${message.id}-restored-${index}`;
+            seen.add(id);
+            return { ...message, id };
+          });
+          const restoredSequence = uniqueMessages.reduce((maximum, message) => {
+            const suffix = Number(message.id.split("-").at(-1));
+            return Number.isFinite(suffix) ? Math.max(maximum, suffix) : maximum;
+          }, 0);
+          messageIdRef.current = Math.max(messageIdRef.current, restoredSequence);
+          setMessages(uniqueMessages);
+        }
+        setStoreHydrated(true);
+      });
+    } catch {
+      window.localStorage.removeItem(COPILOT_STORE_KEY);
+      queueMicrotask(() => setStoreHydrated(true));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storeHydrated) return;
+    try {
+      const persistable = messages.map((message) => ({
+        ...message,
+        attachments: message.attachments?.map(({ id, name, type }) => ({ id, name, type })),
+      }));
+      window.localStorage.setItem(COPILOT_STORE_KEY, JSON.stringify(persistable.slice(-60)));
+    } catch {
+      // Storage may be unavailable in private browsing; chat remains usable.
+    }
+  }, [messages, storeHydrated]);
+
   // Save API Key & Model Configuration directly from Studio
   const handleSaveKeySettings = async () => {
     setSavingKey(true);
@@ -522,6 +562,7 @@ export function CopilotChatbox({
 
 
 
+
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -548,19 +589,21 @@ export function CopilotChatbox({
       creationVerbs.some((v) => lower.startsWith(v)) ||
       (creationVerbs.some((v) => lower.includes(v)) && lower.split(" ").length >= 3);
 
-    const shouldRunAgent =
-      copilotMode === "agent" ||
-      (copilotMode !== "ask" && isCreationIntent && onStartPipeline);
+    // Creation intents flow to the autonomous workflow. Conversational and
+    // inspection requests remain in chat; no manual plan mode is required.
+    const shouldRunAgent = isCreationIntent && Boolean(onStartPipeline);
 
     if (shouldRunAgent && onStartPipeline) {
       const userMsg: CopilotMessage = {
         id: nextMessageId("user"),
         role: "user",
         content: text,
+        attachments,
         time: "Just now",
       };
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
+      setAttachments([]);
       setShowProgressGrid(true);
       setRunPrompt(text);
       setRunActivities([
@@ -577,20 +620,17 @@ export function CopilotChatbox({
       return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
     }
 
-    const messageForCopilot =
-      copilotMode === "plan"
-        ? `Generate an executable Blender modeling plan only. Do not run tools yet.\n\nUser request: ${text}`
-        : text;
-
     const userMsg: CopilotMessage = {
       id: nextMessageId("user"),
       role: "user",
       content: text,
+      attachments,
       time: "Just now",
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAttachments([]);
     setLoading(true);
 
     try {
@@ -607,10 +647,10 @@ export function CopilotChatbox({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: messageForCopilot,
+          message: text,
           asset_spec: assetSpec,
-          current_plan: currentPlan,
-          conversation_history: history,
+        conversation_history: history,
+        attachments: attachments.map(({ name, type }) => ({ name, type })),
         }),
       });
 
@@ -623,6 +663,7 @@ export function CopilotChatbox({
         content: data.reply,
         actions: data.suggested_actions || [],
         isLiveLLM: data.is_live_llm,
+        citations: data.ragSources || [],
         time: "Just now",
       };
       setMessages((prev) => [...prev, copilotMsg]);
@@ -642,7 +683,6 @@ export function CopilotChatbox({
     }
   };
 
-  const completedStepCount = agentSteps.filter((s) => s.status === "done").length;
   const runFinished = runActivities.some((activity) => activity.id === "workflow-complete");
   const runFailed = runActivities.some(
     (activity) => activity.id === "workflow-complete" && activity.status === "failed"
@@ -691,15 +731,14 @@ export function CopilotChatbox({
 
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
-          {activeTab === "chat" ? (
-            <div className="flex-1 min-h-0 relative">
+          <div className="flex-1 min-h-0 relative">
               <MessageScrollerProvider autoScroll>
                 <MessageScroller>
                   <MessageScrollerViewport className="pr-2">
                     <MessageScrollerContent className="space-y-3 pb-2">
                       {/* One chronological assistant run, fed only by live workflow events. */}
                       {showProgressGrid && (
-                        <MessageScrollerItem messageId="agent-run" scrollAnchor>
+                        <MessageScrollerItem messageId="agent-run" scrollAnchor className="order-2">
                           <Message align="start" className="my-4">
                             <MessageAvatar>
                               <div className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
@@ -714,33 +753,28 @@ export function CopilotChatbox({
                             </MessageAvatar>
                             <MessageContent className="min-w-0 max-w-full">
                               <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                                <span>{runComplete ? "Completed" : runFailed ? "Stopped" : "Working"}</span>
-                                <span className="text-muted-foreground">{completedStepCount}/{agentSteps.length} stages</span>
+                                <span>{runComplete ? "Asset ready" : runFailed ? "Run stopped" : "Building your asset"}</span>
                               </div>
                               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                                 {runPrompt || "Coordinating Blender agents"}
                               </p>
-                              <div className="mt-3 flex flex-col gap-2 text-xs">
-                                {runActivities.map((activity) => (
-                                  <div key={activity.id} className="flex items-start gap-2">
-                                    {activity.status === "done" ? (
-                                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
-                                    ) : activity.status === "failed" ? (
-                                      <Circle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-                                    ) : (
-                                      <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
-                                    )}
-                                    <div className="min-w-0 leading-relaxed">
-                                      <span className="font-medium text-foreground">{activity.title}</span>
-                                      {activity.tool && (
-                                        <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                                          {activity.tool}
-                                        </span>
-                                      )}
-                                      <span className="text-muted-foreground"> - {activity.detail}</span>
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="mt-3">
+                                <ChainOfThought autoCloseOnAllComplete={false}>
+                                  <ChainOfThoughtTrigger icon={<BrainCircuit />}>
+                                    {runComplete ? "Created asset and completed workflow" : runActivities.at(-1)?.title || "Preparing asset creation"}
+                                  </ChainOfThoughtTrigger>
+                                  <ChainOfThoughtContent>
+                                    {runActivities.map((activity) => (
+                                      <ChainOfThoughtStep key={activity.id} status={activity.status === "done" ? "completed" : activity.status === "running" ? "running" : "failed"}>
+                                        <ChainOfThoughtStepTitle icon={activity.tool ? <Wrench /> : undefined}>
+                                          {activity.tool ? `${activity.title} · ${activity.tool}` : activity.title}
+                                        </ChainOfThoughtStepTitle>
+                                        <p className="text-muted-foreground">{activity.detail}</p>
+                                      </ChainOfThoughtStep>
+                                    ))}
+                                    {runComplete && <ChainOfThoughtComplete label="Asset workflow complete" />}
+                                  </ChainOfThoughtContent>
+                                </ChainOfThought>
                               </div>
                             </MessageContent>
                           </Message>
@@ -753,7 +787,7 @@ export function CopilotChatbox({
                         const isAgent = m.role === "agent";
       
                         return (
-                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser}>
+                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser} className="order-1">
                             <Message align={isUser ? "end" : "start"} className="my-2">
                               <MessageAvatar>
                                 <div
@@ -779,26 +813,22 @@ export function CopilotChatbox({
                                       {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                                     </button>
             
+                                    <AttachmentList attachments={m.attachments} />
+
                                     {/* Markdown Body */}
                                     <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
                                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                                     </div>
+
+                                    <Citations sources={m.citations} />
             
-                                    {/* Action Chips */}
+                                    {/* Suggested actions are executable Studio prompts. */}
                                     {m.actions && m.actions.length > 0 && (
-                                      <div className="mt-2.5 pt-2 border-t border-border/40 flex flex-wrap gap-1">
-                                        {m.actions.map((act, i) => (
-                                          <button
-                                            key={i}
-                                            onClick={() => {
-                                              handleSend(act);
-                                              if (onApplyAction) onApplyAction(act);
-                                            }}
-                                            className="text-[10px] px-2 py-1 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors border border-border/60 font-medium"
-                                          >
-                                            {act}
-                                          </button>
-                                        ))}
+                                      <div className="mt-2.5 border-t border-border/40 pt-2">
+                                        <Suggestions items={m.actions} disabled={loading || pipelineRunning} onSelect={(action) => {
+                                          handleSend(action);
+                                          onApplyAction?.(action);
+                                        }} />
                                       </div>
                                     )}
                                   </BubbleContent>
@@ -806,6 +836,7 @@ export function CopilotChatbox({
 
                                 <MessageFooter className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 w-full">
                                   <span>{m.time}</span>
+                                  {!isUser && <FeedbackBar onFeedback={(rating) => toast.success(rating === "up" ? "Feedback saved — thank you." : "Thanks — we’ll use that to improve the next response.")} />}
                                   {m.isLiveLLM && (
                                     <span className="text-cyan-400 font-mono flex items-center gap-0.5 ml-auto">
                                       <Sparkles className="w-2.5 h-2.5" /> Live LLM
@@ -819,9 +850,9 @@ export function CopilotChatbox({
                       })}
 
                       {loading && (
-                        <div className="flex gap-2 items-center text-xs text-muted-foreground p-2">
+                        <div className="order-2 flex items-center gap-2 p-2 text-xs text-muted-foreground">
                           <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                          <span>{hasApiKey ? "LLM reasoning via " + llmProvider.toUpperCase() + "..." : "Processing..."}</span>
+                          <TextShimmer>{hasApiKey ? "Generating with " + llmProvider.toUpperCase() + "..." : "Processing..."}</TextShimmer>
                         </div>
                       )}
                     </MessageScrollerContent>
@@ -830,131 +861,51 @@ export function CopilotChatbox({
                 </MessageScroller>
               </MessageScrollerProvider>
             </div>
-          ) : (
-            /* Plan Inspector Tab */
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 p-1 pr-2 text-xs [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="font-semibold text-foreground">Current 10-Agent Plan</span>
-                <Badge variant="outline" className="text-[10px]">
-                  {currentPlan.length} Operations
-                </Badge>
-              </div>
-
-              {currentPlan.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground space-y-2">
-                  <ListOrdered className="w-8 h-8 mx-auto opacity-40" />
-                  <p>No active plan generated yet.</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSend("Generate Detailed Modeling Plan")}
-                    className="text-xs border-border bg-card hover:bg-muted text-foreground mt-2"
-                  >
-                    Generate Step-by-Step Plan
-                  </Button>
-                </div>
-              ) : (
-                currentPlan.map((step, idx) => (
-                  <div key={idx} className="p-2.5 rounded-xl border border-border backdrop-blur-sm space-y-1 hover:bg-muted/60 transition-colors">
-                    <div className="flex items-center justify-between font-medium text-foreground">
-                      <span className="text-primary">Step {step.step_number || idx + 1}: <span className="text-foreground">{step.operation}</span></span>
-                      <Badge variant="outline" className="text-[9px] border-border bg-muted/50 text-muted-foreground font-mono">
-                        {step.agent || "Modeler"}
-                      </Badge>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">{step.description}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
           </div>
           {/* Chat Input Bar with Plan Toggle */}
-          <div className="p-3 flex gap-2 items-center z-10 shrink-0 border-t border-border">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 px-2.5 gap-1.5"
-                    title={COPILOT_MODES[copilotMode].description}
-                  >
-                    {copilotMode === "agent" ? (
-                      <BotMessageSquare className="w-4 h-4" />
-                    ) : copilotMode === "plan" ? (
-                      <ListOrdered className="w-4 h-4" />
-                    ) : (
-                      <MessageCircleQuestion className="w-4 h-4" />
-                    )}
-                    <span className="text-xs">{COPILOT_MODES[copilotMode].label}</span>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </Button>
-                }
+          <div className="border-t border-border p-3">
+            <PromptInput onSubmit={handleSend}>
+              <PromptInputTextarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Ask Copilot (e.g. ‘Make a sword’)"
+                disabled={loading || pipelineRunning}
+                className="min-h-12 px-3 py-2 text-xs"
               />
-              <DropdownMenuContent side="top" align="start" className="w-64">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => setCopilotMode("agent")}>
-                    <BotMessageSquare className="w-4 h-4" />
-                    <div className="flex flex-col">
-                      <span>Agent</span>
-                      <span className="text-xs text-muted-foreground">Run agents and edit the scene</span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setCopilotMode("ask")}>
-                    <MessageCircleQuestion className="w-4 h-4" />
-                    <div className="flex flex-col">
-                      <span>Ask</span>
-                      <span className="text-xs text-muted-foreground">Chat only, no scene changes</span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setCopilotMode("plan")}>
-                    <ListOrdered className="w-4 h-4" />
-                    <div className="flex flex-col">
-                      <span>Plan</span>
-                      <span className="text-xs text-muted-foreground">Create steps before executing</span>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => setKeyDialogOpen(true)}>
-                    <Key className="w-4 h-4" />
-                    Configure Custom Agents
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <PromptInputActions>
+                <PromptInputActionGroup>
+                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={loading || pipelineRunning} />
+                  <ImageStatus count={attachments.filter((attachment) => attachment.type.startsWith("image/")).length} />
             <Button
               size="sm"
-              variant={activeTab === "plan" ? "default" : "outline"}
-              onClick={() => setActiveTab(activeTab === "chat" ? "plan" : "chat")}
-              className={`h-9 px-2.5 transition-all duration-300 ${
-                activeTab === "plan" 
-                  ? "shadow-md" 
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              title="Toggle Plan View"
+              variant="outline"
+              onClick={() => setKeyDialogOpen(true)}
+              title="Configure the model that automatically selects the workflow tools"
             >
-              <ListOrdered className="w-4 h-4" />
-              <span className="sr-only">Plan</span>
+              <BotMessageSquare data-icon="inline-start" />
+              Auto
             </Button>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              placeholder="Ask Copilot (e.g. 'Make a sword')..."
-              className="h-9 text-xs"
-              disabled={loading}
-            />
+                </PromptInputActionGroup>
+                <PromptInputActionGroup>
             <Button
-              size="sm"
+              type="button"
+              size="icon-sm"
               onClick={() => handleSend()}
-              disabled={!input.trim() || loading}
-              className="h-9 px-3 shadow-lg disabled:opacity-50"
+              disabled={!input.trim() || loading || pipelineRunning}
+              aria-label="Send message"
             >
-              <Send className="w-4 h-4" />
+              {loading ? <Loader2 className="animate-spin" /> : <Send />}
             </Button>
+                </PromptInputActionGroup>
+              </PromptInputActions>
+            </PromptInput>
+            <div className="mt-2">
+              <Suggestions
+                disabled={loading || pipelineRunning}
+                items={["Create a game-ready prop", "Inspect scene topology", "Export the current asset"]}
+                onSelect={(suggestion) => setInput(suggestion)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

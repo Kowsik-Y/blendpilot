@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { type ChatMessage } from "@/types/chat";
 import { MessageBubble } from "./message-bubble";
 import { MessageInput } from "./message-input";
