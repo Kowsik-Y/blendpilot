@@ -139,6 +139,26 @@ interface StageStatus {
   status: "pending" | "running" | "done" | "failed";
 }
 
+const AGENT_NODE_ALIASES: Record<string, string> = {
+  intent_agent: "intent",
+  scene_agent: "scene",
+  research_agent: "research",
+  planning_agent: "planning",
+  modeling_agent: "modeling",
+  material_agent: "material",
+  geometry_qa_agent: "geometry_qa",
+  geometry_repair: "geometry_qa",
+  visual_critic_agent: "visual_critic",
+  visual_repair: "visual_critic",
+  feedback_agent: "human_feedback",
+  export_agent: "export",
+};
+
+function toStageId(node?: string | null) {
+  if (!node) return null;
+  return AGENT_NODE_ALIASES[node] || node;
+}
+
 interface CopilotChatboxProps {
   assetSpec?: StudioAssetSpec;
   onApplyAction?: (actionText: string) => void;
@@ -206,9 +226,11 @@ export function CopilotChatbox({
   };
 
   const setPipelineStepStatus = useCallback((nodeId: string, status: StageStatus["status"], detail?: string) => {
+    const stageId = toStageId(nodeId);
+    if (!stageId) return;
     setStageStatuses((prev) =>
       prev.map((step) => {
-        if (step.id === nodeId) {
+        if (step.id === stageId) {
           return { ...step, status, detail: detail || step.detail };
         }
         if (status === "running" && step.status === "running") {
@@ -217,7 +239,7 @@ export function CopilotChatbox({
         return step;
       })
     );
-    setActiveStage(nodeId);
+    setActiveStage(stageId);
   }, []);
 
   const markWorkflowEventHandled = useCallback((payload: WorkflowStreamPayload) => {
@@ -307,14 +329,15 @@ export function CopilotChatbox({
         if (completed.has(step.id)) {
           return { ...step, status: "done" };
         }
-        if (step.id === state.current_agent) {
+        if (step.id === toStageId(state.current_agent)) {
           return { ...step, status: "running" };
         }
         return step;
       })
     );
-    if (state.current_agent) {
-      setActiveStage(state.current_agent);
+    const currentStage = toStageId(state.current_agent);
+    if (currentStage) {
+      setActiveStage(currentStage);
     }
   }, []);
 
@@ -410,16 +433,34 @@ export function CopilotChatbox({
       return;
     }
 
-    if (payload.node) {
+    if (payload.event === "workflow_missing" || payload.status === "FAILED") {
       setStageStatuses((prev) =>
-        prev.map((s) => s.id === payload.node ? { ...s, status: "done" } : s)
+        prev.map((step) =>
+          step.id === toStageId(payload.node) || step.status === "running"
+            ? { ...step, status: "failed" }
+            : step
+        )
+      );
+      upsertRunActivity({
+        id: "workflow-error",
+        title: "Workflow connection failed",
+        detail: payload.error || "The workflow could not continue. Re-run the request to start a new session.",
+        status: "failed",
+      });
+      return;
+    }
+
+    if (payload.node) {
+      const stageId = toStageId(payload.node) || payload.node;
+      setStageStatuses((prev) =>
+        prev.map((s) => s.id === stageId ? { ...s, status: "done" } : s)
       );
       const state = (payload.state || {}) as PipelineStatePayload;
-      const activity = describeNodeActivity(payload.node, state);
+      const activity = describeNodeActivity(stageId, state);
       if (activity) {
         upsertRunActivity(activity);
       }
-      setActiveStage(payload.node);
+      setActiveStage(toStageId(state.current_agent) || stageId);
     }
   }, [describeNodeActivity, markWorkflowEventHandled, setPipelineStepStatus, upsertRunActivity]);
 
