@@ -89,8 +89,9 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
             reference_images=state.get("reference_images", []),
         )
         spec_dict = _safe_model_dump(spec)
+        asset_type = getattr(spec, 'asset_type', getattr(spec, 'object_type', 'unknown'))
         _record_event(state, "intent_agent", "COMPLETED",
-                      f"Parsed DesignSpec for asset_type='{spec.asset_type}'",
+                      f"Parsed DesignSpec for asset_type='{asset_type}'",
                       {"spec": spec_dict})
         return {"current_agent": "planning_agent", "design_spec": spec_dict}
     except Exception as exc:

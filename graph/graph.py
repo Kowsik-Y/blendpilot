@@ -52,11 +52,13 @@ logger = logging.getLogger("blendpilot.graph")
 
 
 def build_blendpilot_graph(
+    enable_human_interrupt: bool = False,
     checkpointer: Any | None = None,
 ) -> Any:
     """Construct and compile the BlendPilot multi-agent StateGraph.
 
     Args:
+        enable_human_interrupt: Included for interface compatibility.
         checkpointer: Optional LangGraph checkpointer for persistence.
                       Defaults to the project-configured checkpointer.
 
@@ -74,7 +76,7 @@ def build_blendpilot_graph(
     workflow.add_node("scene_state",   node_scene_state)
     workflow.add_node("geometry_qa",   node_geometry_qa)
     workflow.add_node("visual_critic", node_visual_critic)
-    workflow.add_node("decision",      node_decision)
+    workflow.add_node("decision_node", node_decision)
     workflow.add_node("repair",        node_repair)
     workflow.add_node("export",        node_export)
 
@@ -85,11 +87,11 @@ def build_blendpilot_graph(
     workflow.add_edge("generation",   "scene_state")
     workflow.add_edge("scene_state",  "geometry_qa")
     workflow.add_edge("geometry_qa",  "visual_critic")
-    workflow.add_edge("visual_critic","decision")
+    workflow.add_edge("visual_critic","decision_node")
 
     # ── Conditional Routing: Decision → repair or export ─────────────────────
     workflow.add_conditional_edges(
-        "decision",
+        "decision_node",
         route_after_decision,
         {
             "repair": "repair",

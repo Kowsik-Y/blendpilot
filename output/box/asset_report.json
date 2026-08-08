@@ -1,0 +1,26 @@
+{
+  "asset_name": "box",
+  "timestamp": "2026-08-08T05:36:00.864427+00:00",
+  "target_platform": "Unity",
+  "style": "low-poly",
+  "dimensions": {
+    "width": 0.5,
+    "depth": 0.5,
+    "height": 0.8
+  },
+  "triangle_budget": 10000,
+  "created_objects": [],
+  "materials": [],
+  "files": {
+    "blend": "output\\box\\box.blend",
+    "fbx": "output\\box\\box.fbx",
+    "glb": "output\\box\\box.glb",
+    "preview": "output\\box\\preview.png"
+  },
+  "quality_assurance": {
+    "geometry_status": "PASS",
+    "geometry_score": 1.0,
+    "visual_score": 0.88,
+    "approved": true
+  }
+}

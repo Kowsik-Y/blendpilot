@@ -1,8 +1,7 @@
 """
-BlendPilot AI — Step-by-Step Design Planning Agent
+BlendPilot AI — Step-by-Step Modeling Plan Agent
 
-Workflow 4: Uses LLM to generate creative, context-aware modeling plans that
-leverage the full MCP tool registry. Falls back to enhanced procedural plans.
+Workflow 4: Converts structured IntentSpec into an ordered ModelingPlan.
 """
 
 from __future__ import annotations
@@ -12,360 +11,225 @@ import logging
 import re
 from typing import Any
 
-from prompts.planning import PLANNING_SYSTEM_PROMPT, PLANNING_USER_PROMPT
-from schemas.design import DesignSpec
-from schemas.plan import DesignPlan, PlanStep, StepStatus
-from schemas.scene import SceneSummary
+from pydantic import ValidationError
+from schemas.intent import IntentSpec
+from schemas.plan_state import ModelingPlan, ModelingStep, VALID_OPERATIONS
 from services.llm import LLMService
 
 logger = logging.getLogger("blendpilot.agents.planning")
 
-# Available MCP tools the LLM can use in its plan
-MCP_TOOLS_CONTEXT = """
-Available Blender MCP Tools (use these exact tool names in plan steps):
-- create_primitive: Create a mesh (cube, cylinder, uv_sphere, ico_sphere, plane, cone, torus) with name, dimensions [w,d,h], location [x,y,z]
-- set_transform: Set location/rotation/scale of an existing object
-- duplicate_object: Duplicate an object with optional offset [x,y,z]
-- delete_object: Delete an object by name
-- add_modifier: Add modifier (BEVEL, SUBSURF, SOLIDIFY, MIRROR, BOOLEAN, DECIMATE, EDGE_SPLIT) with properties
-- apply_modifier: Bake a modifier into the mesh
-- edit_mesh: Perform mesh operations (recalculate_normals, subdivide, bevel_edges)
-- create_material: Create PBR material with base_color [r,g,b,a], metallic, roughness, emission_color, emission_strength
-- assign_material: Assign material to object
-- save_checkpoint: Save a .blend checkpoint for rollback
-"""
-
 
 class PlanningAgent:
-    """Agent that creates structured, step-by-step 3D modeling plans using LLM reasoning."""
+    """Agent that creates structured, step-by-step ModelingPlans."""
 
     def __init__(self, llm_service: LLMService | None = None):
         self.llm_service = llm_service or LLMService()
 
     async def execute(
         self,
-        spec: DesignSpec,
-        scene: SceneSummary | None = None,
-        research: list[dict[str, Any]] | None = None,
-    ) -> DesignPlan:
-        """Generate a complete DesignPlan from DesignSpec."""
-        logger.info("Generating design plan for %s...", spec.asset_type)
+        intent: IntentSpec | Any = None,
+        spec: Any = None,
+    ) -> ModelingPlan:
+        """Generate a complete ModelingPlan from IntentSpec."""
+        target_intent = intent if intent is not None else spec
+        # Coerce DesignSpec/dict to IntentSpec for backward compatibility
+        if not isinstance(target_intent, IntentSpec):
+            if hasattr(target_intent, "model_dump"):
+                intent_data = target_intent.model_dump()
+            else:
+                intent_data = target_intent
+            target_intent = IntentSpec.model_validate(intent_data)
 
-        # Try LLM-powered plan generation
+        intent = target_intent
+
+        logger.info("Generating modeling plan for object type: %s...", intent.object_type)
+
+        # Try LLM-powered plan generation if API key is configured
         if self.llm_service and self.llm_service.config.api_key:
             try:
-                plan = await self._llm_generate_plan(spec, scene, research)
+                plan = await self._llm_generate_plan(intent)
                 if plan and len(plan.steps) > 0:
-                    logger.info("LLM generated %d-step plan for %s", len(plan.steps), spec.asset_type)
+                    logger.info("LLM generated %d-step plan for %s", len(plan.steps), intent.object_type)
                     return plan
             except Exception as e:
                 logger.warning("LLM planning failed (%s), using procedural plan generator", e)
 
-        # Fallback: enhanced procedural plan generator
-        return self._generate_procedural_plan(spec)
+        # Fallback to procedural plan generator
+        return self._generate_procedural_plan(intent)
 
-    async def _llm_generate_plan(
-        self,
-        spec: DesignSpec,
-        scene: SceneSummary | None,
-        research: list[dict[str, Any]] | None,
-    ) -> DesignPlan | None:
-        """Use LLM to generate creative, context-aware modeling plans."""
-        try:
-            system_prompt = PLANNING_SYSTEM_PROMPT.format(
-                format_instructions=(
-                    "Return a JSON object with this structure:\n"
-                    '{"spec_id": "plan_<asset_type>", "steps": [...], "current_step_index": 0, "status": "pending"}\n'
-                    "Each step: {\"step_id\": int, \"description\": str, \"tool\": str, "
-                    "\"parameters\": {}, \"dependencies\": [int], \"expected_outcome\": str}\n\n"
-                    + MCP_TOOLS_CONTEXT
+    async def _llm_generate_plan(self, intent: IntentSpec) -> ModelingPlan | None:
+        """Use LLM to generate ModelingPlan."""
+        chat_model = self.llm_service.get_chat_model()
+        structured_model = chat_model.with_structured_output(ModelingPlan)
+
+        system_prompt = (
+            "You are the Planning Agent for BlendPilot AI. "
+            "Your role is to translate a structured design Intent (IntentSpec) into a sequential, "
+            "ordered list of atomic ModelingSteps (ModelingPlan). "
+            "Do not output any Python code. "
+            f"Allowed operations: {', '.join(sorted(VALID_OPERATIONS))}."
+        )
+
+        from langchain_core.messages import SystemMessage, HumanMessage
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=intent.model_dump_json(indent=2)),
+        ]
+
+        result = await structured_model.ainvoke(messages)
+        if result and isinstance(result, ModelingPlan):
+            return result
+        return None
+
+    def _generate_procedural_plan(self, intent: IntentSpec) -> ModelingPlan:
+        """Generates a fallback procedural ModelingPlan for supported categories."""
+        steps: list[ModelingStep] = []
+        obj_type = intent.object_type
+        mat_name = intent.material or "default_material"
+        color = intent.color or "gray"
+
+        # Determine color RGBA values
+        rgba = [0.8, 0.8, 0.8, 1.0]
+        if color == "red":
+            rgba = [0.9, 0.1, 0.1, 1.0]
+        elif color == "green":
+            rgba = [0.1, 0.8, 0.1, 1.0]
+        elif color == "blue":
+            rgba = [0.1, 0.1, 0.9, 1.0]
+        elif color == "brown":
+            rgba = [0.4, 0.25, 0.15, 1.0]
+        elif color == "gold":
+            rgba = [0.9, 0.7, 0.1, 1.0]
+
+        # 1. Create Main primitive
+        step_id = 1
+        prim_type = "cube"
+        if obj_type in ["mug", "bottle", "lamp"]:
+            prim_type = "cylinder"
+
+        steps.append(
+            ModelingStep(
+                step_id=step_id,
+                operation="create_primitive",
+                target=f"{obj_type}_base",
+                parameters={
+                    "primitive_type": prim_type,
+                    "location": [0.0, 0.0, 0.5],
+                    "dimensions": [1.0, 1.0, 1.0],
+                },
+            )
+        )
+
+        # 2. Add extra components
+        leg_step_ids = []
+        if obj_type in ["table", "chair", "stool", "desk"]:
+            # Add 4 legs
+            leg_positions = [
+                [0.4, 0.4, 0.25],
+                [-0.4, 0.4, 0.25],
+                [0.4, -0.4, 0.25],
+                [-0.4, -0.4, 0.25],
+            ]
+            for idx, pos in enumerate(leg_positions, 1):
+                step_id += 1
+                leg_name = f"leg_{idx}"
+                steps.append(
+                    ModelingStep(
+                        step_id=step_id,
+                        operation="create_primitive",
+                        target=leg_name,
+                        parameters={
+                            "primitive_type": "cylinder",
+                            "location": pos,
+                            "dimensions": [0.1, 0.1, 0.5],
+                        },
+                        dependencies=[1],
+                    )
+                )
+                leg_step_ids.append(step_id)
+
+        # 3. Create Material
+        step_id += 1
+        mat_step_id = step_id
+        steps.append(
+            ModelingStep(
+                step_id=step_id,
+                operation="create_material",
+                target=mat_name,
+                parameters={
+                    "base_color": rgba,
+                    "metallic": 0.8 if mat_name in ["metal", "metallic", "gold", "silver"] else 0.0,
+                    "roughness": 0.2 if mat_name in ["glass", "plastic"] else 0.5,
+                },
+            )
+        )
+
+        # 4. Assign Material
+        step_id += 1
+        steps.append(
+            ModelingStep(
+                step_id=step_id,
+                operation="assign_material",
+                target=f"{obj_type}_base",
+                parameters={"material_name": mat_name},
+                dependencies=[1, mat_step_id],
+            )
+        )
+
+        for leg_step in leg_step_ids:
+            step_id += 1
+            steps.append(
+                ModelingStep(
+                    step_id=step_id,
+                    operation="assign_material",
+                    target=f"leg_{leg_step - 1}",
+                    parameters={"material_name": mat_name},
+                    dependencies=[leg_step, mat_step_id],
                 )
             )
-            user_msg = PLANNING_USER_PROMPT.format(
-                design_spec=spec.model_dump_json(indent=2),
-                scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
-                research_notes=json.dumps(research or []),
-            )
-            response = await self.llm_service.generate(
-                prompt=user_msg,
-                system_prompt=system_prompt,
-                response_format={"type": "json_object"},
-            )
 
-            if not response:
-                return None
-
-            clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
-            data = json.loads(clean_json)
-
-            # Validate and normalize the LLM output
-            if "steps" not in data:
-                return None
-
-            return DesignPlan.model_validate(data)
-
-        except Exception as e:
-            logger.warning("LLM plan generation failed: %s", e)
-            return None
-
-    def _generate_procedural_plan(self, spec: DesignSpec) -> DesignPlan:
-        """Generate an enhanced, asset-specific procedural plan."""
-        steps: list[PlanStep] = []
-        w, d, h = spec.dimensions.width, spec.dimensions.depth, spec.dimensions.height
-
-        main_name = f"{spec.asset_type.capitalize()}_Main"
-
-        # Determine primary primitive type based on asset
-        cylindrical_assets = {"barrel", "street_lamp", "piston", "robot_wheel", "pipe_valve", "potion", "pillar"}
-        spherical_assets = {"crystal", "rock", "potion"}
-        if spec.asset_type in cylindrical_assets:
-            primitive = "cylinder"
-        elif spec.asset_type in spherical_assets:
-            primitive = "ico_sphere"
-        elif spec.asset_type in {"sword", "blade"}:
-            primitive = "cube"
-        else:
-            primitive = "cube"
-
-        # Step 1: Primary blockout geometry
-        steps.append(PlanStep(
-            step_id=1,
-            description=f"Create primary blockout {primitive} for {spec.asset_type}",
-            tool="create_primitive",
-            parameters={
-                "primitive_type": primitive,
-                "name": main_name,
-                "dimensions": [w, d, h],
-                "location": [0.0, 0.0, h / 2.0],
-            },
-            expected_outcome=f"Primary {primitive} '{main_name}' centered on ground plane",
-        ))
-
-        # Step 2: Bevel modifier for edge detail
-        bevel_width = 0.02 if spec.style in ("sci-fi", "industrial") else 0.03
-        steps.append(PlanStep(
-            step_id=2,
-            description=f"Add Bevel modifier ({bevel_width}m width) for edge highlight",
-            tool="add_modifier",
-            parameters={
-                "object_name": main_name,
-                "modifier_type": "BEVEL",
-                "modifier_name": "EdgeBevel",
-                "properties": {"width": bevel_width, "segments": 2},
-            },
-            dependencies=[1],
-            expected_outcome=f"Bevel modifier with {bevel_width}m width on '{main_name}'",
-        ))
-
-        # Step 3: Apply Bevel
-        steps.append(PlanStep(
-            step_id=3,
-            description="Apply bevel modifier into geometry",
-            tool="apply_modifier",
-            parameters={
-                "object_name": main_name,
-                "modifier_name": "EdgeBevel",
-            },
-            dependencies=[2],
-            expected_outcome="Bevel baked into mesh geometry",
-        ))
-
-        # Step 4-6: Asset-specific detail geometry
-        step_id = 4
-        accent_objects: list[str] = []
-
-        if spec.asset_type in ("crate", "chest", "container"):
-            # Lid accent
-            accent_name = f"{spec.asset_type.capitalize()}_Lid"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description=f"Create lid accent for {spec.asset_type}",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cube",
-                    "name": accent_name,
-                    "dimensions": [w * 1.04, d * 1.04, h * 0.12],
-                    "location": [0.0, 0.0, h * 0.94],
-                },
-                dependencies=[1],
-                expected_outcome=f"Lid accent '{accent_name}' positioned at top",
-            ))
-            accent_objects.append(accent_name)
+        # 5. Add Modifier
+        if "bevel" in intent.additional_constraints or intent.style == "low-poly":
             step_id += 1
-
-            # Bottom trim
-            trim_name = f"{spec.asset_type.capitalize()}_Trim"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description="Create bottom trim reinforcement",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cube",
-                    "name": trim_name,
-                    "dimensions": [w * 1.06, d * 1.06, h * 0.08],
-                    "location": [0.0, 0.0, h * 0.04],
-                },
-                dependencies=[1],
-                expected_outcome=f"Bottom trim '{trim_name}' at base",
-            ))
-            accent_objects.append(trim_name)
-            step_id += 1
-
-        elif spec.asset_type in ("table", "desk"):
-            # Table legs
-            leg_positions = [
-                [w * 0.4, d * 0.35, h * 0.35],
-                [-w * 0.4, d * 0.35, h * 0.35],
-                [w * 0.4, -d * 0.35, h * 0.35],
-                [-w * 0.4, -d * 0.35, h * 0.35],
-            ]
-            for i, pos in enumerate(leg_positions):
-                leg_name = f"Table_Leg_{i + 1}"
-                steps.append(PlanStep(
+            steps.append(
+                ModelingStep(
                     step_id=step_id,
-                    description=f"Create table leg {i + 1}",
-                    tool="create_primitive",
-                    parameters={
-                        "primitive_type": "cube",
-                        "name": leg_name,
-                        "dimensions": [0.06, 0.06, h * 0.92],
-                        "location": pos,
-                    },
+                    operation="add_modifier",
+                    target=f"{obj_type}_base",
+                    parameters={"modifier_type": "BEVEL", "name": "Bevel"},
                     dependencies=[1],
-                    expected_outcome=f"Leg '{leg_name}' positioned",
-                ))
-                accent_objects.append(leg_name)
-                step_id += 1
+                )
+            )
 
-        elif spec.asset_type in ("barrel", "drum"):
-            # Metal hoops
-            for i, z_frac in enumerate([0.15, 0.5, 0.85]):
-                hoop_name = f"Barrel_Hoop_{i + 1}"
-                steps.append(PlanStep(
-                    step_id=step_id,
-                    description=f"Create metal hoop ring at {int(z_frac * 100)}% height",
-                    tool="create_primitive",
-                    parameters={
-                        "primitive_type": "torus",
-                        "name": hoop_name,
-                        "dimensions": [w * 1.02, d * 1.02, 0.03],
-                        "location": [0.0, 0.0, h * z_frac],
-                    },
-                    dependencies=[1],
-                    expected_outcome=f"Metal hoop '{hoop_name}' wrapping barrel",
-                ))
-                accent_objects.append(hoop_name)
-                step_id += 1
-
-        elif spec.asset_type == "sword":
-            # Blade elongation + guard + hilt
-            guard_name = "Sword_Guard"
-            steps.append(PlanStep(
+        # 6. Camera / Lighting & Render
+        step_id += 1
+        steps.append(
+            ModelingStep(
                 step_id=step_id,
-                description="Create crossguard tsuba",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cube",
-                    "name": guard_name,
-                    "dimensions": [0.20, 0.06, 0.03],
-                    "location": [0.0, 0.0, 0.30],
-                },
-                dependencies=[1],
-                expected_outcome="Crossguard element",
-            ))
-            accent_objects.append(guard_name)
-            step_id += 1
-
-            hilt_name = "Sword_Hilt"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description="Create wrapped hilt handle",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cylinder",
-                    "name": hilt_name,
-                    "dimensions": [0.04, 0.04, 0.25],
-                    "location": [0.0, 0.0, 0.15],
-                },
-                dependencies=[1],
-                expected_outcome="Hilt handle cylinder",
-            ))
-            accent_objects.append(hilt_name)
-            step_id += 1
-
-        elif spec.asset_type == "pylon":
-            # Energy core
-            core_name = "Pylon_Core"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description="Create floating energy core",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "ico_sphere",
-                    "name": core_name,
-                    "dimensions": [0.25, 0.25, 0.25],
-                    "location": [0.0, 0.0, h * 0.75],
-                },
-                dependencies=[1],
-                expected_outcome=f"Energy core sphere at top section",
-            ))
-            accent_objects.append(core_name)
-            step_id += 1
-
-            # Base platform
-            base_name = "Pylon_Base"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description="Create stepped base platform",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cube",
-                    "name": base_name,
-                    "dimensions": [w * 1.5, d * 1.5, h * 0.1],
-                    "location": [0.0, 0.0, h * 0.05],
-                },
-                dependencies=[1],
-                expected_outcome="Wide base platform",
-            ))
-            accent_objects.append(base_name)
-            step_id += 1
-
-        else:
-            # Generic accent
-            accent_name = f"{spec.asset_type.capitalize()}_Accent"
-            steps.append(PlanStep(
-                step_id=step_id,
-                description=f"Create accent detailing for {spec.asset_type}",
-                tool="create_primitive",
-                parameters={
-                    "primitive_type": "cube",
-                    "name": accent_name,
-                    "dimensions": [w * 1.04, d * 1.04, h * 0.15],
-                    "location": [0.0, 0.0, h * 0.9],
-                },
-                dependencies=[1],
-                expected_outcome=f"Accent detail '{accent_name}' positioned near top",
-            ))
-            accent_objects.append(accent_name)
-            step_id += 1
-
-        # Final step: Checkpoint save
-        all_deps = list(range(1, step_id))
-        steps.append(PlanStep(
-            step_id=step_id,
-            description="Save blockout milestone checkpoint",
-            tool="save_checkpoint",
-            parameters={
-                "filepath": f"output/checkpoints/{spec.asset_type}_blockout.blend",
-                "checkpoint_name": "01_blockout_complete",
-            },
-            dependencies=all_deps,
-            expected_outcome="Blockout .blend checkpoint saved",
-        ))
-
-        return DesignPlan(
-            spec_id=f"plan_{spec.asset_type}",
-            steps=steps,
-            current_step_index=0,
-            status=StepStatus.PENDING,
+                operation="setup_preview_camera",
+                target="Camera",
+                parameters={"location": [2.5, -2.5, 2.0]},
+            )
         )
+
+        step_id += 1
+        steps.append(
+            ModelingStep(
+                step_id=step_id,
+                operation="setup_studio_lighting",
+                target="Light",
+                parameters={"type": "SUN", "energy": 5.0},
+            )
+        )
+
+        step_id += 1
+        steps.append(
+            ModelingStep(
+                step_id=step_id,
+                operation="render_preview",
+                target="Render",
+                parameters={"output_path": f"output/{obj_type}/preview.png"},
+            )
+        )
+
+        return ModelingPlan(steps=steps)

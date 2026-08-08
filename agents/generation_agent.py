@@ -1,15 +1,7 @@
 """
-BlendPilot AI — Unified Generation Agent
+BlendPilot AI — Unified Blender Generation Agent
 
-Merges autonomous mesh modeling and material/lighting setup into a single
-generation step, matching the target architecture:
-    Planning Agent → Generation Agent → Scene State → Geometry Validation
-
-The agent:
-1. Executes all plan steps via MCP tools (mesh creation, modifiers, transforms)
-2. Applies PBR materials and studio lighting
-3. Renders a preview image for the downstream Visual Critic
-4. Uses LLM-powered adaptive error recovery for failed steps
+Workflow 5: Translates a validated ModelingPlan into direct Blender core operations.
 """
 
 from __future__ import annotations
@@ -17,257 +9,299 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mcp_servers.blender.server import BlenderMCPServer
-from schemas.design import DesignSpec
-from schemas.plan import DesignPlan, StepStatus
+from schemas.plan_state import ModelingPlan, ModelingStep, StepExecution, PlanExecution
+from schemas.plan import StepStatus
 from services.llm import LLMService
 
 logger = logging.getLogger("blendpilot.agents.generation")
 
-# Material palette keyed by material token from DesignSpec
-_MATERIAL_PALETTE: dict[str, dict[str, Any]] = {
-    "dark_metal": {"base_color": [0.12, 0.13, 0.15, 1.0], "metallic": 0.85, "roughness": 0.35},
-    "blue_emissive": {
-        "base_color": [0.05, 0.4, 0.95, 1.0],
-        "metallic": 0.1,
-        "roughness": 0.2,
-        "emission_color": [0.0, 0.5, 1.0, 1.0],
-        "emission_strength": 5.0,
-    },
-    "wood_grain": {"base_color": [0.4, 0.25, 0.15, 1.0], "metallic": 0.0, "roughness": 0.7},
-    "stone_rough": {"base_color": [0.55, 0.52, 0.48, 1.0], "metallic": 0.0, "roughness": 0.9},
-    "rusted_metal": {"base_color": [0.45, 0.2, 0.1, 1.0], "metallic": 0.6, "roughness": 0.85},
-    "gold_metal": {"base_color": [0.95, 0.78, 0.2, 1.0], "metallic": 1.0, "roughness": 0.15},
-    "glass": {
-        "base_color": [0.9, 0.95, 1.0, 0.15],
-        "metallic": 0.0,
-        "roughness": 0.0,
-        "emission_strength": 0.0,
-    },
-    "lava_emissive": {
-        "base_color": [1.0, 0.3, 0.0, 1.0],
-        "metallic": 0.0,
-        "roughness": 0.9,
-        "emission_color": [1.0, 0.2, 0.0, 1.0],
-        "emission_strength": 8.0,
-    },
-    "chrome_mirror": {"base_color": [0.9, 0.9, 0.92, 1.0], "metallic": 1.0, "roughness": 0.05},
-    "base_gray_pbr": {"base_color": [0.75, 0.75, 0.78, 1.0], "metallic": 0.2, "roughness": 0.4},
-}
-
 
 class GenerationAgent:
-    """Unified agent that executes mesh modeling and material/lighting in a single step.
-
-    Execution order:
-        1. Sequentially execute all DesignPlan steps via MCP (geometry).
-        2. Apply PBR materials from DesignSpec.materials, assign to objects.
-        3. Set up 3-point studio lighting and preview camera.
-        4. Render a 1024×1024 preview image for the Visual Critic.
-    """
+    """Agent that translates ModelingPlan steps into direct Blender core operations."""
 
     def __init__(
         self,
-        mcp_server: BlenderMCPServer | None = None,
+        mcp_server: Any | None = None,
         llm_service: LLMService | None = None,
+        mock_mode: bool = False,
     ):
-        self.mcp_server = mcp_server or BlenderMCPServer()
+        self.mcp_server = mcp_server
         self.llm_service = llm_service
+        self.mock_mode = mock_mode
+        if mcp_server and getattr(getattr(mcp_server, "client", None), "mock_mode", False):
+            self.mock_mode = True
 
     async def execute(
         self,
-        spec: DesignSpec,
-        plan: DesignPlan,
+        spec: Any,
+        plan: ModelingPlan | Any,
         output_image_path: str | None = None,
     ) -> dict[str, Any]:
-        """Run the full generation pipeline and return results.
+        """Run the full generation pipeline by executing ModelingPlan steps.
 
         Args:
-            spec: The validated DesignSpec from the Intent Agent.
-            plan: The step-by-step DesignPlan from the Planning Agent.
+            spec: The design spec (DesignSpec or IntentSpec).
+            plan: The modeling plan (ModelingPlan or DesignPlan).
             output_image_path: Path to write the preview render to.
 
         Returns:
-            dict with keys: success, created_objects, materials_created,
-                            preview_image_path, modeling_logs.
+            dict matching PlanExecution structure.
         """
-        if output_image_path is None:
-            output_image_path = f"output/{spec.asset_type}/preview.png"
+        # Coerce DesignPlan to ModelingPlan if needed
+        if not isinstance(plan, ModelingPlan):
+            steps = []
+            for step in getattr(plan, "steps", []):
+                # Map PlanStep to ModelingStep
+                steps.append(
+                    ModelingStep(
+                        step_id=step.step_id,
+                        operation=step.tool or step.required_tool,
+                        target=step.target_object or "",
+                        parameters=step.parameters or {},
+                        dependencies=step.dependencies or [],
+                    )
+                )
+            plan = ModelingPlan(steps=steps)
 
-        logger.info(
-            "GenerationAgent starting for '%s' — %d plan steps",
-            spec.asset_type,
-            len(plan.steps),
-        )
+        asset_type = getattr(spec, "asset_type", getattr(spec, "object_type", "object"))
+        if output_image_path is None:
+            output_image_path = f"output/{asset_type}/preview.png"
+
+        logger.info("GenerationAgent starting execution for '%s' — %d plan steps", asset_type, len(plan.steps))
 
         created_objects: list[str] = []
         materials_created: list[str] = []
-        modeling_logs: list[dict[str, Any]] = []
+        step_executions: list[StepExecution] = []
+        all_success = True
 
-        # ── Phase A: Execute Mesh Modeling Steps ──────────────────────────
         for step in plan.steps:
-            logger.info(
-                "  Step %d/%d: [%s] %s",
-                step.step_id,
-                len(plan.steps),
-                step.tool,
-                step.description,
-            )
-            step.status = StepStatus.IN_PROGRESS
-            plan.current_step_index = step.step_id - 1
+            logger.info("Executing Step %d: [%s] on target: %s", step.step_id, step.operation, step.target)
 
-            result = await self.mcp_server.call_tool(step.tool, step.parameters)
-            success = result.get("success", False)
+            success = False
+            msg = ""
+            details = {}
+
+            if self.mock_mode:
+                # Simulated/mock mode to bypass Blender environment
+                success = True
+                msg = f"Mock execution of {step.operation} succeeded"
+                details = {"mocked": True}
+            else:
+                try:
+                    res = self._execute_core_operation(step, output_image_path)
+                    success = res.get("success", False)
+                    msg = res.get("message", "")
+                    details = res
+                except Exception as e:
+                    logger.exception("Step %d execution failed with exception", step.step_id)
+                    success = False
+                    msg = str(e)
+                    details = {"exception": str(e)}
 
             if success:
-                step.status = StepStatus.COMPLETED
-                obj_name = (
-                    result.get("object_name")
-                    or result.get("new_object")
-                    or step.parameters.get("name")
-                )
-                if obj_name and obj_name not in created_objects and step.tool in (
-                    "create_primitive",
-                    "duplicate_object",
-                ):
-                    created_objects.append(obj_name)
+                if step.operation in ["create_primitive", "duplicate_object"]:
+                    obj_name = details.get("object_name") or details.get("new_object") or step.target
+                    if obj_name and obj_name not in created_objects:
+                        created_objects.append(obj_name)
+                elif step.operation == "create_material":
+                    mat_name = details.get("material_name") or step.target
+                    if mat_name and mat_name not in materials_created:
+                        materials_created.append(mat_name)
             else:
-                error_msg = result.get("error", "Unknown error")
-                logger.warning("  Step %d failed: %s — attempting LLM recovery", step.step_id, error_msg)
+                all_success = False
 
-                recovered = await self._attempt_recovery(step, error_msg, created_objects)
-                if recovered:
-                    step.status = StepStatus.COMPLETED
-                    if recovered.get("created_object"):
-                        created_objects.append(recovered["created_object"])
-                    logger.info("  Step %d recovered via LLM", step.step_id)
-                else:
-                    step.status = StepStatus.FAILED
-                    step.error_message = error_msg
+            step_executions.append(
+                StepExecution(
+                    step_id=step.step_id,
+                    operation=step.operation,
+                    target=step.target,
+                    success=success,
+                    message=msg,
+                    details=details,
+                )
+            )
 
-            modeling_logs.append({
-                "step_id": step.step_id,
-                "tool": step.tool,
-                "success": step.status == StepStatus.COMPLETED,
-                "response": result,
-            })
-
-        all_steps_ok = all(s.status == StepStatus.COMPLETED for s in plan.steps)
-        plan.status = StepStatus.COMPLETED if all_steps_ok else StepStatus.FAILED
-
-        # ── Phase B: Apply PBR Materials ──────────────────────────────────
-        for i, mat_token in enumerate(spec.materials or ["base_gray_pbr"]):
-            palette_entry = _MATERIAL_PALETTE.get(mat_token, _MATERIAL_PALETTE["base_gray_pbr"])
-            mat_name = f"Mat_{spec.asset_type}_{mat_token}"
-            await self.mcp_server.call_tool("create_material", {"name": mat_name, **palette_entry})
-            materials_created.append(mat_name)
-
-            # Assign to object at matching index (or first if not enough objects)
-            target_obj = created_objects[i] if i < len(created_objects) else (created_objects[0] if created_objects else None)
-            if target_obj:
-                await self.mcp_server.call_tool("assign_material", {
-                    "object_name": target_obj,
-                    "material_name": mat_name,
-                })
-
-        # ── Phase C: Studio Lighting ──────────────────────────────────────
-        await self.mcp_server.call_tool("setup_studio_lighting", {
-            "key_energy": 1200.0,
-            "fill_energy": 450.0,
-            "rim_energy": 700.0,
-        })
-
-        # ── Phase D: Preview Camera ───────────────────────────────────────
-        await self.mcp_server.call_tool("setup_preview_camera", {
-            "target_object": created_objects[0] if created_objects else None,
-            "distance": 3.2,
-            "focal_length": 50.0,
-        })
-
-        # ── Phase E: Render Preview ───────────────────────────────────────
-        await self.mcp_server.call_tool("render_preview", {
-            "output_path": output_image_path,
-            "resolution_x": 1024,
-            "resolution_y": 1024,
-            "samples": 64,
-        })
-
-        logger.info(
-            "GenerationAgent complete — objects: %s | materials: %s | success: %s",
-            created_objects,
-            materials_created,
-            all_steps_ok,
+        execution_result = PlanExecution(
+            success=all_success,
+            created_objects=created_objects,
+            materials_created=materials_created,
+            step_executions=step_executions,
+            preview_image_path=output_image_path,
         )
 
-        return {
-            "success": all_steps_ok,
-            "created_objects": created_objects,
-            "materials_created": materials_created,
-            "preview_image_path": output_image_path,
-            "modeling_logs": modeling_logs,
-            "plan": plan,
-        }
+        return execution_result.model_dump()
 
-    async def _attempt_recovery(
-        self,
-        failed_step: Any,
-        error_msg: str,
-        created_objects: list[str],
-    ) -> dict[str, Any] | None:
-        """Use LLM to suggest an alternative tool call when a step fails."""
-        if not self.llm_service or not self.llm_service.config.api_key:
-            return None
+    def _execute_core_operation(self, step: ModelingStep, default_output_path: str) -> dict[str, Any]:
+        """Execute a single core Blender operation by calling deterministic functions in core/."""
+        import core.objects
+        import core.materials
+        import core.modifiers
+        import core.rendering
+        import core.project
 
-        import json
-        import re
+        op = step.operation
+        params = step.parameters or {}
 
-        try:
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            system_prompt = (
-                "You are a Blender 3D modeling expert. A modeling step has failed. "
-                "Analyze the error and suggest a single corrected MCP tool call that achieves "
-                "the same goal. Respond ONLY with a JSON object: "
-                '{"tool": "<tool_name>", "parameters": {<params>}, "reasoning": "<why>"}'
-            )
-            user_prompt = (
-                f"Failed step: {failed_step.description}\n"
-                f"Tool: {failed_step.tool}\n"
-                f"Parameters: {json.dumps(failed_step.parameters)}\n"
-                f"Error: {error_msg}\n"
-                f"Existing objects in scene: {created_objects}\n\n"
-                "Suggest a corrected tool call to achieve the same goal."
+        if op == "create_primitive":
+            prim_type = params.get("primitive_type") or "cube"
+            name = params.get("name") or step.target
+            dims = params.get("dimensions")
+            if isinstance(dims, list):
+                dims = tuple(dims)
+            loc = params.get("location") or (0.0, 0.0, 0.0)
+            if isinstance(loc, list):
+                loc = tuple(loc)
+            rot = params.get("rotation") or (0.0, 0.0, 0.0)
+            if isinstance(rot, list):
+                rot = tuple(rot)
+            return core.objects.create_primitive(
+                primitive_type=prim_type,
+                name=name,
+                dimensions=dims,
+                location=loc,
+                rotation=rot,
             )
 
-            response = await self.llm_service.generate(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                response_format={"type": "json_object"},
+        elif op == "set_transform":
+            name = params.get("object_name") or step.target
+            loc = params.get("location")
+            if isinstance(loc, list):
+                loc = tuple(loc)
+            rot = params.get("rotation")
+            if isinstance(rot, list):
+                rot = tuple(rot)
+            sc = params.get("scale")
+            if isinstance(sc, list):
+                sc = tuple(sc)
+            return core.objects.set_transform(
+                object_name=name,
+                location=loc,
+                rotation=rot,
+                scale=sc,
             )
-            if not response:
-                return None
 
-            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
-            recovery = json.loads(clean)
-
-            tool_name = recovery.get("tool", failed_step.tool)
-            params = recovery.get("parameters", failed_step.parameters)
-            logger.info(
-                "LLM recovery: calling %s (reason: %s)",
-                tool_name,
-                recovery.get("reasoning", ""),
+        elif op == "duplicate_object":
+            name = params.get("object_name") or step.target
+            new_name = params.get("new_name") or f"{name}_dup"
+            offset = params.get("offset") or (0.0, 0.0, 0.0)
+            if isinstance(offset, list):
+                offset = tuple(offset)
+            return core.objects.duplicate_object(
+                object_name=name,
+                new_name=new_name,
+                offset=offset,
             )
 
-            retry = await self.mcp_server.call_tool(tool_name, params)
-            if retry.get("success", False):
-                result: dict[str, Any] = {"success": True}
-                if "object_name" in retry:
-                    result["created_object"] = retry["object_name"]
-                elif "name" in params:
-                    result["created_object"] = params["name"]
-                return result
+        elif op == "delete_object":
+            name = params.get("object_name") or step.target
+            return core.objects.delete_object(object_name=name)
 
-        except Exception as exc:
-            logger.warning("LLM error recovery failed: %s", exc)
+        elif op == "create_material":
+            name = params.get("name") or step.target
+            base_color = params.get("base_color") or (0.8, 0.8, 0.8, 1.0)
+            if isinstance(base_color, list):
+                base_color = tuple(base_color)
+            met = params.get("metallic", 0.0)
+            rough = params.get("roughness", 0.5)
+            em_color = params.get("emission_color")
+            if isinstance(em_color, list):
+                em_color = tuple(em_color)
+            em_str = params.get("emission_strength", 0.0)
+            return core.materials.create_material(
+                name=name,
+                base_color=base_color,
+                metallic=met,
+                roughness=rough,
+                emission_color=em_color,
+                emission_strength=em_str,
+            )
 
-        return None
+        elif op == "assign_material":
+            obj_name = params.get("object_name") or step.target
+            mat_name = params.get("material_name") or ""
+            return core.materials.assign_material(
+                object_name=obj_name,
+                material_name=mat_name,
+            )
+
+        elif op == "add_modifier":
+            obj_name = params.get("object_name") or step.target
+            mod_type = params.get("modifier_type") or "BEVEL"
+            name = params.get("name") or "Bevel"
+            props = params.get("properties")
+            return core.modifiers.add_modifier(
+                object_name=obj_name,
+                modifier_type=mod_type,
+                name=name,
+                properties=props,
+            )
+
+        elif op == "apply_modifier":
+            obj_name = params.get("object_name") or step.target
+            mod_name = params.get("modifier_name") or ""
+            return core.modifiers.apply_modifier(
+                object_name=obj_name,
+                modifier_name=mod_name,
+            )
+
+        elif op == "setup_preview_camera":
+            # setup_preview_camera takes target: tuple[float, float, float]
+            target_pos = (0.0, 0.0, 0.0)
+            loc = params.get("location")
+            if isinstance(loc, list):
+                loc = tuple(loc)
+            dist = params.get("distance", 5.0)
+            elev = params.get("elevation_angle", 30.0)
+            azim = params.get("azimuth_angle", 45.0)
+            cam_name = params.get("camera_name", "PreviewCamera")
+            return core.rendering.setup_preview_camera(
+                target=target_pos,
+                distance=dist,
+                elevation_angle=elev,
+                azimuth_angle=azim,
+                camera_name=cam_name,
+            )
+
+        elif op == "setup_studio_lighting":
+            target_pos = (0.0, 0.0, 0.0)
+            key = params.get("key_energy", 300.0)
+            fill = params.get("fill_energy", 100.0)
+            rim = params.get("rim_energy", 200.0)
+            return core.rendering.setup_studio_lighting(
+                target=target_pos,
+                key_energy=key,
+                fill_energy=fill,
+                rim_energy=rim,
+            )
+
+        elif op == "render_preview":
+            out_path = params.get("output_path") or default_output_path
+            res_x = params.get("resolution_x", 1024)
+            res_y = params.get("resolution_y", 1024)
+            samps = params.get("samples", 64)
+            return core.rendering.render_preview(
+                output_path=out_path,
+                resolution_x=res_x,
+                resolution_y=res_y,
+                samples=samps,
+            )
+
+        elif op == "save_checkpoint":
+            path = params.get("checkpoint_path") or ""
+            return core.project.save_checkpoint(checkpoint_path=path)
+
+        elif op == "save_project":
+            path = params.get("filepath") or ""
+            return core.project.save_project(filepath=path)
+
+        elif op == "export_asset":
+            out_dir = params.get("output_dir") or ""
+            fmt = params.get("format", "FBX")
+            return core.project.export_asset(output_dir=out_dir, format=fmt)
+
+        elif op == "restore_checkpoint":
+            path = params.get("checkpoint_path") or ""
+            return core.project.restore_checkpoint(checkpoint_path=path)
+
+        else:
+            raise ValueError(f"Unsupported core operation: {op}")
