@@ -133,18 +133,12 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
     except Exception as e:
         logger.exception("[Node] Intent Agent failed: %s", e)
         _record_event(state, "intent_agent", "FAILED", f"Intent parsing failed: {e}")
-        # Minimal fallback spec
         return {
             "current_agent": "scene_agent",
             "design_spec": {
                 "asset_type": "generic_prop",
-                "style": "low-poly",
-                "dimensions": {"width": 1.0, "depth": 1.0, "height": 1.0},
-                "triangle_limit": 8000,
-                "target_platform": "Unity",
-                "materials": ["base_gray_pbr"],
-                "export_format": "FBX",
                 "description": state.get("user_prompt", ""),
+                "error": str(e),
             },
         }
 
@@ -168,7 +162,7 @@ async def node_scene(state: BlendPilotState, mcp_server: BlenderMCPServer | None
         _record_event(state, "scene_agent", "FAILED", f"Scene scan failed: {e}")
         return {
             "current_agent": "research_agent",
-            "scene_summary": {"objects": [], "materials": [], "lights": [], "camera": None},
+            "scene_summary": {"objects": [], "materials": [], "lights": [], "camera": None, "error": str(e)},
         }
 
 
@@ -224,7 +218,7 @@ async def node_planning(state: BlendPilotState) -> dict[str, Any]:
         _record_event(state, "planning_agent", "FAILED", f"Planning failed: {e}")
         return {
             "current_agent": "modeling_agent",
-            "design_plan": {"spec_id": "fallback", "steps": [], "current_step_index": 0, "status": "pending"},
+            "design_plan": {"spec_id": "error", "steps": [], "current_step_index": 0, "status": "failed", "error": str(e)},
         }
 
 
@@ -325,9 +319,9 @@ async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer 
         _record_event(state, "geometry_qa_agent", "FAILED", f"Geometry QA failed: {e}")
         return {
             "current_agent": "visual_critic_agent",
-            "geometry_qa_status": "PASS",
-            "geometry_score": 1.0,
-            "geometry_issues": [],
+            "geometry_qa_status": "ERROR",
+            "geometry_score": 0.0,
+            "geometry_issues": [{"error": str(e)}],
             "_repair_steps": [],
         }
 
@@ -387,9 +381,9 @@ async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
         _record_event(state, "visual_critic_agent", "FAILED", f"Visual critique failed: {e}")
         return {
             "current_agent": "human_feedback",
-            "visual_qa_approved": True,
-            "visual_score": 0.85,
-            "visual_issues": [],
+            "visual_qa_approved": False,
+            "visual_score": 0.0,
+            "visual_issues": [{"error": str(e)}],
         }
 
 
@@ -454,12 +448,12 @@ async def node_export(state: BlendPilotState, mcp_server: BlenderMCPServer | Non
         created_objs = state.get("created_objects", [])
 
         geo_qa = ValidationResult(
-            status=state.get("geometry_qa_status", "PASS"),
-            score=state.get("geometry_score", 1.0),
+            status=state.get("geometry_qa_status") or "UNKNOWN",
+            score=state.get("geometry_score") or 0.0,
         )
         vis_qa = VisualCritiqueResult(
-            approved=state.get("visual_qa_approved", True),
-            overall_score=state.get("visual_score", 0.92),
+            approved=state.get("visual_qa_approved") or False,
+            overall_score=state.get("visual_score") or 0.0,
         )
 
         res = await agent.execute(

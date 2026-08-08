@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
@@ -55,66 +55,43 @@ import {
   type CopilotAttachment,
   type CopilotCitation,
 } from "@/components/nexus-ui/copilot-parts";
-import {
-  ChainOfThought,
-  ChainOfThoughtComplete,
-  ChainOfThoughtContent,
-  ChainOfThoughtStep,
-  ChainOfThoughtStepTitle,
-  ChainOfThoughtTrigger,
-} from "@/components/nexus-ui/chain-of-thought";
 import { toast } from "sonner";
 import Link from "next/link";
 import { connectWorkflowStream, type WorkflowStreamPayload } from "@/lib/workflow-stream";
 import {
   Bot,
-  BrainCircuit,
   User,
   Send,
   Sparkles,
   BotMessageSquare,
   Key,
-  Wrench,
   Eye,
   EyeOff,
   Loader2,
   Copy,
   Check,
-  Command,
-  WandSparkles,
-  Maximize2,
-  ChevronDown,
 } from "lucide-react";
 
 export interface CopilotMessage {
   id: string;
   role: "user" | "copilot" | "agent";
-  agentName?: string;
-  agentStep?: number;
   content: string;
   actions?: string[];
-  status?: "pending" | "running" | "done" | "failed";
   time: string;
   isLiveLLM?: boolean;
-  eventKey?: string;
   attachments?: CopilotAttachment[];
   citations?: CopilotCitation[];
 }
 
-interface StudioAssetSpec {
-  asset_type?: string;
-  dimensions?: {
-    width?: number;
-    depth?: number;
-    height?: number;
-  };
-  triangle_limit?: number;
-  budget?: {
-    target_triangles?: number;
-  };
+interface CopilotChatboxProps {
+  assetSpec?: Record<string, unknown>;
+  onApplyAction?: (actionText: string) => void;
+  onStartPipeline?: (prompt: string) => void;
+  onWorkflowEvent?: (payload: WorkflowStreamPayload) => void;
+  pipelineSessionId?: string | null;
+  pipelineRunning?: boolean;
 }
 
-const COPILOT_STORE_KEY = "blendpilot:studio-copilot:v1";
 export function CopilotChatbox({
   assetSpec,
   onApplyAction,
@@ -124,16 +101,15 @@ export function CopilotChatbox({
   pipelineRunning = false,
 }: CopilotChatboxProps) {
   const messageIdRef = useRef(0);
-  const handledWorkflowEventsRef = useRef<Set<string>>(new Set());
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<CopilotAttachment[]>([]);
 
-  // User LLM Settings loaded from Settings Store (/api/settings)
-  const [llmProvider, setLlmProvider] = useState<string>("openai");
-  const [llmModel, setLlmModel] = useState<string>("gpt-4o");
+  // LLM settings loaded live from /api/settings
+  const [llmProvider, setLlmProvider] = useState<string>("");
+  const [llmModel, setLlmModel] = useState<string>("");
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   const [apiKeyInput, setApiKeyInput] = useState<string>("");
   const [showKeyText, setShowKeyText] = useState(false);
@@ -145,18 +121,18 @@ export function CopilotChatbox({
     return `${prefix}-${messageIdRef.current}`;
   };
 
-  // Auto-fetch user settings on mount
+  // Fetch live user settings from the database on mount
   const loadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
       if (res.ok) {
         const data = await res.json();
-        setLlmProvider(data.llmProvider || "openai");
-        setLlmModel(data.llmModel || "gpt-4o");
+        setLlmProvider(data.llmProvider || "");
+        setLlmModel(data.llmModel || "");
         setHasApiKey(data.hasApiKey || false);
       }
     } catch {
-      // Fallback
+      // silent — no static fallback
     }
   };
 
@@ -164,7 +140,7 @@ export function CopilotChatbox({
     void Promise.resolve().then(loadSettings);
   }, []);
 
-  // Save API Key & Model Configuration directly from Studio
+  // Save API Key & Model Configuration
   const handleSaveKeySettings = async () => {
     setSavingKey(true);
     try {
@@ -178,9 +154,7 @@ export function CopilotChatbox({
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to save settings");
-      }
+      if (!res.ok) throw new Error("Failed to save settings");
 
       toast.success(`Connected to ${llmProvider.toUpperCase()} (${llmModel})!`);
       setHasApiKey(true);
@@ -195,7 +169,7 @@ export function CopilotChatbox({
     }
   };
 
-  // Listen to live pipeline WebSocket stream
+  // Live pipeline WebSocket stream — forward all events directly to parent
   useEffect(() => {
     if (!pipelineSessionId) return;
 
@@ -218,9 +192,6 @@ export function CopilotChatbox({
     };
   }, [pipelineSessionId, onWorkflowEvent]);
 
-
-
-
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -237,8 +208,6 @@ export function CopilotChatbox({
     }
 
     const lower = text.toLowerCase();
-    // Broad intent detection — let the LLM handle nuanced classification
-    // Pipeline triggers: explicit launch commands OR any 3D creation verbs
     const creationVerbs = ["create", "make", "generate", "build", "design", "model", "construct", "sculpt", "craft"];
     const isCreationIntent =
       lower.includes("launch 10-agent") ||
@@ -247,8 +216,6 @@ export function CopilotChatbox({
       creationVerbs.some((v) => lower.startsWith(v)) ||
       (creationVerbs.some((v) => lower.includes(v)) && lower.split(" ").length >= 3);
 
-    // Creation intents flow to the autonomous workflow. Conversational and
-    // inspection requests remain in chat; no manual plan mode is required.
     const shouldRunAgent = isCreationIntent && Boolean(onStartPipeline);
 
     if (shouldRunAgent && onStartPipeline) {
@@ -257,13 +224,13 @@ export function CopilotChatbox({
         role: "user",
         content: text,
         attachments,
-        time: "Just now",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setAttachments([]);
       onStartPipeline(text);
-      return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
+      return;
     }
 
     const userMsg: CopilotMessage = {
@@ -271,7 +238,7 @@ export function CopilotChatbox({
       role: "user",
       content: text,
       attachments,
-      time: "Just now",
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -280,7 +247,6 @@ export function CopilotChatbox({
     setLoading(true);
 
     try {
-      // Build multi-turn conversation memory for context window
       const history = messages
         .filter((m) => m.role === "user" || m.role === "copilot")
         .slice(-8)
@@ -300,7 +266,7 @@ export function CopilotChatbox({
         }),
       });
 
-      if (!res.ok) throw new Error("Copilot response error");
+      if (!res.ok) throw new Error(`Copilot error: ${res.status}`);
       const data = await res.json();
 
       const copilotMsg: CopilotMessage = {
@@ -310,7 +276,7 @@ export function CopilotChatbox({
         actions: data.suggested_actions || [],
         isLiveLLM: data.is_live_llm,
         citations: data.ragSources || [],
-        time: "Just now",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, copilotMsg]);
     } catch (e: unknown) {
@@ -320,8 +286,8 @@ export function CopilotChatbox({
         {
           id: nextMessageId("error"),
           role: "copilot",
-          content: `⚠️ Copilot notice: ${message}`,
-          time: "Just now",
+          content: `⚠️ ${message}`,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
     } finally {
@@ -329,17 +295,17 @@ export function CopilotChatbox({
     }
   };
 
-
-
   return (
     <>
       <Card className="bg-card border-border py-0 flex flex-col h-full overflow-hidden">
-        {/* Header Bar with Store Connection & Key Config Dialog */}
+        {/* Header */}
         <CardHeader className="p-3 pb-2 bg-muted/50">
           <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
             <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
-              <span>({llmModel})</span>
+              {llmProvider && (
+                <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
+              )}
+              {llmModel && <span>({llmModel})</span>}
               {hasApiKey ? (
                 <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -367,24 +333,28 @@ export function CopilotChatbox({
                 <MessageScroller>
                   <MessageScrollerViewport className="pr-2">
                     <MessageScrollerContent className="space-y-3 pb-2">
-
-
-                      {/* Message Flow */}
                       {messages.map((m) => {
                         const isUser = m.role === "user";
                         const isAgent = m.role === "agent";
 
                         return (
-                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser} className="order-1">
+                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser}>
                             <Message align={isUser ? "end" : "start"} className="my-2">
                               <MessageAvatar>
                                 <div
-                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${isAgent
-                                    ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
-                                    : "bg-primary text-primary-foreground"
-                                    }`}
+                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${
+                                    isAgent
+                                      ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                                      : "bg-primary text-primary-foreground"
+                                  }`}
                                 >
-                                  {isUser ? <User className="w-3.5 h-3.5" /> : isAgent ? <Sparkles className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                                  {isUser ? (
+                                    <User className="w-3.5 h-3.5" />
+                                  ) : isAgent ? (
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Bot className="w-3.5 h-3.5" />
+                                  )}
                                 </div>
                               </MessageAvatar>
 
@@ -397,31 +367,36 @@ export function CopilotChatbox({
                                   }`}
                                 >
                                   <BubbleContent className={!isUser ? "p-0" : ""}>
-                                    {/* Copy Action Button */}
                                     <button
                                       onClick={() => handleCopy(m.id, m.content)}
                                       className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md bg-background/80 hover:bg-muted text-muted-foreground"
                                       title="Copy message"
                                     >
-                                      {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                      {copiedId === m.id ? (
+                                        <Check className="w-3 h-3 text-emerald-400" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
                                     </button>
 
                                     <AttachmentList attachments={m.attachments} />
 
-                                    {/* Markdown Body */}
                                     <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
                                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                                     </div>
 
                                     <Citations sources={m.citations} />
 
-                                    {/* Suggested actions are executable Studio prompts. */}
                                     {m.actions && m.actions.length > 0 && (
                                       <div className="mt-2.5 border-t border-border/40 pt-2">
-                                        <Suggestions items={m.actions} disabled={loading || pipelineRunning} onSelect={(action) => {
-                                          handleSend(action);
-                                          onApplyAction?.(action);
-                                        }} />
+                                        <Suggestions
+                                          items={m.actions}
+                                          disabled={loading || pipelineRunning}
+                                          onSelect={(action) => {
+                                            handleSend(action);
+                                            onApplyAction?.(action);
+                                          }}
+                                        />
                                       </div>
                                     )}
                                   </BubbleContent>
@@ -429,7 +404,17 @@ export function CopilotChatbox({
 
                                 <MessageFooter className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 w-full">
                                   <span>{m.time}</span>
-                                  {!isUser && <FeedbackBar onFeedback={(rating) => toast.success(rating === "up" ? "Feedback saved — thank you." : "Thanks — we’ll use that to improve the next response.")} />}
+                                  {!isUser && (
+                                    <FeedbackBar
+                                      onFeedback={(rating) =>
+                                        toast.success(
+                                          rating === "up"
+                                            ? "Feedback saved — thank you."
+                                            : "Thanks — we'll use that to improve the next response."
+                                        )
+                                      }
+                                    />
+                                  )}
                                   {m.isLiveLLM && (
                                     <span className="text-cyan-400 font-mono flex items-center gap-0.5 ml-auto">
                                       <Sparkles className="w-2.5 h-2.5" /> Live LLM
@@ -443,9 +428,13 @@ export function CopilotChatbox({
                       })}
 
                       {loading && (
-                        <div className="order-2 flex items-center gap-2 p-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 p-2 text-xs text-muted-foreground">
                           <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                          <TextShimmer>{hasApiKey ? "Generating with " + llmProvider.toUpperCase() + "..." : "Processing..."}</TextShimmer>
+                          <TextShimmer>
+                            {hasApiKey && llmProvider
+                              ? `Generating with ${llmProvider.toUpperCase()}...`
+                              : "Processing..."}
+                          </TextShimmer>
                         </div>
                       )}
                     </MessageScrollerContent>
@@ -455,39 +444,35 @@ export function CopilotChatbox({
               </MessageScrollerProvider>
             </div>
           </div>
-          {/* Chat Input Bar with Plan Toggle */}
+
+          {/* Input Bar */}
           <div className="border-t border-border p-3">
             <PromptInput onSubmit={handleSend}>
               <PromptInputTextarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Ask Copilot (e.g. ‘Make a sword’)"
+                placeholder="Ask Copilot or describe an asset to create..."
                 disabled={loading || pipelineRunning}
                 className="min-h-12 px-3 py-2 text-xs"
               />
               <PromptInputActions>
                 <PromptInputActionGroup>
-                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={loading || pipelineRunning} />
-                  <ImageStatus count={attachments.filter((attachment) => attachment.type.startsWith("image/")).length} />
+                  <AttachmentPicker
+                    attachments={attachments}
+                    onChange={setAttachments}
+                    disabled={loading || pipelineRunning}
+                  />
+                  <ImageStatus
+                    count={attachments.filter((a) => a.type.startsWith("image/")).length}
+                  />
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setKeyDialogOpen(true)}
-                    title="Configure the model that automatically selects the workflow tools"
+                    title="Configure LLM provider and API key"
                   >
                     <BotMessageSquare data-icon="inline-start" />
-                    Auto
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setInput("Generate a LangGraph-driven Blender asset with live tool feedback, repair loops, and export readiness.");
-                    }}
-                  >
-                    <Command data-icon="inline-start" />
-                    Graph prompt
+                    LLM
                   </Button>
                 </PromptInputActionGroup>
                 <PromptInputActionGroup>
@@ -507,16 +492,17 @@ export function CopilotChatbox({
         </CardContent>
       </Card>
 
-      {/* Inline Quick LLM Key Configuration Dialog */}
+      {/* LLM Key Configuration Dialog */}
       <Dialog open={keyDialogOpen} onOpenChange={setKeyDialogOpen}>
         <DialogContent className="max-w-md bg-card border-border shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <Key className="w-4 h-4 text-primary" />
-              Configure LLM Provider & Key
+              Configure LLM Provider &amp; Key
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Link your API Key to enable real-time Claude, GPT-4o, or Gemini streaming and agent execution.
+              Link your API Key to enable real-time Claude, GPT-4o, or Gemini streaming and agent
+              execution.
             </DialogDescription>
           </DialogHeader>
 
@@ -524,13 +510,16 @@ export function CopilotChatbox({
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground font-medium">Provider</Label>
-                <Select value={llmProvider} onValueChange={(val) => {
-                  if (!val) return;
-                  setLlmProvider(val);
-                  if (val === "anthropic") setLlmModel("claude-3-5-sonnet-20241022");
-                  else if (val === "openai") setLlmModel("gpt-4o");
-                  else if (val === "custom") setLlmModel("gemini-1.5-pro");
-                }}>
+                <Select
+                  value={llmProvider}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    setLlmProvider(val);
+                    if (val === "anthropic") setLlmModel("claude-3-5-sonnet-20241022");
+                    else if (val === "openai") setLlmModel("gpt-4o");
+                    else if (val === "custom") setLlmModel("gemini-1.5-pro");
+                  }}
+                >
                   <SelectTrigger className="h-9 text-xs bg-background">
                     <SelectValue placeholder="Select LLM Provider" />
                   </SelectTrigger>
@@ -554,7 +543,10 @@ export function CopilotChatbox({
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground font-medium">
-                  API Key {hasApiKey && <span className="text-emerald-400 font-mono">(Key Already Configured)</span>}
+                  API Key{" "}
+                  {hasApiKey && (
+                    <span className="text-emerald-400 font-mono">(Key Already Configured)</span>
+                  )}
                 </Label>
                 <div className="relative">
                   <Input
@@ -584,7 +576,13 @@ export function CopilotChatbox({
                 Advanced Settings →
               </Link>
               <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setKeyDialogOpen(false)} className="text-xs">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setKeyDialogOpen(false)}
+                  className="text-xs"
+                >
                   Cancel
                 </Button>
                 <Button
@@ -593,8 +591,12 @@ export function CopilotChatbox({
                   disabled={savingKey || (!apiKeyInput.trim() && !hasApiKey)}
                   className="text-xs bg-primary text-primary-foreground gap-1.5"
                 >
-                  {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Save & Connect
+                  {savingKey ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Save &amp; Connect
                 </Button>
               </div>
             </DialogFooter>
