@@ -70,6 +70,7 @@ class BlendPilotState(TypedDict, total=False):
     geometry_qa_status: str  # PASS, FAIL
     geometry_score: float
     geometry_issues: list[dict[str, Any]]
+    geometry_qa_report: dict[str, Any] | None
     geometry_repair_count: int
     max_geometry_repairs: int
 
@@ -139,6 +140,7 @@ def create_initial_state(
         "geometry_qa_status": "PENDING",
         "geometry_score": 1.0,
         "geometry_issues": [],
+        "geometry_qa_report": None,
         "geometry_repair_count": 0,
         "max_geometry_repairs": 3,
         "visual_qa_approved": False,

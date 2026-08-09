@@ -234,7 +234,9 @@ class TestProjectOperators:
 
     def test_handle_restore_checkpoint_accepts_filepath(self, mock_bpy):
         ops = self._setup()
-        result = ops.handle_restore_checkpoint({"filepath": "output/checkpoints/test.blend"})
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("os.path.exists", lambda p: True)
+            result = ops.handle_restore_checkpoint({"filepath": "output/checkpoints/test.blend"})
         assert result["success"] is True
 
 

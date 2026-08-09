@@ -294,40 +294,55 @@ async def node_material(state: BlendPilotState, mcp_server: BlenderMCPServer | N
 
 # ── Workflow 7: Deterministic Geometry QA Node ──────────────
 async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer | None = None) -> dict[str, Any]:
-    """Inspect geometry topology, normals, manifolds, and triangle count."""
-    logger.info("[Node] Running Geometry QA Agent")
-    await _emit_agent_state(state, "geometry_qa", "geometry_qa_agent", "RUNNING", "Validating topology and triangle budget")
+    """Inspect geometry topology, normals, manifolds, and triangle count using pure-Python engine."""
+    logger.info("[Node] Running Geometry QA Engine (Stage 9)")
+    await _emit_agent_state(state, "geometry_qa", "geometry_qa_agent", "RUNNING", "Validating geometry deterministically")
     try:
-        agent = GeometryQAAgent(mcp_server=_get_mcp_server(state, mcp_server))
-        spec = DesignSpec.model_validate(state["design_spec"])
+        from core.geometry_qa_engine import GeometryQAEngine
+        
+        spec = state.get("design_spec", {})
+        scene_state = state.get("scene_summary", {})
         created_objs = state.get("created_objects", [])
-        repairs = state.get("geometry_repair_count", 0)
-
-        res = await agent.execute(spec=spec, created_objects=created_objs, repair_iteration=repairs)
-        issues_list = [_safe_model_dump(i) for i in res["validation_result"].issues] if hasattr(res.get("validation_result"), "issues") else []
-        repair_steps = [_safe_model_dump(s) for s in res.get("repair_steps", [])]
+        
+        engine = GeometryQAEngine(scene_state=scene_state, spec=spec)
+        report = engine.validate(created_objects=created_objs)
+        
+        status = "PASS" if report.passed else "FAIL"
+        
+        score = 1.0
+        for chk in report.checks:
+            if not chk.passed:
+                if chk.severity == "critical": score -= 0.4
+                elif chk.severity == "high": score -= 0.25
+                elif chk.severity == "medium": score -= 0.1
+                else: score -= 0.05
+        score = max(0.0, min(1.0, score))
+        
         _record_event(
             state,
             "geometry_qa_agent",
             "COMPLETED",
-            f"Geometry QA Result: {res['status']} (Score: {res['score']:.2f})",
-            {"status": res["status"], "score": res["score"], "issues": len(issues_list)},
+            f"Geometry QA Result: {status} (Score: {score:.2f})",
+            {"status": status, "score": score, "issues": len(report.issues)},
         )
+        
         return {
-            "current_agent": "visual_critic_agent" if res["status"] == "PASS" else "geometry_repair",
-            "geometry_qa_status": res["status"],
-            "geometry_score": res["score"],
-            "geometry_issues": issues_list,
-            "_repair_steps": repair_steps,
+            "current_agent": "visual_critic_agent" if status == "PASS" else "geometry_repair",
+            "geometry_qa_status": status,
+            "geometry_score": score,
+            "geometry_issues": [_safe_model_dump(c) for c in report.issues],
+            "geometry_qa_report": _safe_model_dump(report),
+            "_repair_steps": [],
         }
     except Exception as e:
-        logger.exception("[Node] Geometry QA Agent failed: %s", e)
+        logger.exception("[Node] Geometry QA Engine failed: %s", e)
         _record_event(state, "geometry_qa_agent", "FAILED", f"Geometry QA failed: {e}")
         return {
             "current_agent": "visual_critic_agent",
             "geometry_qa_status": "PASS",
             "geometry_score": 1.0,
             "geometry_issues": [],
+            "geometry_qa_report": None,
             "_repair_steps": [],
         }
 

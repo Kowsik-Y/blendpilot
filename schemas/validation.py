@@ -146,3 +146,30 @@ class VisualCritiqueResult(BaseModel):
             self.overall_score = self.quality_score
         if not self.recommendation:
             self.recommendation = "APPROVE" if self.approved else "REVISE"
+
+
+class CheckResult(BaseModel):
+    """A single deterministic check result."""
+
+    passed: bool = Field(..., description="Whether the check passed")
+    severity: Severity = Field(..., description="Severity if the check fails")
+    check_name: str = Field(..., description="Name of the check performed")
+    object: str | None = Field(default=None, description="Object name if applicable")
+    message: str = Field(..., description="Detailed message about the result")
+    suggested_action: str | None = Field(default=None, description="Recommended fix if failed")
+
+
+class ValidationReport(BaseModel):
+    """Top-level structured geometry QA report."""
+
+    passed: bool = Field(default=True, description="True if no high/critical issues exist")
+    checks: list[CheckResult] = Field(default_factory=list)
+
+    @property
+    def has_critical_issues(self) -> bool:
+        return any(not c.passed and c.severity == Severity.CRITICAL for c in self.checks)
+
+    @property
+    def issues(self) -> list[CheckResult]:
+        return [c for c in self.checks if not c.passed]
+

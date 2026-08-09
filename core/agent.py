@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Any, AsyncGenerator, Dict, List
 
-from langchain.agents import create_agent
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, create_model
@@ -72,7 +73,7 @@ class BlendPilotAgent:
             lc_tools.append(tool)
         return lc_tools
 
-    def _build_agent_executor(self):
+    def _build_agent_executor(self) -> AgentExecutor:
         """Construct the core tool-calling agent executor."""
         model = self.llm_service.get_chat_model()
 
@@ -84,12 +85,15 @@ class BlendPilotAgent:
              "Once you finish your tasks, inform the user."
         )
 
-        return create_agent(
-            model=model,
-            tools=self.tools,
-            system_prompt=system_prompt,
-            checkpointer=self.memory,
-        )
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+
+        agent = create_tool_calling_agent(model, self.tools, prompt)
+        return AgentExecutor(agent=agent, tools=self.tools, verbose=False)
 
     async def astream_events(self, user_input: str, session_id: str = "default_thread") -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the execution trace using astream_events."""

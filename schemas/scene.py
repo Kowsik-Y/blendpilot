@@ -58,6 +58,7 @@ class ObjectInfo(BaseModel):
     modifiers: list[ModifierInfo] = Field(default_factory=list)
     material_slots: list[MaterialSlot] = Field(default_factory=list)
     visible: bool = True
+    mesh_stats: MeshStatistics | None = None
 
 
 class MeshStatistics(BaseModel):
@@ -71,6 +72,8 @@ class MeshStatistics(BaseModel):
     has_ngons: bool = False
     dimensions: tuple[float, float, float] = (0.0, 0.0, 0.0)
     bounding_box_volume: float = Field(default=0.0, ge=0)
+    non_manifold_edges: int | None = None
+    flipped_faces: int | None = None
 
 
 class SceneSummary(BaseModel):
