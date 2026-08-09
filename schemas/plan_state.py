@@ -12,6 +12,7 @@ VALID_OPERATIONS = {
     "set_transform",
     "duplicate_object",
     "delete_object",
+    "edit_mesh",
     "create_material",
     "assign_material",
     "add_modifier",
@@ -103,3 +104,27 @@ class PlanExecution(BaseModel):
     materials_created: list[str] = Field(default_factory=list, description="All materials created during execution")
     step_executions: list[StepExecution] = Field(default_factory=list, description="Step-by-step executions")
     preview_image_path: str | None = Field(default=None, description="Path to generated preview render")
+
+
+class RepairStep(BaseModel):
+    """A single step in a targeted repair plan."""
+    affected_object: str = Field(..., description="Name of the object to repair")
+    problem: str = Field(..., description="Description of the issue being fixed")
+    corrective_operation: str = Field(..., description="Name of the Blender core operation to execute")
+    parameters: dict[str, Any] = Field(default_factory=dict, description="Execution parameters for the operation")
+    reason: str = Field(..., description="Explanation of why this operation fixes the problem")
+
+    @field_validator("corrective_operation")
+    @classmethod
+    def validate_operation(cls, v: str) -> str:
+        cleaned = v.strip().lower()
+        if cleaned not in VALID_OPERATIONS:
+            raise ValueError(
+                f"Unsupported operation: '{v}'. Must be one of: {', '.join(sorted(VALID_OPERATIONS))}"
+            )
+        return cleaned
+
+
+class RepairPlan(BaseModel):
+    """A targeted repair plan to fix scene issues without full regeneration."""
+    steps: list[RepairStep] = Field(..., description="List of targeted repair steps")

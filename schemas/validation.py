@@ -146,3 +146,35 @@ class VisualCritiqueResult(BaseModel):
             self.overall_score = self.quality_score
         if not self.recommendation:
             self.recommendation = "APPROVE" if self.approved else "REVISE"
+
+
+class VisionReport(BaseModel):
+    """Result of the Stage 11 Vision Critic pass."""
+    
+    object_presence: bool = Field(default=True, description="Whether the main object is present in the scene")
+    required_component_presence: bool = Field(default=True, description="Whether all required sub-components are visible")
+    color_match: bool = Field(default=True, description="Whether the colors align with the intent")
+    approximate_shape_match: bool = Field(default=True, description="Whether the overall shape/silhouette is correct")
+    obvious_visual_errors: list[str] = Field(default_factory=list, description="List of any glaring visual issues (e.g. floating geometry)")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score of the visual critique")
+    overall_result: Literal["PASS", "FAIL"] = Field(default="PASS", description="Overall validation result from the vision critic")
+
+
+
+class QACheckResult(BaseModel):
+    """A single deterministic geometry check result."""
+
+    passed: bool
+    severity: str  # critical, high, medium, low
+    check_name: str
+    object: str
+    message: str
+    suggested_action: str
+
+
+class ValidationReport(BaseModel):
+    """Final output of the deterministic geometry QA stage."""
+
+    passed: bool = True
+    checks: list[QACheckResult] = Field(default_factory=list)
+

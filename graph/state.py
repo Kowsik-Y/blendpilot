@@ -39,6 +39,7 @@ class BlendPilotState(TypedDict, total=False):
     # ── Config ────────────────────────────────────────────────────────────
     api_key: str | None
     provider: str | None
+    baseline_mode: bool
 
     # ── Intent Agent ─────────────────────────────────────────────────────
     design_spec: dict[str, Any] | None
@@ -55,31 +56,13 @@ class BlendPilotState(TypedDict, total=False):
     # ── Scene State (post-generation Blender context snapshot) ───────────
     scene_summary: dict[str, Any] | None
 
-    # ── Geometry QA ──────────────────────────────────────────────────────
-    geometry_qa_status: str   # PASS, FAIL, PENDING
-    geometry_score: float
-    geometry_issues: list[dict[str, Any]]
+    # ── Geometry QA (Stage 9) ────────────────────────────────────────────
+    validation_report: dict[str, Any] | None
 
-    # ── Visual Critic ─────────────────────────────────────────────────────
-    visual_qa_approved: bool
-    visual_score: float
-    visual_issues: list[str]
+    # ── Vision Critic (Stage 11) ─────────────────────────────────────────
+    vision_report: dict[str, Any] | None
 
-    # ── Decision Agent ────────────────────────────────────────────────────
-    decision: str             # APPROVE, REPAIR
-    decision_reason: str
-    priority_issue: str       # geometry, visual, none
 
-    # ── Repair Agent ──────────────────────────────────────────────────────
-    geometry_repair_count: int
-    max_geometry_repairs: int
-    visual_revision_count: int
-    max_visual_revisions: int
-
-    # ── Export ────────────────────────────────────────────────────────────
-    export_directory: str | None
-    exported_files: list[str]
-    asset_report: dict[str, Any] | None
 
     # ── Event Log ─────────────────────────────────────────────────────────
     events: list[dict[str, Any]]
@@ -91,6 +74,7 @@ class BlendPilotState(TypedDict, total=False):
     executable_operations: list[dict[str, Any]]
     execution_result: dict[str, Any] | None
     scene_state: dict[str, Any] | None
+    repair_plan: dict[str, Any] | None
     errors: list[str]
     iteration_count: int
 
@@ -102,6 +86,7 @@ def create_initial_state(
     reference_images: list[str] | None = None,
     api_key: str | None = None,
     provider: str | None = None,
+    baseline_mode: bool = False,
     overrides: dict[str, Any] | None = None,
 ) -> BlendPilotState:
     """Create a fully initialized default state for starting a modeling pipeline."""
@@ -120,6 +105,7 @@ def create_initial_state(
         # Config
         "api_key": api_key,
         "provider": provider or "openai",
+        "baseline_mode": baseline_mode,
         # Intent
         "design_spec": None,
         # Planning
@@ -132,26 +118,8 @@ def create_initial_state(
         # Scene State
         "scene_summary": None,
         # Geometry QA
-        "geometry_qa_status": "PENDING",
-        "geometry_score": 1.0,
-        "geometry_issues": [],
-        # Visual Critic
-        "visual_qa_approved": False,
-        "visual_score": 0.0,
-        "visual_issues": [],
-        # Decision
-        "decision": "REPAIR",
-        "decision_reason": "",
-        "priority_issue": "none",
-        # Repair counters
-        "geometry_repair_count": 0,
-        "max_geometry_repairs": 3,
-        "visual_revision_count": 0,
-        "max_visual_revisions": 3,
-        # Export
-        "export_directory": None,
-        "exported_files": [],
-        "asset_report": None,
+        "validation_report": None,
+
         # Events
         "events": [],
         "checkpoint_path": None,
@@ -161,6 +129,7 @@ def create_initial_state(
         "executable_operations": [],
         "execution_result": None,
         "scene_state": None,
+        "repair_plan": None,
         "errors": [],
         "iteration_count": 0,
     }

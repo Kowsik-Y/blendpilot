@@ -121,7 +121,9 @@ class PlanningAgent:
         )
 
         # 2. Add extra components
-        leg_step_ids = []
+        # Each entry is (step_id, leg_name) so assign_material can reference
+        # the exact name used in create_primitive without step-id arithmetic.
+        leg_step_info: list[tuple[int, str]] = []
         if obj_type in ["table", "chair", "stool", "desk"]:
             # Add 4 legs
             leg_positions = [
@@ -146,7 +148,7 @@ class PlanningAgent:
                         dependencies=[1],
                     )
                 )
-                leg_step_ids.append(step_id)
+                leg_step_info.append((step_id, leg_name))
 
         # 3. Create Material
         step_id += 1
@@ -176,15 +178,15 @@ class PlanningAgent:
             )
         )
 
-        for leg_step in leg_step_ids:
+        for leg_step_id, leg_name in leg_step_info:
             step_id += 1
             steps.append(
                 ModelingStep(
                     step_id=step_id,
                     operation="assign_material",
-                    target=f"leg_{leg_step - 1}",
+                    target=leg_name,
                     parameters={"material_name": mat_name},
-                    dependencies=[leg_step, mat_step_id],
+                    dependencies=[leg_step_id, mat_step_id],
                 )
             )
 
@@ -222,14 +224,6 @@ class PlanningAgent:
             )
         )
 
-        step_id += 1
-        steps.append(
-            ModelingStep(
-                step_id=step_id,
-                operation="render_preview",
-                target="Render",
-                parameters={"output_path": f"output/{obj_type}/preview.png"},
-            )
-        )
+
 
         return ModelingPlan(steps=steps)

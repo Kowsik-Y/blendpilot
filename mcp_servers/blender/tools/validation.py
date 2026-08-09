@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 from pydantic import BaseModel, Field
 
-from schemas.validation import IssueSeverity, ValidationIssue, ValidationResult
+from schemas.validation import QACheckResult, ValidationReport
 from services.blender_client import BlenderClient
 
 
@@ -41,16 +41,23 @@ async def validate_asset(client: BlenderClient, params: dict[str, Any]) -> dict[
     if not response.success or not response.result:
         return {
             "success": False,
-            "status": "FAIL",
+            "passed": False,
             "error": response.error or f"Validation failed for '{validated.object_name}'",
-            "result": ValidationResult(
-                status="FAIL",
-                issues=[ValidationIssue(type="VALIDATION_ERROR", description=response.error or "Unknown error", severity=IssueSeverity.HIGH)],
+            "result": ValidationReport(
+                passed=False,
+                checks=[QACheckResult(
+                    passed=False,
+                    severity="high",
+                    check_name="mcp_execution_error",
+                    object=validated.object_name,
+                    message=response.error or "Unknown error",
+                    suggested_action="Check Blender server connection."
+                )]
             ).model_dump(),
         }
     return {
         "success": True,
-        "status": response.result.get("status", "FAIL"),
+        "passed": response.result.get("passed", False),
         "result": response.result,
     }
 

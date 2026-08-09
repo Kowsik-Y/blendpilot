@@ -20,6 +20,52 @@ import bpy  # type: ignore[import-not-found]
 logger = logging.getLogger("blendpilot.core.validation")
 
 
+def check_empty_mesh(name: str) -> dict[str, Any]:
+    _validate_mesh_object(name)
+    obj = bpy.data.objects[name]
+    vertex_count = len(obj.data.vertices)
+    face_count = len(obj.data.polygons)
+    passed = vertex_count > 0 and face_count > 0
+    return {
+        "passed": passed,
+        "vertex_count": vertex_count,
+        "face_count": face_count,
+        "message": f"Mesh has {vertex_count} vertices and {face_count} faces." if passed else f"Mesh '{name}' is empty (0 vertices or faces).",
+    }
+
+
+def check_zero_dimensions(name: str) -> dict[str, Any]:
+    _validate_mesh_object(name)
+    obj = bpy.data.objects[name]
+    dims = obj.dimensions
+    passed = all(d >= 0.001 for d in dims)
+    return {
+        "passed": passed,
+        "dimensions": tuple(dims),
+        "message": "Dimensions are valid." if passed else f"Mesh '{name}' has zero or near-zero dimensions: {tuple(dims)}.",
+    }
+
+
+def check_duplicate_vertices(name: str) -> dict[str, Any]:
+    _validate_mesh_object(name)
+    obj = bpy.data.objects[name]
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    original_count = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0001)
+    new_count = len(bm.verts)
+    bm.free()
+
+    duplicates = original_count - new_count
+    passed = duplicates == 0
+    return {
+        "passed": passed,
+        "duplicates": duplicates,
+        "message": "No duplicate vertices found." if passed else f"Found {duplicates} duplicate vertices on '{name}'.",
+    }
+
+
 def check_triangle_count(
     name: str,
     triangle_limit: int = 10_000,
@@ -210,123 +256,109 @@ def validate_asset(
     """Run a full deterministic validation pass on an asset.
 
     Combines all individual checks into a single comprehensive result
-    matching the ValidationResult schema.
-
-    Args:
-        name: Name of the mesh object to validate.
-        triangle_limit: Maximum triangle budget.
-        expected_dimensions: Expected (width, depth, height), or None to skip.
-        dimension_tolerance: Allowed deviation from expected dimensions (meters).
-
-    Returns:
-        Dict matching the ValidationResult schema structure.
+    matching the ValidationReport schema.
     """
     _validate_mesh_object(name)
 
-    issues = []
+    checks = []
     obj = bpy.data.objects[name]
 
+    # --- Empty Mesh ---
+    empty_res = check_empty_mesh(name)
+    checks.append({
+        "passed": empty_res["passed"],
+        "severity": "critical",
+        "check_name": "empty_mesh",
+        "object": name,
+        "message": empty_res["message"],
+        "suggested_action": "Check generator logic. Mesh was created without vertices.",
+    })
+
+    # --- Zero Dimensions ---
+    zero_res = check_zero_dimensions(name)
+    checks.append({
+        "passed": zero_res["passed"],
+        "severity": "critical",
+        "check_name": "zero_dimensions",
+        "object": name,
+        "message": zero_res["message"],
+        "suggested_action": "Scale up object or rebuild with valid dimensions.",
+    })
+
     # --- Triangle count ---
-    tri_result = check_triangle_count(name, triangle_limit)
-    if not tri_result["passed"]:
-        issues.append({
-            "issue_type": "TRIANGLE_OVER_BUDGET",
-            "object_name": name,
-            "severity": "high",
-            "message": tri_result["message"],
-            "auto_fixable": True,
-        })
+    tri_res = check_triangle_count(name, triangle_limit)
+    checks.append({
+        "passed": tri_res["passed"],
+        "severity": "high",
+        "check_name": "excessive_polygon_count",
+        "object": name,
+        "message": tri_res["message"],
+        "suggested_action": "Apply a Decimate modifier to reduce polygon count.",
+    })
+
+    # --- Duplicate Vertices ---
+    dup_res = check_duplicate_vertices(name)
+    checks.append({
+        "passed": dup_res["passed"],
+        "severity": "medium",
+        "check_name": "duplicate_vertices",
+        "object": name,
+        "message": dup_res["message"],
+        "suggested_action": "Run remove doubles/merge by distance operation.",
+    })
 
     # --- Normals ---
-    normal_result = check_normals(name)
-    if not normal_result["passed"]:
-        issues.append({
-            "issue_type": "FLIPPED_NORMALS",
-            "object_name": name,
-            "severity": "medium",
-            "message": normal_result["message"],
-            "auto_fixable": True,
-        })
+    normal_res = check_normals(name)
+    checks.append({
+        "passed": normal_res["passed"],
+        "severity": "medium",
+        "check_name": "invalid_normals",
+        "object": name,
+        "message": normal_res["message"],
+        "suggested_action": "Recalculate outside normals.",
+    })
 
     # --- Non-manifold ---
-    manifold_result = check_non_manifold(name)
-    if not manifold_result["passed"]:
-        issues.append({
-            "issue_type": "NON_MANIFOLD",
-            "object_name": name,
-            "severity": "medium",
-            "message": manifold_result["message"],
-            "auto_fixable": False,
-        })
+    manifold_res = check_non_manifold(name)
+    checks.append({
+        "passed": manifold_res["passed"],
+        "severity": "high",
+        "check_name": "non_manifold_geometry",
+        "object": name,
+        "message": manifold_res["message"],
+        "suggested_action": "Manually repair topology or remove loose geometry.",
+    })
 
-    # --- Transforms ---
-    transform_result = check_transforms(name)
-    if not transform_result["passed"]:
-        for issue in transform_result["issues"]:
-            issues.append({
-                "issue_type": "UNAPPLIED_TRANSFORM",
-                "object_name": name,
-                "severity": "medium",
-                "message": f"{issue['type']}: current={issue['current']}",
-                "auto_fixable": True,
-            })
+    # --- Transforms (Invalid Scale) ---
+    transform_res = check_transforms(name)
+    checks.append({
+        "passed": transform_res["passed"],
+        "severity": "medium",
+        "check_name": "invalid_scale",
+        "object": name,
+        "message": transform_res["message"],
+        "suggested_action": "Apply transforms.",
+    })
 
-    # --- Materials ---
-    if not obj.material_slots or all(
-        slot.material is None for slot in obj.material_slots
-    ):
-        issues.append({
-            "issue_type": "MISSING_MATERIAL",
-            "object_name": name,
-            "severity": "low",
-            "message": f"Object '{name}' has no materials assigned.",
-            "auto_fixable": False,
-        })
+    # --- Missing Materials ---
+    has_mats = bool(obj.material_slots and not all(slot.material is None for slot in obj.material_slots))
+    checks.append({
+        "passed": has_mats,
+        "severity": "low",
+        "check_name": "missing_materials",
+        "object": name,
+        "message": "Materials are assigned." if has_mats else f"Object '{name}' has no materials assigned.",
+        "suggested_action": "Assign a material to the object.",
+    })
 
-    # --- Dimensions ---
-    if expected_dimensions is not None:
-        actual_dims = tuple(obj.dimensions)
-        for axis, (actual, expected) in enumerate(
-            zip(actual_dims, expected_dimensions)
-        ):
-            axis_name = ["width (X)", "depth (Y)", "height (Z)"][axis]
-            if abs(actual - expected) > dimension_tolerance:
-                issues.append({
-                    "issue_type": "DIMENSION_MISMATCH",
-                    "object_name": name,
-                    "severity": "medium",
-                    "message": (
-                        f"{axis_name}: actual={actual:.3f}m, "
-                        f"expected={expected:.3f}m (tolerance={dimension_tolerance}m)"
-                    ),
-                    "auto_fixable": True,
-                })
-
-    # --- Build result ---
-    status = "PASS" if len(issues) == 0 else "FAIL"
-
-    # Count by severity
-    severity_counts: dict[str, int] = {}
-    for issue in issues:
-        sev = issue["severity"]
-        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+    all_passed = all(c["passed"] for c in checks)
 
     result = {
-        "status": status,
-        "object_name": name,
-        "triangle_count": tri_result["triangle_count"],
-        "triangle_limit": triangle_limit,
-        "vertex_count": len(obj.data.vertices),
-        "face_count": len(obj.data.polygons),
-        "dimensions": tuple(obj.dimensions),
-        "issues": issues,
-        "issues_by_severity": severity_counts,
+        "passed": all_passed,
+        "checks": checks,
     }
 
-    logger.info(
-        "Validation '%s': %s (%d issues: %s)",
-        name, status, len(issues), severity_counts,
-    )
+    logger.info("Validation '%s': %s (%d checks)", name, "PASS" if all_passed else "FAIL", len(checks))
     return result
 
 

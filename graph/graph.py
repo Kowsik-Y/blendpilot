@@ -34,16 +34,75 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from graph.nodes import (
+    node_executor,
+    node_generator,
+    node_geometry_qa,
+    node_geometry_wait,
+    node_vision_critic,
     node_intent,
     node_planner,
-    node_generator,
-    node_executor,
     node_scene_state,
+    node_render,
+    node_decision,
+    node_repair,
+    node_export,
+    node_human_review,
+    node_refinement,
 )
 from graph.persistence import get_checkpointer
 from graph.state import BlendPilotState, create_initial_state
 
 logger = logging.getLogger("blendpilot.graph")
+
+
+def route_from_start(state: BlendPilotState) -> str:
+    """Determine the first node based on whether the state already has a scene.
+    
+    If the user provides a prompt and a scene already exists (and the pipeline
+    was previously completed or paused), we route to refinement for modification.
+    Otherwise, we start fresh at intent_node.
+    """
+    if state.get("scene_state") and state.get("status") in ("COMPLETED", "REVIEW_REQUIRED"):
+        return "refinement_node"
+    return "intent_node"
+
+
+def route_after_decision(state: BlendPilotState) -> str:
+    """Determine the next step after Geometry and Vision QA.
+    
+    Logic:
+      1. If both pass -> export_node
+      2. If iteration >= 3 -> export_node (prevent infinite loops)
+      3. If fundamentally invalid -> planner_node
+      4. Otherwise -> repair_node
+    """
+    val_report = state.get("validation_report", {})
+    vis_report = state.get("vision_report", {})
+    
+    val_pass = val_report.get("passed", False)
+    vis_pass = vis_report.get("overall_result") == "PASS"
+    
+    if val_pass and vis_pass:
+        return "export_node"
+        
+    if state.get("baseline_mode", False):
+        logger.info("Baseline mode enabled. Bypassing repair and routing to export.")
+        return "export_node"
+        
+    iteration_count = state.get("iteration_count", 0)
+    if iteration_count >= 3:
+        logger.warning("Max iterations reached. Routing to human review.")
+        return "human_review_node"
+        
+    checks = val_report.get("checks", [])
+    has_critical = any(c.get("severity") == "critical" for c in checks)
+    
+    if has_critical:
+        logger.warning("Fundamentally invalid scene detected. Re-planning.")
+        return "planner_node"
+        
+    logger.info("Repairable errors found. Routing to repair.")
+    return "repair_node"
 
 
 def build_blendpilot_graph(
@@ -70,14 +129,53 @@ def build_blendpilot_graph(
     workflow.add_node("generator_node",   node_generator)
     workflow.add_node("executor_node",    node_executor)
     workflow.add_node("scene_state_node", node_scene_state)
+    workflow.add_node("geometry_qa_node", node_geometry_qa)
+    workflow.add_node("geometry_wait_node", node_geometry_wait)
+    workflow.add_node("render_node",      node_render)
+    workflow.add_node("vision_critic_node", node_vision_critic)
+    workflow.add_node("decision_node",    node_decision)
+    workflow.add_node("repair_node",      node_repair)
+    workflow.add_node("export_node",      node_export)
+    workflow.add_node("human_review_node", node_human_review)
+    workflow.add_node("refinement_node",  node_refinement)
 
     # ── Sequential Edges (linear spine) ─────────────────────────────────────
-    workflow.add_edge(START,              "intent_node")
+    workflow.add_conditional_edges(
+        START,
+        route_from_start,
+        {
+            "intent_node": "intent_node",
+            "refinement_node": "refinement_node",
+        }
+    )
     workflow.add_edge("intent_node",       "planner_node")
     workflow.add_edge("planner_node",      "generator_node")
     workflow.add_edge("generator_node",    "executor_node")
     workflow.add_edge("executor_node",     "scene_state_node")
-    workflow.add_edge("scene_state_node",  END)
+    workflow.add_edge("scene_state_node",  "geometry_qa_node")
+    workflow.add_edge("scene_state_node",  "render_node")
+    workflow.add_edge("geometry_qa_node",  "geometry_wait_node")
+    workflow.add_edge("render_node",       "vision_critic_node")
+    workflow.add_edge("geometry_wait_node", "decision_node")
+    workflow.add_edge("vision_critic_node", "decision_node")
+
+    # ── Conditional Routing ──────────────────────────────────────────────────
+    workflow.add_conditional_edges(
+        "decision_node",
+        route_after_decision,
+        {
+            "export_node": "export_node",
+            "repair_node": "repair_node",
+            "planner_node": "planner_node",
+            "human_review_node": "human_review_node",
+        }
+    )
+
+    # Finish nodes
+    workflow.add_edge("export_node", END)
+    workflow.add_edge("human_review_node", END)
+    workflow.add_edge("repair_node", "scene_state_node")
+    workflow.add_edge("refinement_node", "scene_state_node")
 
     # ── Compile ───────────────────────────────────────────────────────────────
     cp = checkpointer or get_checkpointer()

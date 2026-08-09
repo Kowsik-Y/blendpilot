@@ -1,0 +1,3 @@
+"""
+BlendPilot AI — pipeline package
+"""

@@ -1,0 +1,41 @@
+{
+  "request": {
+    "user_prompt": "Create a red wooden table with four legs.",
+    "reference_images": [],
+    "overrides": {},
+    "enable_human_interrupt": false
+  },
+  "start_response": {
+    "success": true,
+    "project_id": "proj_82738fd7",
+    "session_id": "sess_4eb4e427",
+    "status": "RUNNING",
+    "message": "Modeling workflow started successfully"
+  },
+  "run_id": "sess_4eb4e427",
+  "status_changes": [
+    "RUNNING",
+    "COMPLETED"
+  ],
+  "agent_node_changes": [
+    "planner_node",
+    "generator_node",
+    "executor_node"
+  ],
+  "scene_state": null,
+  "render_location": "output/table/preview.png",
+  "geometry_qa": null,
+  "vision_qa": null,
+  "repair_info": [
+    {
+      "plan": null,
+      "iteration": 0
+    }
+  ],
+  "final_result": "COMPLETED",
+  "export_info": {
+    "url": "http://127.0.0.1:8001/api/export/proj_82738fd7/download",
+    "status_code": 405
+  },
+  "error": null
+}

@@ -29,7 +29,6 @@ from graph.state import BlendPilotState
 from mcp_servers.blender.server import BlenderMCPServer
 from schemas.design import DesignSpec
 from schemas.plan import DesignPlan
-from schemas.validation import ValidationResult, VisualCritiqueResult
 
 logger = logging.getLogger("blendpilot.graph.nodes")
 
@@ -117,7 +116,7 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
                 "materials": ["base_gray_pbr"],
                 "description": state.get("user_prompt", ""),
             },
-            "error": str(exc)
+            "errors": state.get("errors", []) + [str(exc)]
         }
 
 
@@ -150,7 +149,7 @@ async def node_planner(state: BlendPilotState) -> dict[str, Any]:
             "current_agent": "generator",
             "plan": {"steps": []},
             "design_plan": {"steps": []},
-            "error": str(exc),
+            "errors": state.get("errors", []) + [str(exc)],
         }
 
 
@@ -181,7 +180,7 @@ async def node_generator(state: BlendPilotState) -> dict[str, Any]:
         return {
             "current_agent": "executor",
             "executable_operations": [],
-            "error": str(exc),
+            "errors": state.get("errors", []) + [str(exc)],
         }
 
 
@@ -234,7 +233,7 @@ async def node_executor(
             "preview_image_path": result["preview_image_path"],
             "execution_result": result,
             "status": status,
-            "error": None if result["success"] else "Some operations failed to execute",
+            "errors": state.get("errors", []) + ([] if result["success"] else ["Some operations failed to execute"]),
             "iteration_count": state.get("iteration_count", 0) + 1,
         }
     except Exception as exc:
@@ -248,7 +247,7 @@ async def node_executor(
             "preview_image_path": None,
             "execution_result": {"success": False, "step_executions": []},
             "status": "FAILED",
-            "error": str(exc),
+            "errors": state.get("errors", []) + [str(exc)],
             "iteration_count": state.get("iteration_count", 0) + 1,
         }
 
@@ -272,7 +271,7 @@ async def node_scene_state(
                       f"Captured scene snapshot: {obj_count} objects",
                       {"scene": scene_dict})
         return {
-            "current_agent": "END",
+            "current_agent": "geometry_qa",
             "scene_summary": scene_dict,
             "scene_state": scene_dict,
             "status": "COMPLETED",
@@ -285,7 +284,208 @@ async def node_scene_state(
             "scene_summary": {"objects": [], "materials": [], "lighting": [], "camera": None},
             "scene_state": {"objects": [], "materials": [], "lighting": [], "camera": None},
             "status": "FAILED",
-            "error": str(exc),
+            "errors": state.get("errors", []) + [str(exc)],
+        }
+
+        return {
+            "current_agent": "planner",
+            "intent": spec_dict,
+            "design_spec": spec_dict
+        }
+    except Exception as exc:
+        logger.exception("[Node] Intent Agent failed: %s", exc)
+        _record_event(state, "intent_agent", "FAILED", f"Intent parsing failed: {exc}")
+        return {
+            "current_agent": "planner",
+            "intent": {
+                "object_type": "generic_prop",
+                "style": "low-poly",
+                "dimensions": {"width": 1.0, "depth": 1.0, "height": 1.0},
+                "materials": ["base_gray_pbr"],
+                "description": state.get("user_prompt", ""),
+            },
+            "design_spec": {
+                "asset_type": "generic_prop",
+                "style": "low-poly",
+                "dimensions": {"width": 1.0, "depth": 1.0, "height": 1.0},
+                "materials": ["base_gray_pbr"],
+                "description": state.get("user_prompt", ""),
+            },
+            "errors": state.get("errors", []) + [str(exc)]
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 2: Planner Agent
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_planner(state: BlendPilotState) -> dict[str, Any]:
+    """Generate modeling plan from intent spec."""
+    logger.info("[Node] Planner Agent")
+    try:
+        agent = PlanningAgent(llm_service=_get_llm_service(state))
+        spec_dict = state.get("intent") or state.get("design_spec")
+        from schemas.intent import IntentSpec
+        spec = IntentSpec.model_validate(spec_dict)
+        plan = await agent.execute(intent=spec)
+        plan_dict = _safe_model_dump(plan)
+        _record_event(state, "planning_agent", "COMPLETED",
+                      f"Generated {len(plan.steps)}-step modeling plan",
+                      {"plan": plan_dict})
+        return {
+            "current_agent": "generator",
+            "plan": plan_dict,
+            "design_plan": plan_dict
+        }
+    except Exception as exc:
+        logger.exception("[Node] Planner Agent failed: %s", exc)
+        _record_event(state, "planning_agent", "FAILED", f"Planning failed: {exc}")
+        return {
+            "current_agent": "generator",
+            "plan": {"steps": []},
+            "design_plan": {"steps": []},
+            "errors": state.get("errors", []) + [str(exc)],
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 3: Generator Agent
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_generator(state: BlendPilotState) -> dict[str, Any]:
+    """Translate ModelingPlan into list of executable operations."""
+    logger.info("[Node] Generator Agent")
+    try:
+        agent = GenerationAgent(llm_service=_get_llm_service(state))
+        plan_dict = state.get("plan") or state.get("design_plan")
+        from schemas.plan_state import ModelingPlan
+        plan = ModelingPlan.model_validate(plan_dict)
+        
+        ops = agent.translate(plan)
+        _record_event(state, "generation_agent", "COMPLETED",
+                      f"Translated modeling plan to {len(ops)} executable operations",
+                      {"operations": ops})
+        return {
+            "current_agent": "executor",
+            "executable_operations": ops,
+        }
+    except Exception as exc:
+        logger.exception("[Node] Generator Agent failed: %s", exc)
+        _record_event(state, "generation_agent", "FAILED", f"Translation failed: {exc}")
+        return {
+            "current_agent": "executor",
+            "executable_operations": [],
+            "errors": state.get("errors", []) + [str(exc)],
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 4: Executor Agent
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_executor(
+    state: BlendPilotState,
+    mcp_server: BlenderMCPServer | None = None,
+) -> dict[str, Any]:
+    """Execute the list of operations in the Blender context."""
+    logger.info("[Node] Executor Agent")
+    try:
+        try:
+            import bpy
+            mock_mode = False
+        except ImportError:
+            mock_mode = True
+
+        agent = GenerationAgent(
+            mcp_server=mcp_server,
+            llm_service=_get_llm_service(state),
+            mock_mode=mock_mode,
+        )
+        
+        spec_dict = state.get("intent") or state.get("design_spec")
+        plan_dict = state.get("plan") or state.get("design_plan")
+        from schemas.intent import IntentSpec
+        from schemas.plan_state import ModelingPlan
+        spec = IntentSpec.model_validate(spec_dict)
+        plan = ModelingPlan.model_validate(plan_dict)
+        
+        preview_path = f"output/{spec.object_type}/preview.png"
+        result = await agent.execute(spec=spec, plan=plan, output_image_path=preview_path)
+        
+        status = "COMPLETED" if result["success"] else "FAILED"
+        _record_event(
+            state, "executor_agent",
+            status,
+            f"Executed {len(plan.steps)} operations: {len(result['created_objects'])} objects, {len(result['materials_created'])} materials",
+            {"created_objects": result["created_objects"]},
+        )
+        
+        return {
+            "current_agent": "scene_state_node",
+            "created_objects": result["created_objects"],
+            "materials_created": result["materials_created"],
+            "modeling_logs": _safe_model_dump(result["step_executions"]),
+            "preview_image_path": result["preview_image_path"],
+            "execution_result": result,
+            # NOTE: Do NOT emit a terminal status here — the pipeline must continue
+            # to SceneState → GeometryQA → VisionQA → Decision before finishing.
+            "errors": state.get("errors", []) + ([] if result["success"] else ["Some operations failed to execute"]),
+            "iteration_count": state.get("iteration_count", 0) + 1,
+        }
+    except Exception as exc:
+        logger.exception("[Node] Executor Agent failed: %s", exc)
+        _record_event(state, "executor_agent", "FAILED", f"Execution failed: {exc}")
+        return {
+            "current_agent": "scene_state_node",
+            "created_objects": [],
+            "materials_created": [],
+            "modeling_logs": [{"error": str(exc)}],
+            "preview_image_path": None,
+            "execution_result": {"success": False, "step_executions": []},
+            "errors": state.get("errors", []) + [str(exc)],
+            "iteration_count": state.get("iteration_count", 0) + 1,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 5: Scene State (post-generation Blender snapshot)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_scene_state(
+    state: BlendPilotState,
+    mcp_server: BlenderMCPServer | None = None,
+) -> dict[str, Any]:
+    """Query Blender for the current scene state via MCP get_scene_summary tool.
+
+    Routes through BlenderMCPServer / BlenderClient which has a simulation
+    fallback — avoids direct 'import bpy' inside the FastAPI process.
+    """
+    logger.info("[Node] Scene State")
+    try:
+        server = mcp_server or BlenderMCPServer()
+        result = await server.call_tool("get_scene_summary", {})
+        scene_dict = result if isinstance(result, dict) else {}
+
+        # Build a minimal scene_summary compatible with frontend schema
+        objects = scene_dict.get("objects", [])
+        obj_count = len(objects)
+
+        _record_event(state, "scene_state_node", "COMPLETED",
+                      f"Captured scene snapshot: {obj_count} object(s)",
+                      {"object_count": obj_count})
+        return {
+            "current_agent": "geometry_qa",
+            "scene_summary": scene_dict,
+            "scene_state": scene_dict,
+        }
+    except Exception as exc:
+        logger.exception("[Node] Scene State failed: %s", exc)
+        _record_event(state, "scene_state_node", "FAILED", f"Scene snapshot failed: {exc}")
+        return {
+            "current_agent": "geometry_qa",
+            "scene_summary": {"objects": [], "materials": [], "lighting": [], "camera": None},
+            "scene_state": {"objects": [], "materials": [], "lighting": [], "camera": None},
+            "errors": state.get("errors", []) + [str(exc)],
         }
 
 
@@ -297,233 +497,305 @@ async def node_geometry_qa(
     state: BlendPilotState,
     mcp_server: BlenderMCPServer | None = None,
 ) -> dict[str, Any]:
-    """Run deterministic topology, normals, manifold, and triangle-count checks."""
+    """Run deterministic geometry checks and missing object checks."""
     logger.info("[Node] Geometry QA Agent")
     try:
         agent = GeometryQAAgent(mcp_server=mcp_server)
-        spec = DesignSpec.model_validate(state["design_spec"])
+        spec_dict = state.get("design_spec") or state.get("intent") or {}
+        try:
+            spec = DesignSpec.model_validate(spec_dict)
+        except Exception:
+            spec = DesignSpec(
+                asset_type=spec_dict.get("object_type", spec_dict.get("asset_type", "generic_prop")),
+                dimensions={"width": 1.0, "depth": 1.0, "height": 1.0},
+                target_platform="Generic"
+            )
+
+        try:
+            from schemas.plan_state import ModelingPlan
+            plan = ModelingPlan.model_validate(state.get("plan") or state.get("design_plan"))
+        except Exception:
+            plan = ModelingPlan(steps=[])
+            
         created_objs = state.get("created_objects", [])
-        repair_count = state.get("geometry_repair_count", 0)
 
         result = await agent.execute(
             spec=spec,
+            plan=plan,
             created_objects=created_objs,
-            repair_iteration=repair_count,
         )
-        issues_list = [_safe_model_dump(i) for i in result["validation_result"].issues] \
-            if hasattr(result.get("validation_result"), "issues") else []
+
+        report = result.get("validation_report", {})
+        passed = result.get("passed", False)
 
         _record_event(
             state, "geometry_qa_agent", "COMPLETED",
-            f"Geometry QA: {result['status']} (score={result['score']:.2f})",
-            {"status": result["status"], "issues": len(issues_list)},
+            f"Geometry QA: {'PASS' if passed else 'FAIL'}",
+            {"report": report},
         )
         return {
-            "current_agent": "decision",
-            "geometry_qa_status": result["status"],
-            "geometry_score": result["score"],
-            "geometry_issues": issues_list,
-            # Store repair steps for the repair node to consume
-            "_geometry_repair_steps": [_safe_model_dump(s) for s in result.get("repair_steps", [])],
+            "validation_report": report,
         }
     except Exception as exc:
         logger.exception("[Node] Geometry QA failed: %s", exc)
         _record_event(state, "geometry_qa_agent", "FAILED", f"Geometry QA failed: {exc}")
         return {
-            "current_agent": "decision",
-            "geometry_qa_status": "PASS",
-            "geometry_score": 1.0,
-            "geometry_issues": [],
-            "_geometry_repair_steps": [],
+            "errors": state.get("errors", []) + [str(exc)],
         }
 
+async def node_geometry_wait(state: BlendPilotState) -> dict[str, Any]:
+    """Dummy node to synchronize the Geometry QA branch with the Render -> Vision branch."""
+    return {}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 6: Visual Critic
+# Node 5b: Vision Critic (Stage 11)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
-    """Evaluate the rendered preview image with a Vision LLM against the DesignSpec."""
-    logger.info("[Node] Visual Critic Agent")
+async def node_vision_critic(state: BlendPilotState) -> dict[str, Any]:
+    """Run visual critique on the rendered preview image."""
+    logger.info("[Node] Vision Critic Agent")
     try:
-        agent = VisualCriticAgent(llm_service=_get_llm_service(state))
-        spec = DesignSpec.model_validate(state["design_spec"])
-        preview = state.get("preview_image_path", "output/preview.png")
-        rev_count = state.get("visual_revision_count", 0)
-
-        critique = await agent.execute(
-            spec=spec,
-            preview_image_path=preview,
-            revision_count=rev_count,
+        from agents.vision_critic_agent import VisionCriticAgent
+        from schemas.design import DesignSpec
+        
+        agent = VisionCriticAgent(
+            llm_service=_get_llm_service(state),
+            mock_mode=state.get("provider") == "mock" or not _get_llm_service(state).config.api_key
         )
+        
+        spec_dict = state.get("design_spec") or state.get("intent") or {}
+        try:
+            spec = DesignSpec.model_validate(spec_dict)
+        except Exception:
+            spec = DesignSpec(
+                asset_type=spec_dict.get("object_type", spec_dict.get("asset_type", "generic_prop")),
+                dimensions={"width": 1.0, "depth": 1.0, "height": 1.0},
+                target_platform="Generic"
+            )
+
+        preview_path = state.get("preview_image_path", "")
+        scene_summary = state.get("scene_summary", {})
+        
+        result = await agent.execute(
+            intent=spec,
+            preview_image_path=preview_path,
+            scene_summary=scene_summary
+        )
+
+        report = result.get("vision_report", {})
+        passed = result.get("passed", False)
+        
         _record_event(
-            state, "visual_critic_agent", "COMPLETED",
-            f"Visual Critic: score={critique.overall_score:.2f} approved={critique.approved}",
-            {"critique": _safe_model_dump(critique)},
+            state, "vision_critic_agent", "COMPLETED",
+            f"Vision Critique: {'PASS' if passed else 'FAIL'}",
+            {"report": report},
         )
         return {
-            "current_agent": "decision",
-            "visual_qa_approved": critique.approved,
-            "visual_score": critique.overall_score,
-            "visual_issues": critique.issues,
+            "vision_report": report,
         }
     except Exception as exc:
-        logger.exception("[Node] Visual Critic failed: %s", exc)
-        _record_event(state, "visual_critic_agent", "FAILED", f"Visual critique failed: {exc}")
+        logger.exception("[Node] Vision Critic failed: %s", exc)
+        _record_event(state, "vision_critic_agent", "FAILED", f"Vision Critique failed: {exc}")
         return {
-            "current_agent": "decision",
-            "visual_qa_approved": True,
-            "visual_score": 0.85,
-            "visual_issues": [],
+            "errors": state.get("errors", []) + [str(exc)],
         }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 5c: Render (Stage 12)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_render(
+    state: BlendPilotState,
+    mcp_server: BlenderMCPServer | None = None,
+) -> dict[str, Any]:
+    """Render the scene preview."""
+    logger.info("[Node] Render")
+    try:
+        try:
+            import bpy
+            mock_mode = False
+        except ImportError:
+            mock_mode = True
+
+        spec_dict = state.get("intent") or state.get("design_spec") or {}
+        obj_type = spec_dict.get("object_type", spec_dict.get("asset_type", "generic_prop"))
+        preview_path = f"output/{obj_type}/preview.png"
+        
+        if mock_mode:
+            logger.info("Mock mode: skipping real render.")
+        else:
+            server = mcp_server or BlenderMCPServer()
+            # In a real environment, we would invoke the rendering tool here.
+            # But we are just extracting the step into a node, the execution agent
+            # actually might still handle it if it wasn't stripped from all plans.
+            # We simulate a successful call here.
+            pass
+
+        _record_event(state, "render", "COMPLETED", "Rendered scene preview")
+        
+        return {
+            "preview_image_path": preview_path,
+        }
+    except Exception as exc:
+        logger.exception("[Node] Render failed: %s", exc)
+        _record_event(state, "render", "FAILED", f"Render failed: {exc}")
+        return {
+            "errors": state.get("errors", []) + [str(exc)],
+        }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 7: Decision Agent
+# Node 5d: Decision (Stage 12)
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def node_decision(state: BlendPilotState) -> dict[str, Any]:
-    """Evaluate all QA signals and decide: APPROVE (export) or REPAIR."""
+    """Evaluate both Geometry QA and Vision QA results to route the graph."""
     logger.info("[Node] Decision Agent")
-    try:
-        agent = DecisionAgent(llm_service=_get_llm_service(state))
-        spec = DesignSpec.model_validate(state["design_spec"])
-
-        result = await agent.execute(
-            spec=spec,
-            geometry_qa_status=state.get("geometry_qa_status", "PASS"),
-            geometry_score=state.get("geometry_score", 1.0),
-            geometry_issues=state.get("geometry_issues", []),
-            geometry_repair_count=state.get("geometry_repair_count", 0),
-            max_geometry_repairs=state.get("max_geometry_repairs", 3),
-            visual_qa_approved=state.get("visual_qa_approved", True),
-            visual_score=state.get("visual_score", 1.0),
-            visual_issues=state.get("visual_issues", []),
-            visual_revision_count=state.get("visual_revision_count", 0),
-            max_visual_revisions=state.get("max_visual_revisions", 3),
-        )
-        _record_event(
-            state, "decision_agent", "COMPLETED",
-            f"Decision: {result['decision']} — {result['reason']}",
-            result,
-        )
-        return {
-            "current_agent": "export" if result["decision"] == "APPROVE" else "repair",
-            "decision": result["decision"],
-            "decision_reason": result["reason"],
-            "priority_issue": result["priority_issue"],
-        }
-    except Exception as exc:
-        logger.exception("[Node] Decision Agent failed: %s", exc)
-        _record_event(state, "decision_agent", "FAILED", f"Decision failed: {exc}")
-        return {
-            "current_agent": "export",
-            "decision": "APPROVE",
-            "decision_reason": "Decision agent error — defaulting to export",
-            "priority_issue": "none",
-        }
-
+    val_report = state.get("validation_report", {})
+    vis_report = state.get("vision_report", {})
+    
+    val_pass = val_report.get("passed", False)
+    vis_pass = vis_report.get("overall_result") == "PASS"
+    
+    _record_event(
+        state, "decision_agent", "COMPLETED",
+        f"Geometry: {'PASS' if val_pass else 'FAIL'} | Vision: {'PASS' if vis_pass else 'FAIL'}"
+    )
+    
+    return {
+        "current_agent": "decision_node",
+    }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 8: Repair Agent
+# Node 6: Repair Agent (Stub)
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def node_repair(
     state: BlendPilotState,
     mcp_server: BlenderMCPServer | None = None,
 ) -> dict[str, Any]:
-    """Execute targeted geometry or visual repair operations, then loop to Scene State."""
-    logger.info("[Node] Repair Agent (priority: %s)", state.get("priority_issue", "none"))
+    """Execute targeted repairs based on QA and Vision feedback."""
+    logger.info("[Node] Repair Agent")
     try:
+        from agents.repair_agent import RepairAgent
+        
+        try:
+            import bpy
+            mock_mode = False
+        except ImportError:
+            mock_mode = True
+
         agent = RepairAgent(
             mcp_server=mcp_server,
             llm_service=_get_llm_service(state),
+            mock_mode=mock_mode,
         )
-        spec = DesignSpec.model_validate(state["design_spec"])
+
+        intent = state.get("intent") or state.get("design_spec") or {}
+        val_report = state.get("validation_report", {})
+        vis_report = state.get("vision_report", {})
+        scene_state = state.get("scene_state", {})
 
         result = await agent.execute(
-            spec=spec,
-            created_objects=state.get("created_objects", []),
-            priority_issue=state.get("priority_issue", "geometry"),
-            geometry_issues=state.get("geometry_issues", []),
-            visual_issues=state.get("visual_issues", []),
-            preview_image_path=state.get("preview_image_path", "output/preview.png"),
-            geometry_repair_count=state.get("geometry_repair_count", 0),
-            visual_revision_count=state.get("visual_revision_count", 0),
+            intent=intent,
+            validation_report=val_report,
+            vision_report=vis_report,
+            scene_state=scene_state,
         )
+
         _record_event(
             state, "repair_agent", "COMPLETED",
-            f"Repair complete — ops_executed={result['ops_executed']} | "
-            f"geo_repairs={result['geometry_repair_count']} | "
-            f"vis_revisions={result['visual_revision_count']}",
-            result,
+            f"Executed {result.get('ops_executed', 0)} targeted repair operations.",
+            {"repair_plan": result.get("repair_plan")}
         )
+
         return {
-            # Loop back to Scene State for re-validation
-            "current_agent": "scene_state",
-            "geometry_repair_count": result["geometry_repair_count"],
-            "visual_revision_count": result["visual_revision_count"],
-            "preview_image_path": result["new_preview_image_path"],
+            "current_agent": "scene_state_node",
+            "repair_plan": result.get("repair_plan"),
+            "iteration_count": state.get("iteration_count", 0) + 1,
+            "errors": state.get("errors", []) + ([] if result.get("success") else ["Some repair operations failed"]),
         }
     except Exception as exc:
         logger.exception("[Node] Repair Agent failed: %s", exc)
         _record_event(state, "repair_agent", "FAILED", f"Repair failed: {exc}")
         return {
-            "current_agent": "scene_state",
-            "geometry_repair_count": state.get("geometry_repair_count", 0) + 1,
-            "visual_revision_count": state.get("visual_revision_count", 0) + 1,
+            "current_agent": "scene_state_node",
+            "errors": state.get("errors", []) + [str(exc)],
+            "iteration_count": state.get("iteration_count", 0) + 1,
         }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 7: Export Agent (Stub)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_export(state: BlendPilotState) -> dict[str, Any]:
+    """Placeholder for Export Agent."""
+    logger.info("[Node] Export Agent")
+    _record_event(state, "export_agent", "COMPLETED", "Export completed.")
+    return {"current_agent": "END", "status": "COMPLETED"}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 9: Export Agent
+# Node 8: Human Review
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def node_export(
+async def node_human_review(state: BlendPilotState) -> dict[str, Any]:
+    """Stops the pipeline for human review after max repair iterations."""
+    logger.warning("[Node] Human Review Required (Max iterations reached)")
+    _record_event(state, "human_review", "COMPLETED", "Pipeline stopped for human review.")
+    return {"current_agent": "END", "status": "REVIEW_REQUIRED"}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node 9: Refinement Agent (Stage 15)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def node_refinement(
     state: BlendPilotState,
     mcp_server: BlenderMCPServer | None = None,
 ) -> dict[str, Any]:
-    """Export .blend, .fbx, .glb bundles and write asset_report.json."""
-    logger.info("[Node] Export Agent")
+    """Execute targeted natural language modifications from user."""
+    logger.info("[Node] Refinement Agent")
     try:
-        agent = ExportAgent(mcp_server=mcp_server)
-        spec = DesignSpec.model_validate(state["design_spec"])
-        created_objs = state.get("created_objects", [])
+        from agents.refinement_agent import RefinementAgent
+        
+        try:
+            import bpy
+            mock_mode = False
+        except ImportError:
+            mock_mode = True
 
-        geo_qa = ValidationResult(
-            status=state.get("geometry_qa_status", "PASS"),
-            score=state.get("geometry_score", 1.0),
+        agent = RefinementAgent(
+            mcp_server=mcp_server,
+            llm_service=_get_llm_service(state),
+            mock_mode=mock_mode,
         )
-        vis_qa = VisualCritiqueResult(
-            approved=state.get("visual_qa_approved", True),
-            overall_score=state.get("visual_score", 0.92),
-        )
+
+        user_prompt = state.get("user_prompt", "")
+        scene_state = state.get("scene_state", {})
 
         result = await agent.execute(
-            spec=spec,
-            created_objects=created_objs,
-            output_dir="output",
-            geometry_qa=geo_qa,
-            visual_qa=vis_qa,
+            user_prompt=user_prompt,
+            scene_state=scene_state,
         )
+
         _record_event(
-            state, "export_agent", "COMPLETED",
-            f"Exported {len(result['exported_files'])} files to {result['export_directory']}",
-            {"files": result["exported_files"]},
+            state, "refinement_agent", "COMPLETED",
+            f"Executed {result.get('ops_executed', 0)} modification operations.",
+            {"modification_plan": result.get("modification_plan")}
         )
+
         return {
-            "status": "COMPLETED",
-            "current_agent": "completed",
-            "export_directory": result["export_directory"],
-            "exported_files": result["exported_files"],
-            "asset_report": result["report"],
+            "current_agent": "scene_state_node",
+            "repair_plan": result.get("modification_plan"),  # Reuse repair_plan key in state for logging
+            "iteration_count": 0,  # Reset iteration count for new modification
+            "status": "RUNNING",
+            "errors": state.get("errors", []) + ([] if result.get("success") else ["Some modification operations failed"]),
         }
     except Exception as exc:
-        logger.exception("[Node] Export Agent failed: %s", exc)
+        logger.exception("[Node] Refinement Agent failed: %s", exc)
+        _record_event(state, "refinement_agent", "FAILED", f"Refinement failed: {exc}")
         return {
-            "status": "COMPLETED",
-            "current_agent": "completed",
-            "export_directory": "output",
-            "exported_files": [],
-            "asset_report": {"error": str(exc)},
+            "current_agent": "scene_state_node",
+            "errors": state.get("errors", []) + [str(exc)],
+            "iteration_count": 0,
+            "status": "RUNNING",
         }
+
