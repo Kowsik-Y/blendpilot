@@ -173,7 +173,7 @@ export default function StudioPage() {
 
       if (currentPayload.event === "on_tool_start" || currentPayload.event === "tool_start") {
         setActiveNode("modeling_agent");
-        
+
         if (node === "create_primitive" && state.input) {
           const input = state.input;
           if (input.name) {
@@ -259,7 +259,7 @@ export default function StudioPage() {
       sessionId: sid,
       onOpen: (transport) => {
         if (transport === "websocket") {
-          toast.success("Live workflow socket connected");
+          toast.success("Live workflow socket connected", { id: "ws-connected" });
         }
       },
 
@@ -282,7 +282,7 @@ export default function StudioPage() {
   useEffect(() => {
     workflowStreamRef.current?.close();
     workflowStreamRef.current = null;
-    
+
     fetch(`/api/projects/${projectId}`)
       .then((res) => res.json())
       .then((data) => {
@@ -307,8 +307,17 @@ export default function StudioPage() {
       .catch((e) => console.error("Failed to fetch project", e));
 
     queueMicrotask(() => {
-      setSessionId(null);
-      setRunning(false);
+      const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
+      const existingSessionId = sessions[projectId];
+
+      if (existingSessionId) {
+        setSessionId(existingSessionId);
+        setRunning(true);
+        connectStream(existingSessionId);
+      } else {
+        setSessionId(null);
+        setRunning(false);
+      }
       setActiveNode(null);
       setCompletedNodes([]);
       setHumanReviewOpen(false);
@@ -378,40 +387,6 @@ export default function StudioPage() {
 
   return (
     <div className="h-full flex flex-col gap-3 p-4 sm:p-6 min-h-[calc(100vh-4rem)]">
-      {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-primary text-primary-foreground shadow-md">
-            <Box className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              BlendPilot 3D Studio
-              <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
-                {running ? activeNode || "running" : "10-Agent Copilot"}
-              </Badge>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {completedNodes.length > 0
-                ? `${completedNodes.length} orchestration stages completed`
-                : "Production-grade 3D Viewport with unified Copilot Chat & Agent Stream"}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownload}
-            className="text-xs border-border text-foreground gap-1.5 h-8 hover:border-cyan-500/50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download Package (.zip)
-          </Button>
-        </div>
-      </div>
 
       {/* Main Studio Workspace: viewport + editor rail + chat */}
       <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)] gap-4 items-stretch overflow-hidden">
@@ -429,9 +404,21 @@ export default function StudioPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center justify-between gap-2">
                 <span>Live Workflow</span>
-                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
-                  {running ? activeNode || "running" : "idle"}
-                </Badge>
+                <div className="items-center gap-2 flex">
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
+                    {running ? activeNode || "running" : "idle"}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDownload}
+                    className="text-xs border-border text-foreground gap-1.5 h-8 hover:border-cyan-500/50"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download Package (.zip)
+                  </Button>
+
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
@@ -466,17 +453,14 @@ export default function StudioPage() {
               <TabsTrigger value="inspector">Scene Inspector</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
+            <TabsContent value="chat" keepMounted className={rightPanelTab === "chat" ? "min-h-0 flex-1 overflow-hidden flex flex-col" : "hidden"}>
               <div className="h-full min-h-0 overflow-hidden">
                 <CopilotChatbox
                   key={projectId}
+                  projectId={projectId}
                   assetSpec={assetSpec}
                   onApplyAction={(action) => {
-                    if (action.includes("Pipeline")) {
-                      handleStartPipeline(
-                        `Create a low-poly ${assetSpec?.asset_type || "sci-fi crate"} with beveled edges and PBR materials.`
-                      );
-                    }
+                    // Do nothing here; CopilotChatbox's handleSend already triggers onStartPipeline
                   }}
                   onStartPipeline={(p) => handleStartPipeline(p)}
                   onWorkflowEvent={handleWorkflowStreamPayload}
@@ -486,7 +470,7 @@ export default function StudioPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="inspector" className="min-h-0 flex-1 overflow-hidden">
+            <TabsContent value="inspector" keepMounted className={rightPanelTab === "inspector" ? "min-h-0 flex-1 overflow-hidden flex flex-col" : "hidden"}>
               <Card className="border-border/70 bg-card/80 backdrop-blur-xl shadow-lg h-full flex flex-col">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center justify-between gap-2">

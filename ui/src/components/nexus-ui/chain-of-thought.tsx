@@ -32,7 +32,7 @@ function ChainOfThoughtContent({ children, className }: React.ComponentProps<typ
 }
 
 function ChainOfThoughtStep({ children, status = "pending", className }: React.ComponentProps<"li"> & { status?: ThoughtStatus }) {
-  const icon = status === "completed" ? <CheckCircle2 className="mt-0.5 text-primary" /> : status === "running" ? <LoaderCircle className="mt-0.5 animate-spin text-primary" /> : status === "failed" ? <Circle className="mt-0.5 text-destructive" /> : <Circle className="mt-0.5 text-muted-foreground" />;
+  const icon = status === "completed" ? <CheckCircle2 className="mt-0.5 text-primary h-3 w-3" /> : status === "running" ? <LoaderCircle className="mt-0.5 animate-spin text-primary" /> : status === "failed" ? <Circle className="mt-0.5 text-destructive" /> : <Circle className="mt-0.5 text-muted-foreground" />;
   return <li data-status={status} className={cn("flex items-start gap-2 text-sm text-muted-foreground", className)}>{icon}<div className="min-w-0">{children}</div></li>;
 }
 

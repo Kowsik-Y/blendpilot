@@ -219,6 +219,7 @@ export default function SettingsPage() {
                   <Select
                     value={provider}
                     onValueChange={(value) => {
+                      if (!value) return;
                       const p = value as LLMProvider;
                       setProvider(p);
                       if (DEFAULT_MODELS[p]?.[0]) {
@@ -251,7 +252,8 @@ export default function SettingsPage() {
                       <Select
                         value={DEFAULT_MODELS[provider]?.some(m => m.id === model) ? model : "custom-input"}
                         onValueChange={(value) => {
-                          if (value && value !== "custom-input") {
+                          if (!value) return;
+                          if (value !== "custom-input") {
                             setModel(value);
                           } else {
                             setModel("");
