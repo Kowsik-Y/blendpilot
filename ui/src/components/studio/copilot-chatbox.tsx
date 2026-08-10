@@ -31,21 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Thread } from "@/components/assistant-ui/thread";
 import {
-  MessageScroller,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerButton,
-} from "@/components/ui/message-scroller";
-import {
-  Message,
-  MessageAvatar,
-  MessageContent,
-  MessageFooter,
-} from "@/components/ui/message";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
+  useExternalStoreRuntime,
+  useExternalMessageConverter,
+  AssistantRuntimeProvider,
+  type ThreadMessageLike,
+} from "@assistant-ui/react";
 import {
   PromptInput,
   PromptInputActionGroup,
@@ -63,19 +55,7 @@ import {
   type CopilotAttachment,
   type CopilotCitation,
 } from "@/components/nexus-ui/copilot-parts";
-import {
-  ChainOfThought,
-  ChainOfThoughtComplete,
-  ChainOfThoughtContent,
-  ChainOfThoughtStep,
-  ChainOfThoughtStepTitle,
-  ChainOfThoughtTrigger,
-} from "@/components/nexus-ui/chain-of-thought";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/nexus-ui/reasoning";
+
 import { AGENT_DEFINITIONS } from "@/components/studio/agent-timeline";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -256,11 +236,14 @@ export function CopilotChatbox({
     }
   };
 
+  const activeMessageIdRef = useRef<string | null>(null);
+
   // Listen to live pipeline WebSocket stream and update in-chat Agent Progress & Thought Bubbles
   useEffect(() => {
     if (!pipelineSessionId) return;
 
     handledWorkflowEventsRef.current.clear();
+    activeMessageIdRef.current = nextMessageId("copilot");
     setLiveThinking({ active: true, content: "", tools: [] });
 
     const stream = connectWorkflowStream({
@@ -296,7 +279,7 @@ export function CopilotChatbox({
                   setMessages(m => {
                     const last = m[m.length - 1];
                     if (last && last.role === "agent" && last.content === finalContent) return m;
-                    return [...m, { id: nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
                 }
                 return { ...prev, content: "", tools: [] };
@@ -310,11 +293,11 @@ export function CopilotChatbox({
                     if (last && last.role === "agent" && (last.content === finalContent || last.tools?.length === prev.tools.length)) {
                        return m;
                     }
-                    return [...m, { id: nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
                 } else if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {
-                    id: nextMessageId("error"),
+                    id: activeMessageIdRef.current || nextMessageId("error"),
                     role: "agent",
                     content: `⚠️ Agent Error: ${payload.error || "Workflow crashed (e.g. LLM recursion limit)"}`,
                     time: "Just now"
@@ -348,6 +331,102 @@ export function CopilotChatbox({
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const threadMessages = useExternalMessageConverter<CopilotMessage>({
+    callback: (m) => {
+      const parts: any[] = [];
+      if (m.thinking) {
+        parts.push({ type: "reasoning", text: m.thinking });
+      }
+      if (m.tools && m.tools.length > 0) {
+        m.tools.forEach(t => {
+          const toolPart: any = {
+            type: "tool-call",
+            toolName: t.name,
+            toolCallId: t.id,
+            args: t.input || {},
+          };
+          if (t.status === "done") {
+            toolPart.result = "Success";
+          } else if (t.status === "failed") {
+            toolPart.error = "Tool failed";
+          }
+          parts.push(toolPart);
+        });
+      }
+      if (m.content) {
+        parts.push({ type: "text", text: m.content });
+      }
+      return {
+        id: m.id,
+        role: (m.role === "agent" || m.role === "copilot") ? "assistant" : m.role,
+        content: parts,
+      };
+    },
+    messages: [
+      ...messages,
+      ...(liveThinking.active
+        ? [
+            {
+              id: activeMessageIdRef.current || "live-thinking",
+              role: "agent" as const,
+              content: liveThinking.content,
+              tools: liveThinking.tools,
+              time: "Just now",
+            },
+          ]
+        : []),
+    ],
+    isRunning: pipelineRunning || loading,
+  });
+
+  const runtime = useExternalStoreRuntime({
+    messages: threadMessages,
+    isRunning: pipelineRunning || loading,
+    onNew: async (msg) => {
+      if (msg.content[0]?.type === "text") {
+        await handleSend(msg.content[0].text);
+      }
+    },
+    onReload: async (parentId) => {
+      // Find the user message we are reloading from
+      const targetIndex = messages.findIndex(m => m.id === parentId);
+      if (targetIndex === -1) return;
+      
+      const targetMessage = messages[targetIndex];
+      
+      // Trim all messages after the parent user message
+      setMessages(messages.slice(0, targetIndex + 1));
+      
+      // Trigger the pipeline again with the user's original text
+      if (onStartPipeline && targetMessage.content) {
+        handledWorkflowEventsRef.current.clear();
+        onStartPipeline(targetMessage.content as string);
+      }
+    },
+    onEdit: async (message) => {
+      // Find the user message we are editing
+      const targetIndex = messages.findIndex(m => m.id === message.sourceId);
+      if (targetIndex === -1) return;
+      
+      const newText = Array.isArray(message.content) 
+        ? message.content.find((c: any) => c.type === "text")?.text || ""
+        : message.content;
+      
+      // Update the user message and trim all messages after it
+      const newMessages = [...messages.slice(0, targetIndex), {
+        ...messages[targetIndex],
+        content: newText as string,
+      }];
+      setMessages(newMessages);
+      
+      // Trigger the pipeline again with the user's new text
+      if (onStartPipeline && newText) {
+        handledWorkflowEventsRef.current.clear();
+        onStartPipeline(newText as string);
+      }
+    }
+  });
 
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
@@ -410,176 +489,12 @@ export function CopilotChatbox({
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
             <div className="flex-1 min-h-0 relative">
-              <MessageScrollerProvider autoScroll>
-                <MessageScroller>
-                  <MessageScrollerViewport className="pr-2">
-                    <MessageScrollerContent className="space-y-3 pb-2">
-
-                      {/* Message Flow */}
-                      {messages.map((m, idx) => {
-                        const isUser = m.role === "user";
-                        const isAgent = m.role === "agent";
-
-                        return (
-                          <MessageScrollerItem key={`${m.id}-${idx}`} messageId={m.id} scrollAnchor={isUser} className="order-1">
-                            <Message align={isUser ? "end" : "start"} className="my-2">
-                              <MessageContent>
-                                <Bubble variant={isUser ? "default" : "ghost"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
-                                  <BubbleContent>
-                                    {/* Copy Action Button */}
-                                    <button
-                                      onClick={() => handleCopy(m.id, m.content)}
-                                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md bg-background/80 hover:bg-muted text-muted-foreground"
-                                      title="Copy message"
-                                    >
-                                      {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                    </button>
-
-                                    <AttachmentList attachments={m.attachments} />
-
-                                    {/* Agent Persistent Thinking & Tools */}
-                                    {(m.thinking || (m.tools && m.tools.length > 0)) && (
-                                      <div className="flex flex-col gap-3 mb-2">
-                                        {m.thinking && (
-                                          <Reasoning isStreaming={false}>
-                                            <ReasoningTrigger>Analyzed</ReasoningTrigger>
-                                            <ReasoningContent>
-                                              <div className="prose prose-invert prose-xs max-w-none wrap-break-word opacity-80">
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.thinking}</ReactMarkdown>
-                                              </div>
-                                            </ReasoningContent>
-                                          </Reasoning>
-                                        )}
-                                        {m.tools && m.tools.length > 0 && (
-                                          <div className={m.thinking ? "border-t border-border/40 pt-2" : ""}>
-                                            <ChainOfThought autoCloseOnAllComplete={true}>
-                                              <ChainOfThoughtTrigger icon={<HugeiconsIcon icon={AiBrain01Icon} strokeWidth={1.75} className="size-4" />}>
-                                                Tool Execution Trace
-                                              </ChainOfThoughtTrigger>
-                                              <ChainOfThoughtContent>
-                                                {m.tools.map((t, tidx) => (
-                                                  <ChainOfThoughtStep key={tidx} status={t.status === "done" ? "completed" : "failed"}>
-                                                    <ChainOfThoughtStepTitle icon={<HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.75} className="size-4" />}>
-                                                      {t.name.replace(/_/g, ' ')}
-                                                    </ChainOfThoughtStepTitle>
-                                                    {t.input && (
-                                                      <pre className="mt-1.5 p-1.5 rounded-md bg-muted/50 text-[10px] text-muted-foreground/80 overflow-x-auto border border-border/20 max-h-24 font-mono">
-                                                        {JSON.stringify(t.input, null, 2)}
-                                                      </pre>
-                                                    )}
-                                                  </ChainOfThoughtStep>
-                                                ))}
-                                                <ChainOfThoughtComplete
-                                                  label="Agent finished executing tools"
-                                                  icon={<HugeiconsIcon icon={CheckmarkCircle01Icon} strokeWidth={1.75} className="size-4" />}
-                                                />
-                                              </ChainOfThoughtContent>
-                                            </ChainOfThought>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Markdown Body */}
-                                    {m.content && (
-                                      <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                                      </div>
-                                    )}
-
-                                    <Citations sources={m.citations} />
-
-
-
-                                    {/* Suggested actions are executable Studio prompts. */}
-                                    {m.actions && m.actions.length > 0 && (
-                                      <div className="mt-2.5 border-t border-border/40 pt-2">
-                                        <Suggestions items={m.actions} disabled={loading || pipelineRunning} onSelect={(action) => {
-                                          handleSend(action);
-                                          onApplyAction?.(action);
-                                        }} />
-                                      </div>
-                                    )}
-                                  </BubbleContent>
-                                </Bubble>
-
-                                <MessageFooter className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 w-full">
-                                  <span>{m.time}</span>
-                                  {!isUser && <FeedbackBar onFeedback={(rating) => toast.success(rating === "up" ? "Feedback saved — thank you." : "Thanks — we’ll use that to improve the next response.")} />}
-                                  {m.isLiveLLM && (
-                                    <span className="text-cyan-400 font-mono flex items-center gap-0.5 ml-auto">
-                                      <Sparkles className="w-2.5 h-2.5" /> Live LLM
-                                    </span>
-                                  )}
-                                </MessageFooter>
-                              </MessageContent>
-                            </Message>
-                          </MessageScrollerItem>
-                        );
-                      })}
-
-                      {liveThinking.active && (
-                        <MessageScrollerItem messageId="live-thinking" className="order-1 animate-in fade-in slide-in-from-bottom-2">
-                          <Message align="start" className="my-2">
-                            <MessageContent>
-                              <Bubble variant="ghost" align="start">
-                                <BubbleContent>
-                                  <div className="flex flex-col gap-3">
-                                      {liveThinking.tools.length > 0 && (
-                                        <div className="border-t border-border/40 pt-2">
-                                          <ChainOfThought>
-                                            <ChainOfThoughtTrigger icon={<HugeiconsIcon icon={AiBrain01Icon} strokeWidth={1.75} className="size-4" />}>
-                                              Tool Execution Trace
-                                            </ChainOfThoughtTrigger>
-                                            <ChainOfThoughtContent>
-                                              {liveThinking.tools.map((t, tidx) => (
-                                                <ChainOfThoughtStep key={tidx} status={t.status === "done" ? "completed" : (t.status === "failed" ? "failed" : "in-progress")}>
-                                                  <ChainOfThoughtStepTitle icon={<HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.75} className="size-4" />}>
-                                                    {t.name.replace(/_/g, ' ')}
-                                                  </ChainOfThoughtStepTitle>
-                                                  {t.input && (
-                                                    <pre className="mt-1.5 p-1.5 rounded-md bg-muted/50 text-[10px] text-muted-foreground/80 overflow-x-auto border border-border/20 max-h-24 font-mono">
-                                                      {JSON.stringify(t.input, null, 2)}
-                                                    </pre>
-                                                  )}
-                                                </ChainOfThoughtStep>
-                                              ))}
-                                            </ChainOfThoughtContent>
-                                          </ChainOfThought>
-                                        </div>
-                                      )}
-                                      
-                                      {liveThinking.content && (
-                                        <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
-                                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveThinking.content + " █"}</ReactMarkdown>
-                                        </div>
-                                      )}
-                                      {!liveThinking.content && liveThinking.tools.length === 0 && (
-                                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                                          <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
-                                        </span>
-                                      )}
-                                  </div>
-                                </BubbleContent>
-                              </Bubble>
-                            </MessageContent>
-                          </Message>
-                        </MessageScrollerItem>
-                      )}
-
-                      {loading && (
-                        <div className="order-2 flex items-center gap-2 p-2 text-xs text-muted-foreground">
-                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                          <TextShimmer>{hasApiKey ? "Generating with " + llmProvider.toUpperCase() + "..." : "Processing..."}</TextShimmer>
-                        </div>
-                      )}
-                    </MessageScrollerContent>
-                  </MessageScrollerViewport>
-                  <MessageScrollerButton />
-                </MessageScroller>
-              </MessageScrollerProvider>
+              <AssistantRuntimeProvider runtime={runtime}>
+                <Thread components={{ Composer: () => null }} />
+              </AssistantRuntimeProvider>
             </div>
           </div>
+
           {/* Chat Input Bar with Plan Toggle */}
           <div className="border-t border-border p-3">
             <PromptInput onSubmit={handleSend}>

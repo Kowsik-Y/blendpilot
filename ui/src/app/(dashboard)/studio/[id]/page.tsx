@@ -8,13 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   Box,
   Download,
+  History,
 } from "lucide-react";
 import { ThreeViewport, type WorkflowSceneObject } from "@/components/studio/three-viewport";
 import { HumanReviewModal } from "@/components/studio/human-review-modal";
 import { CopilotChatbox } from "@/components/studio/copilot-chatbox";
+import { VersionHistory } from "@/components/studio/version-history";
 import { connectWorkflowStream, type WorkflowStreamPayload } from "@/lib/workflow-stream";
 
 interface StudioAssetSpec {
@@ -110,6 +113,8 @@ export default function StudioPage() {
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
   const [selectedObjectName, setSelectedObjectName] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<"chat" | "inspector">("chat");
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [checkpointRefreshTrigger, setCheckpointRefreshTrigger] = useState(0);
 
 
   const [assetSpec, setAssetSpec] = useState<StudioAssetSpec>({
@@ -273,6 +278,10 @@ export default function StudioPage() {
           }
         }
       }
+      
+      if (currentPayload.event === "on_tool_end" && node === "save_checkpoint") {
+        setCheckpointRefreshTrigger(prev => prev + 1);
+      }
 
       if (node) {
         setCompletedNodes((prev) => (prev.includes(node) ? prev : [...prev, node]));
@@ -428,7 +437,25 @@ export default function StudioPage() {
     <div className="h-full flex flex-col gap-3 p-4 sm:p-6 min-h-[calc(100vh-4rem)]">
 
       {/* Main Studio Workspace: viewport + editor rail + chat */}
-      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)] gap-4 items-stretch overflow-hidden">
+      <div className={cn(
+        "flex-1 grid grid-cols-1 gap-4 items-stretch overflow-hidden",
+        versionHistoryOpen 
+          ? "xl:grid-cols-[240px_minmax(0,1.45fr)_minmax(0,0.95fr)]"
+          : "xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]"
+      )}>
+        
+        {/* Left Sidebar: Version History */}
+        {versionHistoryOpen && (
+          <div className="hidden xl:flex flex-col min-w-0 h-full overflow-hidden">
+            <VersionHistory 
+              projectId={projectId} 
+              refreshTrigger={checkpointRefreshTrigger}
+              onRestore={(path) => handleStartPipeline(`Restore the scene to checkpoint: ${path}`)} 
+            />
+          </div>
+        )}
+
+        {/* Center: Viewport + Stats */}
         <div className="flex min-w-0 h-full flex-col gap-4 overflow-hidden">
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <ThreeViewport
@@ -447,6 +474,18 @@ export default function StudioPage() {
                   <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
                     {running ? activeNode || "running" : "idle"}
                   </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setVersionHistoryOpen(!versionHistoryOpen)}
+                    className={cn(
+                      "text-xs border-border h-8 gap-1.5 transition-colors",
+                      versionHistoryOpen ? "bg-accent text-accent-foreground" : "text-foreground hover:border-cyan-500/50"
+                    )}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    History
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

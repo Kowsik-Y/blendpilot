@@ -43,6 +43,7 @@ Rendering tools:
 
 Project tools:
 - `save_checkpoint(path)` — Save .blend checkpoint
+- `restore_checkpoint(filepath)` — Roll back to a saved .blend checkpoint
 - `save_project(path)` — Save project file
 - `export_asset(object_names, format, path)` — Export FBX or GLB
 
@@ -63,9 +64,10 @@ Each step must contain:
 3. **Save checkpoints** after major milestones (blockout, geometry, materials)
 4. **Build from primitives** — create complex shapes by combining simple ones
 5. **Set dimensions explicitly** — don't rely on Blender defaults
-6. **Position objects precisely** — calculate positions from dimensions
-7. **Plan materials last** — geometry must be finalized first
-8. **End with render and export** — always produce a preview
+6. **Position objects precisely** — calculate positions from dimensions. **CRITICAL: Blender's create_primitive tool places the object's origin at its geometric center.**
+7. **Stack objects correctly** — Blender is Z-up. To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Objects like TableTops must be placed ON TOP of legs (higher Z), not at the origin. Do NOT build inverted objects.
+8. **Plan materials last** — geometry must be finalized first
+9. **End with render and export** — always produce a preview
 
 ## Example Plan
 
