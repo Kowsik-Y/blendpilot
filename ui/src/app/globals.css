@@ -1,8 +1,25 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "tw-shimmer";
 
 @custom-variant dark (&:is(.dark *));
+
+@keyframes shimmer {
+  100% {
+    mask-position: -200% 0;
+  }
+}
+
+@keyframes nexus-text-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility shimmer {
+  animation: shimmer 1.5s linear infinite;
+}
 
 @layer base {
   :root {
@@ -130,6 +147,22 @@ body {
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  @keyframes collapsible-down {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  to {
+    height: 0;
+    }
+  }
 }
 
 :root {
@@ -200,3 +233,34 @@ body {
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+@layer utilities {
+
+@keyframes reasoning-expand {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height);
+    }
+  }
+
+@keyframes reasoning-collapse {
+  from {
+    height: var(--radix-collapsible-content-height);
+    }
+  to {
+    height: 0;
+    }
+  }
+  .animate-collapsible-down {
+    animation: reasoning-expand 0.2s ease-out;
+  }
+  .animate-collapsible-up {
+    animation: reasoning-collapse 0.2s ease-out;
+  }
+}
+
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

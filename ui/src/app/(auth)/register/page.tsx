@@ -48,7 +48,7 @@ export default function RegisterPage() {
       if (loginRes?.error) {
         router.push("/login");
       } else {
-        router.push("/chat");
+        router.push("/projects");
         router.refresh();
       }
     } catch {

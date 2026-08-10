@@ -53,3 +53,12 @@ async def test_mcp_server_validation_tool(mcp_server):
     )
     assert res["success"] is True
     assert res["status"] in ["PASS", "FAIL"]
+
+
+@pytest.mark.asyncio
+async def test_live_client_does_not_simulate_a_disconnected_bridge():
+    client = BlenderClient(port=1, timeout=0.01)
+    response = await client.execute("create_primitive", {"primitive_type": "cube", "name": "ShouldNotExist"})
+
+    assert response.success is False
+    assert response.error and "Blender Bridge unavailable" in response.error

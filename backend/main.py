@@ -20,6 +20,12 @@ from backend.api.workflow import router as workflow_router
 from backend.routers.copilot import router as copilot_router
 from backend.config import settings
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+
 # Configure root logger
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -34,6 +40,15 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s (v%s)...", settings.app_name, settings.app_version)
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs(settings.checkpoints_dir, exist_ok=True)
+    
+    # Initialize OpenTelemetry Global Tracer Provider
+    provider = TracerProvider()
+    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    trace.set_tracer_provider(provider)
+    
+    # Instrument Langchain and LangGraph calls globally
+    LangchainInstrumentor().instrument()
+    
     yield
     logger.info("Shutting down %s...", settings.app_name)
 
@@ -58,6 +73,9 @@ app.add_middleware(
 app.include_router(workflow_router)
 app.include_router(export_router)
 app.include_router(copilot_router)
+
+# ── OpenTelemetry Instrumentation ───────────────────────────
+FastAPIInstrumentor.instrument_app(app)
 
 @app.get("/api/health")
 async def health_check() -> dict[str, str]:

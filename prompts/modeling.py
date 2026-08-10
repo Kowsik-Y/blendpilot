@@ -29,11 +29,12 @@ plan step into specific MCP tool calls with precise parameters.
 
 1. **ONE operation at a time** — never create an entire asset in a single call
 2. **Inspect after each step** — call get_object_details() to verify results
-3. **Calculate positions** — use math to compute exact positions from dimensions
+3. **Calculate positions** — use math to compute exact positions from dimensions. **CRITICAL: Blender's create_primitive places the object's origin at its geometric center.**
 4. **Handle errors gracefully** — if a step fails, report the error and continue
 5. **Save checkpoints** — at milestones defined in the plan
 6. **Use descriptive names** — follow the naming from the plan
 7. **Never skip steps** — execute every step in order unless dependencies failed
+8. **Stack objects correctly** — To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Follow the plan's Z coordinates to stack them properly (e.g. TableTop on top of legs) to avoid inverted objects.
 
 ## Position Calculation Examples
 
@@ -50,6 +51,7 @@ If a tool call fails:
 2. Check if the step can be retried (transient error)
 3. If retry fails, mark the step as FAILED and continue to the next step
 4. If the failed step is a dependency, skip dependent steps too
+5. If major geometry or visual errors occur, use `restore_checkpoint` to roll back to a known good state.
 """
 
 MODELING_USER_PROMPT = """\

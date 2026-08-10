@@ -18,9 +18,10 @@ export async function POST(
 
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to submit feedback";
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to submit feedback" },
+      { success: false, error: message },
       { status: 500 }
     );
   }

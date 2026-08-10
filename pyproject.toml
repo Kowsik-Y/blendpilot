@@ -26,7 +26,13 @@ dependencies = [
     "langgraph>=0.0.30",
     "openai>=1.0",
     "langchain-openai",
-    "langchain-anthropic"
+    "langchain-anthropic",
+    "langgraph-checkpoint-postgres",
+    "psycopg[binary,pool]",
+    "tavily-python",
+    "opentelemetry-sdk",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-langchain"
 ]
 
 [project.optional-dependencies]

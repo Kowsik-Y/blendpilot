@@ -2,10 +2,10 @@
 BlendPilot AI — Live Blender Bridge Server Launcher
 
 Starts Blender with the BlendPilot bridge add-on running on localhost:9876.
-Can run in headless background mode or interactive GUI mode.
+The GUI process stays alive so the bridge can safely execute Blender commands.
 
 Usage:
-    python scripts/start_blender_bridge.py [--gui] [--port 9876]
+    python scripts/start_blender_bridge.py [--port 9876]
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ import os
 import subprocess
 import sys
 import time
+from urllib.error import URLError
+from urllib.request import urlopen
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blendpilot.bridge.launcher")
@@ -47,13 +49,25 @@ def find_blender_binary() -> str:
     )
 
 
+def bridge_is_healthy(host: str, port: int) -> bool:
+    """Return whether a compatible local bridge already owns this endpoint."""
+    try:
+        with urlopen(f"http://{host}:{port}/health", timeout=1.0) as response:
+            return response.status == 200
+    except (URLError, TimeoutError):
+        return False
+
+
 def start_bridge(
     blender_path: str | None = None,
-    gui: bool = False,
+    gui: bool = True,
     host: str = "127.0.0.1",
     port: int = 9876,
 ) -> subprocess.Popen:
     """Launch Blender and start the BlendPilot bridge server."""
+    if bridge_is_healthy(host, port):
+        raise RuntimeError(f"BlendPilot Bridge is already running on http://{host}:{port}")
+
     bin_path = blender_path or find_blender_binary()
     logger.info("Found Blender executable at: %s", bin_path)
 
@@ -71,9 +85,11 @@ start_bridge_server(host={repr(host)}, port={port})
 print(f"BlendPilot Bridge active on http://{host}:{port}")
 """
 
+    # Blender exits after a background Python expression completes. Keep the
+    # interactive process alive so the bridge's HTTP server remains available.
     cmd = [bin_path]
     if not gui:
-        cmd.append("--background")
+        raise ValueError("Headless bridge mode is not supported; start the interactive Blender bridge instead.")
 
     cmd.extend(["--python-expr", bootstrap_code])
 
@@ -85,12 +101,16 @@ print(f"BlendPilot Bridge active on http://{host}:{port}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Start BlendPilot Blender Bridge")
-    parser.add_argument("--gui", action="store_true", help="Launch in interactive GUI mode")
+    parser.add_argument("--gui", action="store_true", help="Deprecated: the bridge always launches Blender interactively")
     parser.add_argument("--host", default="127.0.0.1", help="Bridge host")
     parser.add_argument("--port", type=int, default=9876, help="Bridge port")
     args = parser.parse_args()
 
-    proc = start_bridge(gui=args.gui, host=args.host, port=args.port)
+    if bridge_is_healthy(args.host, args.port):
+        logger.info("BlendPilot Bridge is already healthy on http://%s:%d", args.host, args.port)
+        raise SystemExit(0)
+
+    proc = start_bridge(gui=True, host=args.host, port=args.port)
     try:
         proc.wait()
     except KeyboardInterrupt:
