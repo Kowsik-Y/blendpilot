@@ -93,6 +93,22 @@ class BlendPilotAgent:
 
     async def astream_events(self, user_input: str, session_id: str = "default_thread") -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the execution trace using astream_events."""
+        try:
+            summary = await self.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
+            if isinstance(summary, dict) and not summary.get("error"):
+                safe_summary = {k: v for k, v in summary.items() if k not in ["success", "error"]}
+                user_input += (
+                    f"\n\n[System Note: Current Blender scene state: {safe_summary}. "
+                    "CRITICAL RULES: "
+                    "1. Do not hallucinate objects not listed here. "
+                    "2. ALWAYS check the 'dimensions' and 'location' of existing objects in this summary before creating new objects (e.g. if making a cup for a table, scale the cup down drastically so it physically fits on the table). "
+                    "3. If a tool fails more than twice, STOP retrying and ask the user for help to avoid infinite loops. "
+                    "4. SPATIAL REASONING: Blender's Z-axis is UP and primitive origins are at their center. When placing supports (like legs under a table) or resting objects (like a cup on a table), explicitly calculate the Z-location using the objects' Z-dimensions so they don't intersect or poke through the wrong side. "
+                    "5. COMPLETENESS: Execute the FULL user request in a single turn without stopping halfway to ask for permission. If asked to 'create a table', do not just create the tabletop and stop; create the tabletop AND all 4 legs in one continuous execution before finishing.]"
+                )
+        except Exception as e:
+            logger.warning("Failed to auto-inject scene summary: %s", e)
+
         async for event in self.agent_executor.astream_events(
             {"messages": [("user", user_input)]},
             config={"configurable": {"thread_id": session_id}},

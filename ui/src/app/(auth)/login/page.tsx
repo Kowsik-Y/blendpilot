@@ -32,7 +32,7 @@ export default function LoginPage() {
         toast.error("Invalid credentials. Please check your email and password.");
       } else {
         toast.success("Welcome back to BlendPilot AI!");
-        router.push("/chat");
+        router.push("/projects");
         router.refresh();
       }
     } catch {

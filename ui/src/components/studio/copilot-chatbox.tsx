@@ -5,6 +5,14 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AiBrain01Icon,
+  Analytics01Icon,
+  CheckmarkCircle01Icon,
+  FileSearchIcon,
+  IdeaIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -63,6 +71,11 @@ import {
   ChainOfThoughtStepTitle,
   ChainOfThoughtTrigger,
 } from "@/components/nexus-ui/chain-of-thought";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/nexus-ui/reasoning";
 import { AGENT_DEFINITIONS } from "@/components/studio/agent-timeline";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -99,6 +112,8 @@ export interface CopilotMessage {
   eventKey?: string;
   attachments?: CopilotAttachment[];
   citations?: CopilotCitation[];
+  thinking?: string;
+  tools?: { id: string; name: string; status: "running" | "done" | "failed"; input?: any }[];
 }
 
 
@@ -131,22 +146,10 @@ interface CopilotChatboxProps {
 interface LiveThinkingState {
   active: boolean;
   content: string;
-  tools: { id: string; name: string; status: "running" | "done" | "failed" }[];
+  tools: { id: string; name: string; status: "running" | "done" | "failed"; input?: any }[];
 }
 
-function formatToolName(name: string): string {
-  const map: Record<string, string> = {
-    "create_primitive": "Generated 3D primitive",
-    "set_transform": "Adjusted object transform",
-    "duplicate_object": "Duplicated geometry",
-    "apply_modifier": "Applied mesh modifier",
-    "scene_snapshot": "Created safety snapshot",
-    "scene_rollback": "Rolled back to snapshot",
-    "delete_object": "Removed object",
-    "export_asset": "Exported production asset",
-  };
-  return map[name] || `Executed ${name.replace(/_/g, ' ')}`;
-}
+
 
 export function CopilotChatbox({
   assetSpec,
@@ -265,15 +268,20 @@ export function CopilotChatbox({
       onMessage: (payload: WorkflowStreamPayload) => {
         try {
           if (payload.event === "on_chat_model_stream" && payload.state?.chunk) {
-             const chunk = payload.state.chunk as { content?: string };
+             const chunk = payload.state.chunk as { content?: string | any[] };
              if (chunk.content) {
-               setLiveThinking(prev => ({ ...prev, content: prev.content + chunk.content }));
+               const text = typeof chunk.content === "string" 
+                 ? chunk.content 
+                 : (Array.isArray(chunk.content) ? chunk.content.map(c => c.text || "").join("") : "");
+               if (text) {
+                 setLiveThinking(prev => ({ ...prev, content: prev.content + text }));
+               }
              }
           } else if (payload.event === "on_tool_start" && payload.node) {
              const toolId = payload.state?.run_id as string || payload.node;
              setLiveThinking(prev => ({ 
                ...prev, 
-               tools: [...prev.tools, { id: toolId, name: payload.node!, status: "running" }] 
+               tools: [...prev.tools, { id: toolId, name: payload.node!, status: "running", input: payload.state?.input }] 
              }));
           } else if (payload.event === "on_tool_end" && payload.node) {
              const toolId = payload.state?.run_id as string || payload.node;
@@ -281,21 +289,37 @@ export function CopilotChatbox({
                ...prev,
                tools: prev.tools.map(t => t.id === toolId ? { ...t, status: "done" } : t)
              }));
-          } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing") {
+          } else if (payload.event === "on_chat_model_end") {
              setLiveThinking(prev => {
-                const finalContent = prev.content || "✨ 3D asset generation completed successfully.";
-                setMessages(m => {
-                  const last = m[m.length - 1];
-                  if (last && last.role === "agent" && (last.content === finalContent || !prev.content)) {
-                    return m;
-                  }
-                  return [...m, {
-                    id: nextMessageId("copilot"),
+                const finalContent = prev.content.trim();
+                if (finalContent || prev.tools.length > 0) {
+                  setMessages(m => {
+                    const last = m[m.length - 1];
+                    if (last && last.role === "agent" && last.content === finalContent) return m;
+                    return [...m, { id: nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                  });
+                }
+                return { ...prev, content: "", tools: [] };
+             });
+          } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing" || payload.event === "workflow_failed") {
+             setLiveThinking(prev => {
+                const finalContent = prev.content.trim();
+                if (finalContent || prev.tools.length > 0) {
+                  setMessages(m => {
+                    const last = m[m.length - 1];
+                    if (last && last.role === "agent" && (last.content === finalContent || last.tools?.length === prev.tools.length)) {
+                       return m;
+                    }
+                    return [...m, { id: nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                  });
+                } else if (payload.event === "workflow_failed") {
+                  setMessages(m => [...m, {
+                    id: nextMessageId("error"),
                     role: "agent",
-                    content: finalContent,
+                    content: `⚠️ Agent Error: ${payload.error || "Workflow crashed (e.g. LLM recursion limit)"}`,
                     time: "Just now"
-                  }];
-                });
+                  }]);
+                }
                 return { active: false, content: "", tools: [] };
              });
           }
@@ -334,37 +358,6 @@ export function CopilotChatbox({
       return;
     }
 
-    const lower = text.toLowerCase();
-    // Broad intent detection — let the LLM handle nuanced classification
-    // Pipeline triggers: explicit launch commands OR any 3D creation verbs
-    const creationVerbs = ["create", "make", "generate", "build", "design", "model", "construct", "sculpt", "craft"];
-    const isCreationIntent =
-      lower.includes("launch 10-agent") ||
-      lower.includes("launch pipeline") ||
-      lower.includes("run pipeline") ||
-      creationVerbs.some((v) => lower.startsWith(v)) ||
-      (creationVerbs.some((v) => lower.includes(v)) && lower.split(" ").length >= 3);
-
-    // Creation intents flow to the autonomous workflow. Conversational and
-    // inspection requests remain in chat; no manual plan mode is required.
-    const shouldRunAgent = isCreationIntent && Boolean(onStartPipeline);
-
-    if (shouldRunAgent && onStartPipeline) {
-      const userMsg: CopilotMessage = {
-        id: nextMessageId("user"),
-        role: "user",
-        content: text,
-        attachments,
-        time: "Just now",
-      };
-      setMessages((prev) => [...prev, userMsg]);
-      setInput("");
-      setAttachments([]);
-      handledWorkflowEventsRef.current.clear();
-      onStartPipeline(text);
-      return; // 🛑 CRITICAL: Stop here so we don't ALSO trigger a standard chat LLM response
-    }
-
     const userMsg: CopilotMessage = {
       id: nextMessageId("user"),
       role: "user",
@@ -376,55 +369,10 @@ export function CopilotChatbox({
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setAttachments([]);
-    setLoading(true);
-
-    try {
-      // Build multi-turn conversation memory for context window
-      const history = messages
-        .filter((m) => m.role === "user" || m.role === "copilot")
-        .slice(-8)
-        .map((m) => ({
-          role: m.role === "user" ? "user" : "assistant",
-          content: m.content,
-        }));
-
-      const res = await fetch("/api/copilot/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          asset_spec: assetSpec,
-          conversation_history: history,
-          attachments: attachments.map(({ name, type }) => ({ name, type })),
-        }),
-      });
-
-      if (!res.ok) throw new Error("Copilot response error");
-      const data = await res.json();
-
-      const copilotMsg: CopilotMessage = {
-        id: nextMessageId("copilot"),
-        role: "copilot",
-        content: data.reply,
-        actions: data.suggested_actions || [],
-        isLiveLLM: data.is_live_llm,
-        citations: data.ragSources || [],
-        time: "Just now",
-      };
-      setMessages((prev) => [...prev, copilotMsg]);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Copilot response error";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextMessageId("error"),
-          role: "copilot",
-          content: `⚠️ Copilot notice: ${message}`,
-          time: "Just now",
-        },
-      ]);
-    } finally {
-      setLoading(false);
+    
+    if (onStartPipeline) {
+      handledWorkflowEventsRef.current.clear();
+      onStartPipeline(text);
     }
   };
 
@@ -475,19 +423,8 @@ export function CopilotChatbox({
                         return (
                           <MessageScrollerItem key={`${m.id}-${idx}`} messageId={m.id} scrollAnchor={isUser} className="order-1">
                             <Message align={isUser ? "end" : "start"} className="my-2">
-                              <MessageAvatar>
-                                <div
-                                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${isAgent
-                                    ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
-                                    : "bg-primary text-primary-foreground"
-                                    }`}
-                                >
-                                  {isUser ? <User className="w-3.5 h-3.5" /> : isAgent ? <Sparkles className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                                </div>
-                              </MessageAvatar>
-
                               <MessageContent>
-                                <Bubble variant={isUser ? "default" : "outline"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
+                                <Bubble variant={isUser ? "default" : "ghost"} align={isUser ? "end" : "start"} className="group relative transition-all duration-300">
                                   <BubbleContent>
                                     {/* Copy Action Button */}
                                     <button
@@ -500,25 +437,59 @@ export function CopilotChatbox({
 
                                     <AttachmentList attachments={m.attachments} />
 
+                                    {/* Agent Persistent Thinking & Tools */}
+                                    {(m.thinking || (m.tools && m.tools.length > 0)) && (
+                                      <div className="flex flex-col gap-3 mb-2">
+                                        {m.thinking && (
+                                          <Reasoning isStreaming={false}>
+                                            <ReasoningTrigger>Analyzed</ReasoningTrigger>
+                                            <ReasoningContent>
+                                              <div className="prose prose-invert prose-xs max-w-none wrap-break-word opacity-80">
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.thinking}</ReactMarkdown>
+                                              </div>
+                                            </ReasoningContent>
+                                          </Reasoning>
+                                        )}
+                                        {m.tools && m.tools.length > 0 && (
+                                          <div className={m.thinking ? "border-t border-border/40 pt-2" : ""}>
+                                            <ChainOfThought autoCloseOnAllComplete={true}>
+                                              <ChainOfThoughtTrigger icon={<HugeiconsIcon icon={AiBrain01Icon} strokeWidth={1.75} className="size-4" />}>
+                                                Tool Execution Trace
+                                              </ChainOfThoughtTrigger>
+                                              <ChainOfThoughtContent>
+                                                {m.tools.map((t, tidx) => (
+                                                  <ChainOfThoughtStep key={tidx} status={t.status === "done" ? "completed" : "failed"}>
+                                                    <ChainOfThoughtStepTitle icon={<HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.75} className="size-4" />}>
+                                                      {t.name.replace(/_/g, ' ')}
+                                                    </ChainOfThoughtStepTitle>
+                                                    {t.input && (
+                                                      <pre className="mt-1.5 p-1.5 rounded-md bg-muted/50 text-[10px] text-muted-foreground/80 overflow-x-auto border border-border/20 max-h-24 font-mono">
+                                                        {JSON.stringify(t.input, null, 2)}
+                                                      </pre>
+                                                    )}
+                                                  </ChainOfThoughtStep>
+                                                ))}
+                                                <ChainOfThoughtComplete
+                                                  label="Agent finished executing tools"
+                                                  icon={<HugeiconsIcon icon={CheckmarkCircle01Icon} strokeWidth={1.75} className="size-4" />}
+                                                />
+                                              </ChainOfThoughtContent>
+                                            </ChainOfThought>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
                                     {/* Markdown Body */}
-                                    <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
-                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                                    </div>
+                                    {m.content && (
+                                      <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                                      </div>
+                                    )}
 
                                     <Citations sources={m.citations} />
 
-                                    {m.role !== "user" && (
-                                      <div className="mt-3 grid gap-2 rounded-xl border border-border/60 bg-background/70 p-2 sm:grid-cols-2">
-                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                          <WandSparkles className="size-3.5 text-cyan-400" />
-                                          Graph-aware reply
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                          <Maximize2 className="size-3.5 text-primary" />
-                                          Production operator console
-                                        </div>
-                                      </div>
-                                    )}
+
 
                                     {/* Suggested actions are executable Studio prompts. */}
                                     {m.actions && m.actions.length > 0 && (
@@ -550,44 +521,44 @@ export function CopilotChatbox({
                       {liveThinking.active && (
                         <MessageScrollerItem messageId="live-thinking" className="order-1 animate-in fade-in slide-in-from-bottom-2">
                           <Message align="start" className="my-2">
-                            <MessageAvatar>
-                              <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                                <Sparkles className="w-3.5 h-3.5" />
-                              </div>
-                            </MessageAvatar>
                             <MessageContent>
-                              <Bubble variant="outline" align="start">
+                              <Bubble variant="ghost" align="start">
                                 <BubbleContent>
                                   <div className="flex flex-col gap-3">
-                                    <div className="text-xs font-semibold flex items-center gap-2 text-cyan-400">
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      Agent is thinking...
-                                    </div>
-                                    {liveThinking.content && (
-                                      <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                          {liveThinking.content}
-                                        </ReactMarkdown>
-                                      </div>
-                                    )}
-                                    {liveThinking.tools.length > 0 && (
-                                      <div className="mt-2 border-t border-border/40 pt-2">
-                                        <ChainOfThought autoCloseOnAllComplete={false}>
-                                          <ChainOfThoughtTrigger icon={<BrainCircuit className="w-4 h-4" />}>
-                                            Tool Execution Trace
-                                          </ChainOfThoughtTrigger>
-                                          <ChainOfThoughtContent>
-                                            {liveThinking.tools.map((t, idx) => (
-                                              <ChainOfThoughtStep key={idx} status={t.status === "done" ? "completed" : "running"}>
-                                                <ChainOfThoughtStepTitle icon={<Wrench className="w-4 h-4" />}>
-                                                  {formatToolName(t.name)}
-                                                </ChainOfThoughtStepTitle>
-                                              </ChainOfThoughtStep>
-                                            ))}
-                                          </ChainOfThoughtContent>
-                                        </ChainOfThought>
-                                      </div>
-                                    )}
+                                      {liveThinking.tools.length > 0 && (
+                                        <div className="border-t border-border/40 pt-2">
+                                          <ChainOfThought>
+                                            <ChainOfThoughtTrigger icon={<HugeiconsIcon icon={AiBrain01Icon} strokeWidth={1.75} className="size-4" />}>
+                                              Tool Execution Trace
+                                            </ChainOfThoughtTrigger>
+                                            <ChainOfThoughtContent>
+                                              {liveThinking.tools.map((t, tidx) => (
+                                                <ChainOfThoughtStep key={tidx} status={t.status === "done" ? "completed" : (t.status === "failed" ? "failed" : "in-progress")}>
+                                                  <ChainOfThoughtStepTitle icon={<HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.75} className="size-4" />}>
+                                                    {t.name.replace(/_/g, ' ')}
+                                                  </ChainOfThoughtStepTitle>
+                                                  {t.input && (
+                                                    <pre className="mt-1.5 p-1.5 rounded-md bg-muted/50 text-[10px] text-muted-foreground/80 overflow-x-auto border border-border/20 max-h-24 font-mono">
+                                                      {JSON.stringify(t.input, null, 2)}
+                                                    </pre>
+                                                  )}
+                                                </ChainOfThoughtStep>
+                                              ))}
+                                            </ChainOfThoughtContent>
+                                          </ChainOfThought>
+                                        </div>
+                                      )}
+                                      
+                                      {liveThinking.content && (
+                                        <div className="prose prose-invert prose-xs max-w-none wrap-break-word">
+                                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{liveThinking.content + " █"}</ReactMarkdown>
+                                        </div>
+                                      )}
+                                      {!liveThinking.content && liveThinking.tools.length === 0 && (
+                                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                                          <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
+                                        </span>
+                                      )}
                                   </div>
                                 </BubbleContent>
                               </Bubble>

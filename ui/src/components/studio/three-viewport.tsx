@@ -292,7 +292,7 @@ export function ThreeViewport({
             <Box className="w-3.5 h-3.5 mr-1 text-cyan-400" />
             {assetSpec?.asset_type ? assetSpec.asset_type.toUpperCase() : "READY"}
           </Badge>
-          <Badge variant="secondary" className="bg-background/75 backdrop-blur-md text-xs text-muted-foreground font-mono">
+          <Badge variant="outline" className="bg-background/75 backdrop-blur-md text-xs text-muted-foreground font-mono">
             {sceneObjects.length} live objects
           </Badge>
         </div>

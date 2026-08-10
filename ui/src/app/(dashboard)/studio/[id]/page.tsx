@@ -63,9 +63,45 @@ function readNumber(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function InspectorNumberInput({ value, onChange }: { value: number; onChange: (val: number) => void }) {
+  const [localValue, setLocalValue] = useState(value.toString());
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(value.toString());
+    }
+  }, [value, isFocused]);
+
+  return (
+    <Input
+      type="number"
+      step="any"
+      value={isFocused ? localValue : value}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => {
+        setIsFocused(false);
+        const parsed = parseFloat(localValue);
+        if (!isNaN(parsed)) {
+          onChange(parsed);
+          setLocalValue(parsed.toString());
+        } else {
+          setLocalValue(value.toString());
+        }
+      }}
+      onChange={(e) => {
+        setLocalValue(e.target.value);
+        const parsed = parseFloat(e.target.value);
+        if (!isNaN(parsed)) {
+          onChange(parsed);
+        }
+      }}
+    />
+  );
+}
+
 export default function StudioPage() {
   const { id: projectId } = useParams<{ id: string }>();
-  const workflowStreamRef = useRef<WorkflowStreamHandle | null>(null);
   const handledSceneEventsRef = useRef<Set<string>>(new Set());
   const liveWorkflowRef = useRef(false);
   const [running, setRunning] = useState(false);
@@ -111,10 +147,10 @@ export default function StudioPage() {
 
   const updateSelectedObject = useCallback(
     (updater: (item: WorkflowSceneObject) => WorkflowSceneObject) => {
-      if (!selectedObjectName) return;
-      updateSceneObject(selectedObjectName, updater);
+      if (!resolvedSelectedObjectName) return;
+      updateSceneObject(resolvedSelectedObjectName, updater);
     },
-    [selectedObjectName, updateSceneObject]
+    [resolvedSelectedObjectName, updateSceneObject]
   );
 
   const handleStartPipeline = async (promptToRun: string) => {
@@ -126,8 +162,6 @@ export default function StudioPage() {
     setCompletedNodes([]);
     setHumanReviewOpen(false);
     handledSceneEventsRef.current.clear();
-    workflowStreamRef.current?.close();
-    workflowStreamRef.current = null;
 
     try {
       const res = await fetch("/api/pipeline", {
@@ -149,7 +183,6 @@ export default function StudioPage() {
       const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
       sessions[projectId] = data.session_id;
       window.localStorage.setItem(PROJECT_WORKFLOW_SESSIONS_KEY, JSON.stringify(sessions));
-      connectStream(data.session_id);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start workflow";
       toast.error(`Workflow Error: ${message}`);
@@ -202,6 +235,27 @@ export default function StudioPage() {
               return item;
             }));
           }
+        } else if (node === "duplicate_object" && state.input) {
+          const input = state.input;
+          if (input.name && input.new_name) {
+            setSceneObjects(prev => {
+              const src = prev.find(p => p.name === input.name);
+              if (!src) return prev;
+              
+              const newLocation: [number, number, number] = input.offset 
+                ? [src.location[0] + (input.offset[0] || 0), src.location[1] + (input.offset[1] || 0), src.location[2] + (input.offset[2] || 0)]
+                : [...src.location];
+                
+              return [
+                ...prev.filter(p => p.name !== input.new_name),
+                {
+                  ...src,
+                  name: input.new_name,
+                  location: newLocation
+                }
+              ];
+            });
+          }
         } else if (node === "delete_object" && state.input) {
           const input = state.input;
           if (input.name) {
@@ -242,10 +296,13 @@ export default function StudioPage() {
       if (state.current_agent === "human_feedback" && liveWorkflowRef.current) {
         setHumanReviewOpen(true);
       }
+      
+      // Sync ground truth from Blender anytime it is provided
+      if (currentPayload.scene_objects) {
+         setSceneObjects(currentPayload.scene_objects as WorkflowSceneObject[]);
+      }
 
       if (currentPayload.event === "workflow_complete" || state.status === "COMPLETED") {
-        workflowStreamRef.current?.close();
-        workflowStreamRef.current = null;
         setRunning(false);
         setActiveNode(null);
         liveWorkflowRef.current = false;
@@ -254,48 +311,35 @@ export default function StudioPage() {
     });
   }, []);
 
-  const connectStream = useCallback((sid: string) => {
-    const stream = connectWorkflowStream({
-      sessionId: sid,
-      onOpen: (transport) => {
-        if (transport === "websocket") {
-          toast.success("Live workflow socket connected", { id: "ws-connected" });
-        }
-      },
-
-      onMessage: (payload: WorkflowStreamPayload) => {
-        try {
-          handleWorkflowStreamPayload(payload);
-        } catch (e) {
-          console.error("Workflow stream parse error", e);
-        }
-      },
-      onClose: () => {
-        setRunning(false);
-        setActiveNode(null);
-        liveWorkflowRef.current = false;
-      },
-    });
-    workflowStreamRef.current = stream;
-  }, [handleWorkflowStreamPayload]);
-
   useEffect(() => {
-    workflowStreamRef.current?.close();
-    workflowStreamRef.current = null;
+    // 1. Try to fetch the true real-time scene state from Blender via the backend
+    fetch(`/api/pipeline/scene?projectId=${projectId}`)
+      .then((res) => res.json())
+      .then((sceneData) => {
+        if (sceneData && sceneData.success && sceneData.scene && sceneData.scene.objects) {
+          setSceneObjects(sceneData.scene.objects);
+        } else {
+          // 2. Fallback to Next.js database optimistic state if Blender is offline
+          fetch(`/api/projects/${projectId}`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data && data.sceneObjects) {
+                try {
+                  setSceneObjects(JSON.parse(data.sceneObjects));
+                } catch (e) {
+                  setSceneObjects([]);
+                }
+              }
+            })
+            .catch((e) => console.error("Failed to fetch project from DB fallback", e));
+        }
+      })
+      .catch((e) => console.error("Failed to fetch live scene from Blender", e));
 
+    // Also fetch the design spec from DB
     fetch(`/api/projects/${projectId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.sceneObjects) {
-          try {
-            setSceneObjects(JSON.parse(data.sceneObjects));
-          } catch (e) {
-            console.error("Failed to parse scene objects", e);
-            setSceneObjects([]);
-          }
-        } else {
-          setSceneObjects([]);
-        }
         if (data && data.designSpec) {
           try {
             setAssetSpec(JSON.parse(data.designSpec));
@@ -304,7 +348,7 @@ export default function StudioPage() {
           }
         }
       })
-      .catch((e) => console.error("Failed to fetch project", e));
+      .catch((e) => console.error("Failed to fetch project spec", e));
 
     queueMicrotask(() => {
       const sessions = JSON.parse(window.localStorage.getItem(PROJECT_WORKFLOW_SESSIONS_KEY) || "{}") as Record<string, string>;
@@ -313,7 +357,6 @@ export default function StudioPage() {
       if (existingSessionId) {
         setSessionId(existingSessionId);
         setRunning(true);
-        connectStream(existingSessionId);
       } else {
         setSessionId(null);
         setRunning(false);
@@ -323,11 +366,7 @@ export default function StudioPage() {
       setHumanReviewOpen(false);
     });
 
-    return () => {
-      workflowStreamRef.current?.close();
-      workflowStreamRef.current = null;
-    };
-  }, [projectId, connectStream]);
+  }, [projectId]);
 
   // Auto-save debounced
   useEffect(() => {
@@ -480,7 +519,8 @@ export default function StudioPage() {
                     </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0">
+                <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 p-0">
+                  <fieldset disabled={running} className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 border-0 m-0">
                   <div className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-background/60 p-2">
                     <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                       Scene Outliner
@@ -546,12 +586,10 @@ export default function StudioPage() {
                           <label className="text-xs font-medium text-muted-foreground">Dimensions</label>
                           <div className="grid grid-cols-3 gap-2">
                             {["X", "Y", "Z"].map((axis, index) => (
-                              <Input
+                              <InspectorNumberInput
                                 key={axis}
-                                inputMode="decimal"
                                 value={selectedObject.dimensions[index]}
-                                onChange={(event) => {
-                                  const nextValue = readNumber(event.target.value, selectedObject.dimensions[index]);
+                                onChange={(nextValue) => {
                                   updateSelectedObject((item) => {
                                     const nextDimensions: [number, number, number] = [...item.dimensions] as [number, number, number];
                                     nextDimensions[index] = nextValue;
@@ -567,12 +605,10 @@ export default function StudioPage() {
                           <label className="text-xs font-medium text-muted-foreground">Location</label>
                           <div className="grid grid-cols-3 gap-2">
                             {["X", "Y", "Z"].map((axis, index) => (
-                              <Input
+                              <InspectorNumberInput
                                 key={axis}
-                                inputMode="decimal"
                                 value={selectedObject.location[index]}
-                                onChange={(event) => {
-                                  const nextValue = readNumber(event.target.value, selectedObject.location[index]);
+                                onChange={(nextValue) => {
                                   updateSelectedObject((item) => {
                                     const nextLocation: [number, number, number] = [...item.location] as [number, number, number];
                                     nextLocation[index] = nextValue;
@@ -588,12 +624,10 @@ export default function StudioPage() {
                           <label className="text-xs font-medium text-muted-foreground">Rotation</label>
                           <div className="grid grid-cols-3 gap-2">
                             {["X", "Y", "Z"].map((axis, index) => (
-                              <Input
+                              <InspectorNumberInput
                                 key={axis}
-                                inputMode="decimal"
                                 value={selectedObject.rotation?.[index] ?? 0}
-                                onChange={(event) => {
-                                  const nextValue = readNumber(event.target.value, selectedObject.rotation?.[index] ?? 0);
+                                onChange={(nextValue) => {
                                   updateSelectedObject((item) => {
                                     const nextRotation: [number, number, number] = [...(item.rotation || [0, 0, 0])] as [number, number, number];
                                     nextRotation[index] = nextValue;
@@ -623,6 +657,7 @@ export default function StudioPage() {
                       Select an object in the outliner or viewport to inspect and edit its properties.
                     </div>
                   )}
+                  </fieldset>
                 </CardContent>
               </Card>
             </TabsContent>

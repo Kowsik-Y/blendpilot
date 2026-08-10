@@ -1,4 +1,5 @@
 export interface WorkflowStreamPayload {
+  scene_objects: any;
   event?: string;
   event_id?: number;
   node?: string;

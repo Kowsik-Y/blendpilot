@@ -28,20 +28,45 @@ function ChainOfThoughtTrigger({ children, icon, className }: React.ComponentPro
 }
 
 function ChainOfThoughtContent({ children, className }: React.ComponentProps<typeof CollapsibleContent>) {
-  return <CollapsibleContent className={cn("pl-1 pt-3", className)}><ol className="flex flex-col gap-3">{children}</ol></CollapsibleContent>;
+  return (
+    <CollapsibleContent className={cn("pt-3", className)}>
+      <ul className="relative flex flex-col gap-4 pl-8 before:absolute before:inset-y-2 before:left-3.75 before:w-px before:bg-border/40">
+        {children}
+      </ul>
+    </CollapsibleContent>
+  );
 }
 
 function ChainOfThoughtStep({ children, status = "pending", className }: React.ComponentProps<"li"> & { status?: ThoughtStatus }) {
-  const icon = status === "completed" ? <CheckCircle2 className="mt-0.5 text-primary h-3 w-3" /> : status === "running" ? <LoaderCircle className="mt-0.5 animate-spin text-primary" /> : status === "failed" ? <Circle className="mt-0.5 text-destructive" /> : <Circle className="mt-0.5 text-muted-foreground" />;
-  return <li data-status={status} className={cn("flex items-start gap-2 text-sm text-muted-foreground", className)}>{icon}<div className="min-w-0">{children}</div></li>;
+  return (
+    <li data-status={status} className={cn("relative flex flex-col gap-1 text-sm text-muted-foreground", className)}>
+      {children}
+    </li>
+  );
 }
 
 function ChainOfThoughtStepTitle({ children, icon, className }: React.ComponentProps<"p"> & { icon?: React.ReactNode }) {
-  return <p className={cn("flex items-center gap-1.5 font-normal", className)}>{icon}{children}</p>;
+  return (
+    <div className={cn("flex items-center gap-3 font-medium text-foreground", className)}>
+      {icon && (
+        <div className="absolute -left-6.25 flex h-5 w-5 items-center justify-center bg-card text-muted-foreground ring-4 ring-card">
+          {icon}
+        </div>
+      )}
+      {children}
+    </div>
+  );
 }
 
 function ChainOfThoughtComplete({ label = "Task complete", icon, className }: { label?: string; icon?: React.ReactNode; className?: string }) {
-  return <li className={cn("flex items-center gap-2 pt-1 text-sm font-medium text-foreground", className)}>{icon ?? <CheckCircle2 className="text-primary" />}{label}</li>;
+  return (
+    <li className={cn("relative flex items-center gap-3 text-sm font-medium text-foreground", className)}>
+      <div className="absolute -left-6.25 flex h-5 w-5 items-center justify-center bg-card text-primary ring-4 ring-card">
+        {icon ?? <CheckCircle2 className="h-4 w-4" />}
+      </div>
+      {label}
+    </li>
+  );
 }
 
 export { ChainOfThought, ChainOfThoughtComplete, ChainOfThoughtContent, ChainOfThoughtStep, ChainOfThoughtStepTitle, ChainOfThoughtTrigger };

@@ -80,6 +80,10 @@ def _make_json_safe(obj: Any) -> Any:
         return {k: _make_json_safe(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_make_json_safe(item) for item in obj]
+    elif hasattr(obj, "model_dump"):
+        return _make_json_safe(obj.model_dump())
+    elif hasattr(obj, "dict"):
+        return _make_json_safe(obj.dict())
     elif isinstance(obj, (str, int, float, bool)) or obj is None:
         return obj
     else:
@@ -125,25 +129,58 @@ async def _run_agent_task(session_id: str, user_prompt: str) -> None:
             name = event.get("name")
             data = event.get("data", {})
             
+
+            
             payload = {
                 "session_id": session_id,
                 "event": event_type,
                 "node": name,
                 "state": data,
             }
+            
+            if event_type == "on_tool_end":
+                try:
+                    summary = await agent.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
+                    if summary and "scene" in summary and "objects" in summary["scene"]:
+                        payload["scene_objects"] = summary["scene"]["objects"]
+                except Exception as e:
+                    logger.warning("Failed to sync scene on tool end: %s", e)
+                    
             await _broadcast_event(session_id, payload)
 
         session["status"] = "COMPLETED"
+        scene_objects = []
+        try:
+            # Auto-save the Blender session so it persists across server restarts
+            project_id = session.get("project_id")
+            if project_id:
+                import os
+                os.makedirs("data/projects", exist_ok=True)
+                save_path = os.path.abspath(f"data/projects/{project_id}.blend")
+                await agent.mcp_server.call_tool("save_project", {"filepath": save_path})
+
+            summary = await agent.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
+            if summary and "scene" in summary and "objects" in summary["scene"]:
+                scene_objects = summary["scene"]["objects"]
+        except Exception as e:
+            logger.error("Failed to fetch final scene state: %s", e)
+
         await _broadcast_event(session_id, {
             "session_id": session_id,
             "event": "workflow_complete",
             "status": "COMPLETED",
+            "scene_objects": scene_objects
         })
 
     except Exception as e:
         logger.exception("Agent error in session %s: %s", session_id, e)
         session["status"] = "FAILED"
-        await _broadcast_event(session_id, {"session_id": session_id, "error": str(e), "status": "FAILED"})
+        await _broadcast_event(session_id, {
+            "session_id": session_id, 
+            "event": "workflow_failed", 
+            "error": str(e), 
+            "status": "FAILED"
+        })
 
 
 def _is_terminal_stream_event(data: dict[str, Any]) -> bool:
@@ -217,6 +254,34 @@ async def websocket_workflow_progress(websocket: WebSocket, session_id: str) -> 
     finally:
         if session_id in _session_event_queues and queue in _session_event_queues[session_id]:
             _session_event_queues[session_id].remove(queue)
+
+
+@router.get("/scene")
+async def get_scene(project_id: str | None = None) -> dict[str, Any]:
+    """Fetch the ground-truth scene summary, loading the project .blend if it exists."""
+    from mcp_servers.blender.server import BlenderMCPServer
+    import os
+    try:
+        # Create a transient connection to fetch the summary
+        server = BlenderMCPServer()
+        
+        # Auto-load the saved project session if available
+        if project_id:
+            save_path = os.path.abspath(f"data/projects/{project_id}.blend")
+            if os.path.exists(save_path):
+                await server.call_tool("restore_checkpoint", {"filepath": save_path})
+            else:
+                # It's a new project, clear the current Blender scene
+                current_summary = await server.call_tool("get_scene_summary", {"include_mesh_stats": False})
+                if current_summary and "scene" in current_summary and "objects" in current_summary["scene"]:
+                    for obj in current_summary["scene"]["objects"]:
+                        await server.call_tool("delete_object", {"name": obj["name"]})
+                
+        summary = await server.call_tool("get_scene_summary", {"include_mesh_stats": False})
+        return summary
+    except Exception as e:
+        logger.error("Error fetching scene: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{session_id}/status")

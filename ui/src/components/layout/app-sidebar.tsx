@@ -94,18 +94,6 @@ export function AppSidebar() {
 
       {/* Navigation Links */}
       <div className="px-3 py-1 space-y-1">
-        {/* 3D Studio link removed as it is now project-specific and accessed via Projects */}
-        {/* <Link
-          href="/chat"
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            pathname === "/chat" || pathname.startsWith("/chat/")
-              ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-              : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>Chat Workspace</span>
-        </Link> */}
         <Link
           href="/projects"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
@@ -119,7 +107,7 @@ export function AppSidebar() {
         </Link>
       </div>
 
-      {/* Chat Sessions list */}
+      {/* Recent Projects list */}
       <div className="px-4 pt-3 pb-1">
         <span className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground">
           Recent 3D Designs
