@@ -14,21 +14,25 @@ import {
   Trash2,
   Cpu,
 } from "lucide-react";
-import { type ChatSession } from "@/types/chat";
 import { toast } from "sonner";
 
+interface ProjectItem {
+  id: string;
+  name: string;
+}
+
 export function AppSidebar() {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
 
-  const fetchSessions = async () => {
+  const fetchProjects = async () => {
     try {
-      const res = await fetch("/api/chat");
+      const res = await fetch("/api/projects");
       if (res.ok) {
         const data = await res.json();
-        setSessions(data);
+        setProjects(data);
       }
     } catch {
       // Ignore
@@ -38,41 +42,28 @@ export function AppSidebar() {
   };
 
   useEffect(() => {
-    void Promise.resolve().then(fetchSessions);
+    void Promise.resolve().then(fetchProjects);
   }, [pathname]);
 
   const handleNewChat = async () => {
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New 3D Design" }),
-      });
-      if (res.ok) {
-        const session = await res.json();
-        router.push(`/chat/${session.id}`);
-        router.refresh();
-      }
-    } catch {
-      toast.error("Failed to create new chat session");
-    }
+    router.push(`/projects`);
   };
 
-  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
 
     try {
-      const res = await fetch(`/api/chat/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setSessions((prev) => prev.filter((s) => s.id !== id));
-        toast.success("Chat deleted");
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+        toast.success("Project deleted");
         if (pathname.includes(id)) {
-          router.push("/chat");
+          router.push("/projects");
         }
       }
     } catch {
-      toast.error("Failed to delete chat");
+      toast.error("Failed to delete project");
     }
   };
 
@@ -131,34 +122,34 @@ export function AppSidebar() {
       {/* Chat Sessions list */}
       <div className="px-4 pt-3 pb-1">
         <span className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground">
-          Recent Sessions
+          Recent 3D Designs
         </span>
       </div>
 
       <ScrollArea className="flex-1 px-3">
         <div className="space-y-1 pb-4">
           {loading ? (
-            <div className="p-3 text-xs text-muted-foreground italic">Loading sessions...</div>
-          ) : sessions.length === 0 ? (
-            <div className="p-3 text-xs text-muted-foreground">No sessions yet. Click &quot;New 3D Design&quot; above!</div>
+            <div className="p-3 text-xs text-muted-foreground italic">Loading projects...</div>
+          ) : projects.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">No projects yet. Click &quot;New 3D Design&quot; above!</div>
           ) : (
-            sessions.map((s) => {
-              const active = pathname === `/chat/${s.id}`;
+            projects.map((p) => {
+              const active = pathname === `/studio/${p.id}`;
               return (
                 <Link
-                  key={s.id}
-                  href={`/chat/${s.id}`}
+                  key={p.id}
+                  href={`/studio/${p.id}`}
                   className={`group relative flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
                     active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium border border-sidebar-border"
                       : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   }`}
                 >
-                  <span className="truncate pr-4">{s.title || "Untitled Session"}</span>
+                  <span className="truncate pr-4">{p.name || "Untitled Design"}</span>
                   <button
-                    onClick={(e) => handleDeleteSession(e, s.id)}
+                    onClick={(e) => handleDeleteProject(e, p.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive rounded transition-opacity"
-                    title="Delete session"
+                    title="Delete project"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

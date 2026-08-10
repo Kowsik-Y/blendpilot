@@ -125,12 +125,27 @@ interface CopilotChatboxProps {
   onWorkflowEvent?: (payload: WorkflowStreamPayload) => void;
   pipelineSessionId?: string | null;
   pipelineRunning?: boolean;
+  projectId?: string;
 }
 
 interface LiveThinkingState {
   active: boolean;
   content: string;
   tools: { id: string; name: string; status: "running" | "done" | "failed" }[];
+}
+
+function formatToolName(name: string): string {
+  const map: Record<string, string> = {
+    "create_primitive": "Generated 3D primitive",
+    "set_transform": "Adjusted object transform",
+    "duplicate_object": "Duplicated geometry",
+    "apply_modifier": "Applied mesh modifier",
+    "scene_snapshot": "Created safety snapshot",
+    "scene_rollback": "Rolled back to snapshot",
+    "delete_object": "Removed object",
+    "export_asset": "Exported production asset",
+  };
+  return map[name] || `Executed ${name.replace(/_/g, ' ')}`;
 }
 
 export function CopilotChatbox({
@@ -140,8 +155,8 @@ export function CopilotChatbox({
   onWorkflowEvent,
   pipelineSessionId,
   pipelineRunning,
+  projectId = "default",
 }: CopilotChatboxProps) {
-  const messageIdRef = useRef(0);
   const handledWorkflowEventsRef = useRef<Set<string>>(new Set());
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
@@ -163,9 +178,9 @@ export function CopilotChatbox({
     content: "",
     tools: [],
   });
+
   const nextMessageId = (prefix: string) => {
-    messageIdRef.current += 1;
-    return `${prefix}-${messageIdRef.current}`;
+    return `${prefix}-${crypto.randomUUID()}`;
   };
 
 
@@ -184,6 +199,24 @@ export function CopilotChatbox({
       // Fallback
     }
   };
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(`copilot_chat_${projectId}`);
+    if (saved) {
+      try {
+        setMessages(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved messages", e);
+      }
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(`copilot_chat_${projectId}`, JSON.stringify(messages));
+    }
+  }, [messages, projectId]);
 
   useEffect(() => {
     void Promise.resolve().then(loadSettings);
@@ -248,16 +281,21 @@ export function CopilotChatbox({
                ...prev,
                tools: prev.tools.map(t => t.id === toolId ? { ...t, status: "done" } : t)
              }));
-          } else if (payload.event === "workflow_complete") {
+          } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing") {
              setLiveThinking(prev => {
-                if (prev.content) {
-                   setMessages(m => [...m, {
-                     id: nextMessageId("copilot"),
-                     role: "copilot",
-                     content: prev.content,
-                     time: "Just now"
-                   }]);
-                }
+                const finalContent = prev.content || "✨ 3D asset generation completed successfully.";
+                setMessages(m => {
+                  const last = m[m.length - 1];
+                  if (last && last.role === "agent" && (last.content === finalContent || !prev.content)) {
+                    return m;
+                  }
+                  return [...m, {
+                    id: nextMessageId("copilot"),
+                    role: "agent",
+                    content: finalContent,
+                    time: "Just now"
+                  }];
+                });
                 return { active: false, content: "", tools: [] };
              });
           }
@@ -430,12 +468,12 @@ export function CopilotChatbox({
                     <MessageScrollerContent className="space-y-3 pb-2">
 
                       {/* Message Flow */}
-                      {messages.map((m) => {
+                      {messages.map((m, idx) => {
                         const isUser = m.role === "user";
                         const isAgent = m.role === "agent";
 
                         return (
-                          <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={isUser} className="order-1">
+                          <MessageScrollerItem key={`${m.id}-${idx}`} messageId={m.id} scrollAnchor={isUser} className="order-1">
                             <Message align={isUser ? "end" : "start"} className="my-2">
                               <MessageAvatar>
                                 <div
@@ -541,7 +579,9 @@ export function CopilotChatbox({
                                           <ChainOfThoughtContent>
                                             {liveThinking.tools.map((t, idx) => (
                                               <ChainOfThoughtStep key={idx} status={t.status === "done" ? "completed" : "running"}>
-                                                <ChainOfThoughtStepTitle icon={<Wrench className="w-4 h-4" />}>{t.name}</ChainOfThoughtStepTitle>
+                                                <ChainOfThoughtStepTitle icon={<Wrench className="w-4 h-4" />}>
+                                                  {formatToolName(t.name)}
+                                                </ChainOfThoughtStepTitle>
                                               </ChainOfThoughtStep>
                                             ))}
                                           </ChainOfThoughtContent>

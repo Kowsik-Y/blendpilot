@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -40,6 +40,9 @@ model UserSettings {
   // Blender Connection
   blenderHost String @default("127.0.0.1")
   blenderPort Int    @default(9876)
+
+  // Web Search Configuration
+  tavilyApiKey String @default("")
 }
 
 model ChatSession {
@@ -72,10 +75,22 @@ model Project {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   status     String   @default("pending")
-  designSpec String? // JSON DesignSpec
-  outputDir  String?
+  designSpec   String? // JSON DesignSpec
+  sceneObjects String? // JSON array of WorkflowSceneObject
+  outputDir    String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   sessions ChatSession[]
+  memories Memory[]
+}
+
+model Memory {
+  id        String   @id @default(cuid())
+  content   String
+  embedding Unsupported("vector(1536)")?
+  sourceUrl String?
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
 }

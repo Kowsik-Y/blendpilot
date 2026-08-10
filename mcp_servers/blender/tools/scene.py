@@ -13,6 +13,16 @@ from schemas.scene import ObjectInfo, SceneSummary, MeshStatistics
 from services.blender_client import BlenderClient
 
 
+class SceneSnapshotInput(BaseModel):
+    """Input for creating a fast scene snapshot."""
+    snapshot_name: str = Field(default="latest", description="Name of the snapshot")
+
+
+class SceneRollbackInput(BaseModel):
+    """Input for rolling back to a scene snapshot."""
+    snapshot_name: str = Field(default="latest", description="Name of the snapshot to restore")
+
+
 class GetSceneSummaryInput(BaseModel):
     """Input for getting the scene summary."""
     include_mesh_stats: bool = Field(default=True, description="Whether to include detailed vertex/face counts")
@@ -72,4 +82,29 @@ async def get_mesh_statistics(client: BlenderClient, params: dict[str, Any]) -> 
     return {
         "success": True,
         "statistics": response.result,
+    }
+
+
+async def scene_snapshot(client: BlenderClient, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Create a fast memory snapshot of the current Blender scene before destructive operations."""
+    validated = SceneSnapshotInput.model_validate(params or {})
+    # Map fast snapshot to checkpoint API with a temporary file path
+    filepath = f"/tmp/blendpilot_snapshot_{validated.snapshot_name}.blend"
+    response = await client.save_checkpoint(filepath=filepath)
+    return {
+        "success": response.success,
+        "snapshot": validated.snapshot_name,
+        "error": response.error
+    }
+
+
+async def scene_rollback(client: BlenderClient, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Roll back the active scene to a previously taken fast snapshot."""
+    validated = SceneRollbackInput.model_validate(params or {})
+    filepath = f"/tmp/blendpilot_snapshot_{validated.snapshot_name}.blend"
+    response = await client.restore_checkpoint(filepath=filepath)
+    return {
+        "success": response.success,
+        "snapshot": validated.snapshot_name,
+        "error": response.error
     }
