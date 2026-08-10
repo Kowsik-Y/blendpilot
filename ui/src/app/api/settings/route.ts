@@ -26,6 +26,7 @@ export async function GET() {
   }
 
   const rawKey = settings.llmApiKey ? decrypt(settings.llmApiKey) : "";
+  const rawTavilyKey = settings.tavilyApiKey ? decrypt(settings.tavilyApiKey) : "";
 
   return NextResponse.json({
     llmProvider: settings.llmProvider,
@@ -40,6 +41,8 @@ export async function GET() {
     ragTopK: settings.ragTopK,
     blenderHost: settings.blenderHost,
     blenderPort: settings.blenderPort,
+    tavilyApiKeyMasked: maskApiKey(rawTavilyKey),
+    hasTavilyApiKey: rawTavilyKey.length > 0,
   });
 }
 
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
       ragTopK,
       blenderHost,
       blenderPort,
+      tavilyApiKey,
       shouldTestConnection,
     } = body;
 
@@ -74,6 +78,11 @@ export async function POST(req: NextRequest) {
     // Only re-encrypt if a new unmasked key was sent
     if (llmApiKey && !llmApiKey.includes("••••")) {
       encryptedKey = encrypt(llmApiKey.trim());
+    }
+
+    let encryptedTavilyKey = existingSettings?.tavilyApiKey || "";
+    if (tavilyApiKey && !tavilyApiKey.includes("••••")) {
+      encryptedTavilyKey = encrypt(tavilyApiKey.trim());
     }
 
     if (shouldTestConnection) {
@@ -113,6 +122,7 @@ export async function POST(req: NextRequest) {
         ragTopK: ragTopK ? Number(ragTopK) : 4,
         blenderHost: blenderHost || "127.0.0.1",
         blenderPort: blenderPort ? Number(blenderPort) : 9876,
+        tavilyApiKey: encryptedTavilyKey,
       },
       update: {
         ...(llmProvider !== undefined && { llmProvider }),
@@ -126,15 +136,19 @@ export async function POST(req: NextRequest) {
         ...(ragTopK !== undefined && { ragTopK: Number(ragTopK) }),
         ...(blenderHost !== undefined && { blenderHost }),
         ...(blenderPort !== undefined && { blenderPort: Number(blenderPort) }),
+        ...(tavilyApiKey && !tavilyApiKey.includes("••••") && { tavilyApiKey: encryptedTavilyKey }),
       },
     });
 
     const rawKey = updated.llmApiKey ? decrypt(updated.llmApiKey) : "";
+    const rawTavilyKey = updated.tavilyApiKey ? decrypt(updated.tavilyApiKey) : "";
 
     return NextResponse.json({
       success: true,
       hasApiKey: rawKey.length > 0,
       llmApiKeyMasked: maskApiKey(rawKey),
+      hasTavilyApiKey: rawTavilyKey.length > 0,
+      tavilyApiKeyMasked: maskApiKey(rawTavilyKey),
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Settings update error";

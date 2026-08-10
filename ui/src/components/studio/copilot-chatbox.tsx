@@ -250,14 +250,13 @@ export function CopilotChatbox({
              }));
           } else if (payload.event === "workflow_complete") {
              setLiveThinking(prev => {
-                if (prev.content) {
-                   setMessages(m => [...m, {
-                     id: nextMessageId("copilot"),
-                     role: "copilot",
-                     content: prev.content,
-                     time: "Just now"
-                   }]);
-                }
+                const finalContent = prev.content || "✨ 3D asset generation completed successfully.";
+                setMessages(m => [...m, {
+                  id: nextMessageId("copilot"),
+                  role: "agent",
+                  content: finalContent,
+                  time: "Just now"
+                }]);
                 return { active: false, content: "", tools: [] };
              });
           }

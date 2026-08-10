@@ -37,6 +37,8 @@ interface WorkflowStatePayload {
   visual_score?: number;
   geometry_repair_count?: number;
   visual_revision_count?: number;
+  input?: any;
+  output?: any;
 }
 
 interface WorkflowStreamHandle {
@@ -123,7 +125,6 @@ export default function StudioPage() {
     setActiveNode("intent");
     setCompletedNodes([]);
     setHumanReviewOpen(false);
-    setSceneObjects([]);
     handledSceneEventsRef.current.clear();
     workflowStreamRef.current?.close();
     workflowStreamRef.current = null;
@@ -170,11 +171,54 @@ export default function StudioPage() {
       const node = currentPayload.node;
       const state = (currentPayload.state || {}) as WorkflowStatePayload;
 
-      if (currentPayload.event === "tool_start") {
+      if (currentPayload.event === "on_tool_start" || currentPayload.event === "tool_start") {
         setActiveNode("modeling_agent");
+        
+        if (node === "create_primitive" && state.input) {
+          const input = state.input;
+          if (input.name) {
+            setSceneObjects(prev => [
+              ...prev.filter(p => p.name !== input.name),
+              {
+                name: input.name,
+                primitiveType: input.primitive_type || "cube",
+                dimensions: readNumberTuple(input.dimensions, [1, 1, 1]),
+                location: readNumberTuple(input.location, [0, 0, 0]),
+                rotation: readNumberTuple(input.rotation, [0, 0, 0]),
+              }
+            ]);
+          }
+        } else if (node === "set_transform" && state.input) {
+          const input = state.input;
+          if (input.name) {
+            setSceneObjects(prev => prev.map(item => {
+              if (item.name === input.name) {
+                return {
+                  ...item,
+                  location: input.location ? readNumberTuple(input.location, item.location) : item.location,
+                  rotation: input.rotation ? readNumberTuple(input.rotation, item.rotation || [0, 0, 0]) : item.rotation,
+                };
+              }
+              return item;
+            }));
+          }
+        } else if (node === "delete_object" && state.input) {
+          const input = state.input;
+          if (input.name) {
+            setSceneObjects(prev => prev.filter(item => item.name !== input.name));
+          }
+        } else if (node === "assign_material" && state.input) {
+          const input = state.input;
+          if (input.object_name && input.material_name) {
+            setSceneObjects(prev => prev.map(item => {
+              if (item.name === input.object_name) {
+                return { ...item, materialName: input.material_name };
+              }
+              return item;
+            }));
+          }
+        }
       }
-
-
 
       if (node) {
         setCompletedNodes((prev) => (prev.includes(node) ? prev : [...prev, node]));
@@ -238,13 +282,36 @@ export default function StudioPage() {
   useEffect(() => {
     workflowStreamRef.current?.close();
     workflowStreamRef.current = null;
+    
+    fetch(`/api/projects/${projectId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.sceneObjects) {
+          try {
+            setSceneObjects(JSON.parse(data.sceneObjects));
+          } catch (e) {
+            console.error("Failed to parse scene objects", e);
+            setSceneObjects([]);
+          }
+        } else {
+          setSceneObjects([]);
+        }
+        if (data && data.designSpec) {
+          try {
+            setAssetSpec(JSON.parse(data.designSpec));
+          } catch (e) {
+            console.error("Failed to parse design spec", e);
+          }
+        }
+      })
+      .catch((e) => console.error("Failed to fetch project", e));
+
     queueMicrotask(() => {
       setSessionId(null);
       setRunning(false);
       setActiveNode(null);
       setCompletedNodes([]);
       setHumanReviewOpen(false);
-      setSceneObjects([]);
     });
 
     return () => {
@@ -252,6 +319,20 @@ export default function StudioPage() {
       workflowStreamRef.current = null;
     };
   }, [projectId, connectStream]);
+
+  // Auto-save debounced
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!projectId) return;
+      fetch(`/api/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sceneObjects }),
+      }).catch(e => console.error("Auto-save failed", e));
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [sceneObjects, projectId]);
 
   const handleFeedbackSubmit = async (action: "APPROVE" | "REQUEST_CHANGE", feedbackText?: string) => {
     setHumanReviewOpen(false);

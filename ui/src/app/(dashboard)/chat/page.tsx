@@ -14,14 +14,6 @@ export default async function ChatIndexPage() {
     orderBy: { updatedAt: "desc" },
   });
 
-  if (!chatSession) {
-    chatSession = await db.chatSession.create({
-      data: {
-        userId: session.user.id,
-        title: "New 3D Design",
-      },
-    });
-  }
 
-  redirect(`/chat/${chatSession.id}`);
+  redirect(`/projects}`);
 }

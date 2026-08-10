@@ -19,12 +19,21 @@ import {
   Box,
 } from "lucide-react";
 import { DEFAULT_MODELS, type LLMProvider } from "@/types/llm";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
   const [provider, setProvider] = useState<LLMProvider>("openai");
   const [model, setModel] = useState("gpt-4o");
   const [apiKey, setApiKey] = useState("");
   const [maskedKey, setMaskedKey] = useState("");
+  const [tavilyApiKey, setTavilyApiKey] = useState("");
+  const [maskedTavilyKey, setMaskedTavilyKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [temperature, setTemperature] = useState(0.0);
   const [maxTokens, setMaxTokens] = useState(4096);
@@ -54,6 +63,7 @@ export default function SettingsPage() {
         setContextWindowSize(data.contextWindowSize ?? 128000);
         setRagEnabled(data.ragEnabled ?? true);
         setRagTopK(data.ragTopK ?? 4);
+        setMaskedTavilyKey(data.tavilyApiKeyMasked || "");
         setBlenderHost(data.blenderHost || "127.0.0.1");
         setBlenderPort(data.blenderPort ?? 9876);
       }
@@ -101,6 +111,7 @@ export default function SettingsPage() {
           contextWindowSize,
           ragEnabled,
           ragTopK,
+          tavilyApiKey: tavilyApiKey || undefined,
           blenderHost,
           blenderPort,
           shouldTestConnection: shouldTest,
@@ -116,6 +127,11 @@ export default function SettingsPage() {
       if (data.llmApiKeyMasked) {
         setMaskedKey(data.llmApiKeyMasked);
         setApiKey("");
+      }
+      
+      if (data.tavilyApiKeyMasked) {
+        setMaskedTavilyKey(data.tavilyApiKeyMasked);
+        setTavilyApiKey("");
       }
 
       if (shouldTest) {
@@ -169,16 +185,16 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="llm" className="space-y-4">
-        <TabsList className="bg-muted border border-border">
-          <TabsTrigger value="llm" className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground">
+        <TabsList className="h-fit!">
+          <TabsTrigger value="llm" className="gap-2 py-2 px-3">
             <Key className="w-4 h-4" />
             <span>LLM & BYO API Keys</span>
           </TabsTrigger>
-          <TabsTrigger value="rag" className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="rag" className="gap-2 py-2 px-3">
             <Database className="w-4 h-4" />
             <span>RAG & Memory</span>
           </TabsTrigger>
-          <TabsTrigger value="bridge" className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground">
+          <TabsTrigger value="bridge" className="gap-2 py-2 px-3">
             <Box className="w-4 h-4" />
             <span>Blender Bridge</span>
           </TabsTrigger>
@@ -200,21 +216,25 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Provider</Label>
-                  <select
+                  <Select
                     value={provider}
-                    onChange={(e) => {
-                      const p = e.target.value as LLMProvider;
+                    onValueChange={(value) => {
+                      const p = value as LLMProvider;
                       setProvider(p);
                       if (DEFAULT_MODELS[p]?.[0]) {
                         setModel(DEFAULT_MODELS[p][0].id);
                       }
                     }}
-                    className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
-                    <option value="openai">OpenAI (GPT-4o, GPT-4o Mini)</option>
-                    <option value="anthropic">Anthropic (Claude Sonnet 4, Claude 3.5)</option>
-                    <option value="custom">Custom / Ollama / OpenRouter / vLLM</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI (GPT-4o, GPT-4o Mini)</SelectItem>
+                      <SelectItem value="anthropic">Anthropic (Claude Sonnet 4, Claude 3.5)</SelectItem>
+                      <SelectItem value="custom">Custom / Ollama / OpenRouter / vLLM</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -228,24 +248,28 @@ export default function SettingsPage() {
                     />
                   ) : (
                     <div className="space-y-2">
-                      <select
+                      <Select
                         value={DEFAULT_MODELS[provider]?.some(m => m.id === model) ? model : "custom-input"}
-                        onChange={(e) => {
-                          if (e.target.value !== "custom-input") {
-                            setModel(e.target.value);
+                        onValueChange={(value) => {
+                          if (value && value !== "custom-input") {
+                            setModel(value);
                           } else {
                             setModel("");
                           }
                         }}
-                        className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                       >
-                        {DEFAULT_MODELS[provider]?.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.contextWindow.toLocaleString()} tokens)
-                          </option>
-                        ))}
-                        <option value="custom-input">Custom Model...</option>
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DEFAULT_MODELS[provider]?.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.name} ({m.contextWindow.toLocaleString()} tokens)
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="custom-input">Custom Model...</SelectItem>
+                        </SelectContent>
+                      </Select>
                       
                       {!DEFAULT_MODELS[provider]?.some(m => m.id === model) && (
                         <Input
@@ -370,6 +394,29 @@ export default function SettingsPage() {
                     Number of similar knowledge chunks to retrieve per prompt.
                   </p>
                 </div>
+              </div>
+
+              {/* Tavily API Key */}
+              <div className="space-y-2 pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <Label>Tavily Search API Key</Label>
+                  {maskedTavilyKey && (
+                    <span className="text-xs text-foreground flex items-center gap-1 font-mono">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
+                      Configured: {maskedTavilyKey}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="password"
+                  placeholder={maskedTavilyKey ? "Leave blank to keep existing key" : "tvly-..."}
+                  value={tavilyApiKey}
+                  onChange={(e) => setTavilyApiKey(e.target.value)}
+                  className="bg-background border-input font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Required for ResearchAgent dynamic web search.
+                </p>
               </div>
 
               {/* RAG Knowledge Store Status */}

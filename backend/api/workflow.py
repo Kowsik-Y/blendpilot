@@ -195,14 +195,21 @@ async def websocket_workflow_progress(websocket: WebSocket, session_id: str) -> 
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=20)
             except asyncio.TimeoutError:
-                await websocket.send_json({
-                    "event": "ping",
-                    "session_id": session_id,
-                    "event_id": int(_active_sessions[session_id].get("stream_event_seq", 0)),
-                })
+                try:
+                    await websocket.send_json({
+                        "event": "ping",
+                        "session_id": session_id,
+                        "event_id": int(_active_sessions[session_id].get("stream_event_seq", 0)),
+                    })
+                except Exception:
+                    break
                 continue
 
-            await websocket.send_json(_make_json_safe(data))
+            try:
+                await websocket.send_json(_make_json_safe(data))
+            except Exception:
+                break
+                
             if _is_terminal_stream_event(data):
                 break
     except WebSocketDisconnect:

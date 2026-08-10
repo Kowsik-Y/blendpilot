@@ -39,6 +39,24 @@ class ResearchAgent:
         # Always include platform-specific knowledge base entries
         findings.extend(self._get_platform_guidelines(spec))
 
+        # Dynamic Web Research via Tavily Search API
+        try:
+            # e.g., query for dimensions and specifics
+            search_query = f"{spec.asset_type} dimensions and {spec.target_platform} import requirements"
+            search_response = await self.search_service.search(search_query)
+            
+            for result in search_response.results:
+                findings.append({
+                    "category": "web_research",
+                    "title": result.title,
+                    "source": result.url,
+                    "notes": result.snippet,
+                })
+                # Persist to pgvector Memory
+                await self._persist_to_memory(result.title, result.snippet, result.url)
+        except Exception as e:
+            logger.warning("Web search failed: %s", e)
+
         # Try LLM-generated contextual research if available
         if self.llm_service and self.llm_service.config.api_key:
             try:
@@ -151,3 +169,38 @@ class ResearchAgent:
             "url": guide["url"],
             "notes": guide["summary"],
         }]
+
+    async def _persist_to_memory(self, title: str, content: str, source: str) -> None:
+        """Embed and persist finding to PostgreSQL pgvector table."""
+        if not self.llm_service or not self.llm_service.config.api_key:
+            return
+            
+        try:
+            from langchain_openai import OpenAIEmbeddings
+            import psycopg
+            import os
+            import uuid
+            
+            # 1. Generate embedding
+            embeddings = OpenAIEmbeddings(api_key=self.llm_service.config.api_key)
+            # ainvoke is not universally available on embeddings, use sync embed_query for simplicity
+            # but ideally wrap in executor. Or if async is needed, aembed_query.
+            vector = await embeddings.aembed_query(content)
+            
+            # 2. Insert to Postgres
+            db_url = os.environ.get("DATABASE_URL", "postgresql://blendpilot:blendpilot@localhost:5432/blendpilot")
+            # We connect using psycopg sync or async (since we're in async, we can use psycopg.AsyncConnection)
+            async with await psycopg.AsyncConnection.connect(db_url) as conn:
+                async with conn.cursor() as cur:
+                    # using the Memory schema we created: id, content, embedding, category, createdAt, updatedAt
+                    await cur.execute(
+                        '''
+                        INSERT INTO "Memory" (id, content, embedding, category, "createdAt", "updatedAt") 
+                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                        ''',
+                        (str(uuid.uuid4()), content, str(vector), "web_research")
+                    )
+                    await conn.commit()
+            logger.info("Persisted research finding '%s' to pgvector Memory.", title)
+        except Exception as e:
+            logger.warning("Failed to persist research finding to memory: %s", e)

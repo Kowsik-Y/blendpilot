@@ -234,6 +234,11 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
     logger.info("[Node] Running Modeling Agent")
     await _emit_agent_state(state, "modeling", "modeling_agent", "RUNNING", "Executing Blender tool calls")
     try:
+        mcp = _get_mcp_server(state, mcp_server)
+        
+        # Create a snapshot before any modeling starts
+        await mcp.call_tool("scene_snapshot", {"snapshot_name": "modeling_start"})
+
         async def event_callback(payload: dict[str, Any]) -> None:
             await _emit_runtime_event(state, {
                 "node": "modeling",
@@ -241,7 +246,7 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
             })
 
         agent = ModelingAgent(
-            mcp_server=_get_mcp_server(state, mcp_server),
+            mcp_server=mcp,
             llm_service=_get_llm_service(state),
             event_callback=event_callback,
         )
@@ -339,6 +344,11 @@ async def node_geometry_repair(state: BlendPilotState, mcp_server: BlenderMCPSer
     await _emit_agent_state(state, "geometry_repair", "geometry_qa_agent", "RUNNING", "Applying geometry repair steps")
     try:
         mcp = _get_mcp_server(state, mcp_server)
+        
+        # Deterministic Rollback: Revert to state before modeling rather than manual un-doing
+        logger.info("Rolling back scene to 'modeling_start' before attempting repairs...")
+        await mcp.call_tool("scene_rollback", {"snapshot_name": "modeling_start"})
+        
         repair_steps = state.get("_repair_steps", [])
         for step in repair_steps:
             await mcp.call_tool(step["tool"], step.get("parameters", {}))
