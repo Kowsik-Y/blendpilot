@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -86,6 +87,7 @@ class BlenderClient:
 
     async def execute(self, command: str, parameters: dict[str, Any] | None = None) -> BridgeResponse:
         """Send a command to the Blender bridge with simulated fallback."""
+        from backend.config import settings
         req = BridgeCommand(command=command, parameters=parameters or {})
 
         if not self.mock_mode:
@@ -96,6 +98,9 @@ class BlenderClient:
                     result = BridgeResponse.model_validate(response.json())
                     return result
             except Exception as e:
+                if settings.require_real_blender:
+                    logger.error("Real Blender is required but bridge is unreachable: %s", e)
+                    raise RuntimeError(f"Failed to connect to Blender bridge at {self.base_url}/execute. Ensure Blender is running.")
                 logger.debug("Live Blender bridge not reachable (%s), executing in simulated fallback mode", e)
 
         # Simulated fallback execution
@@ -263,6 +268,25 @@ class BlenderClient:
             )
 
         elif cmd in ["setup_preview_camera", "setup_studio_lighting", "save_checkpoint", "restore_checkpoint", "save_project", "export_asset", "edit_mesh"]:
+            # In mock mode, actually create dummy files to prevent 404s in export
+            if cmd in ("save_project", "save_checkpoint"):
+                filepath = params.get("filepath", "")
+                if filepath:
+                    os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write("mock_blend_data")
+            elif cmd == "export_asset":
+                output_path = params.get("output_path", "")
+                if output_path:
+                    fmt = params.get("format", "FBX")
+                    if fmt == "FBX" and not output_path.endswith(".fbx"):
+                        output_path += ".fbx"
+                    elif fmt in ("GLB", "GLTF") and not output_path.endswith((".glb", ".gltf")):
+                        output_path += ".glb"
+                    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        f.write("mock_export_data")
+            
             return BridgeResponse(
                 request_id=req.request_id,
                 success=True,

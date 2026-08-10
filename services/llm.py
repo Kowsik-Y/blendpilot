@@ -20,8 +20,8 @@ logger = logging.getLogger("blendpilot.services.llm")
 class LLMConfig(BaseModel):
     """Configuration for an LLM provider."""
 
-    provider: str = Field(default="openai", description="LLM provider: openai, anthropic, custom")
-    model: str = Field(default="gpt-4o", description="Model name")
+    provider: str = Field(default="groq", description="LLM provider: openai, anthropic, groq, custom")
+    model: str = Field(default="llama-3.3-70b-versatile", description="Model name")
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, gt=0)
     api_key: str = Field(default="", description="API key (loaded from env or request)")
@@ -34,12 +34,13 @@ class LLMService:
     VISION_MODELS: dict[str, str] = {
         "openai": "gpt-4o",
         "anthropic": "claude-3-5-sonnet-20241022",
+        "groq": "llama-3.2-90b-vision-preview",
     }
 
     def __init__(
         self,
-        provider: str = "openai",
-        model: str = "gpt-4o",
+        provider: str = "groq",
+        model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.0,
         api_key: str | None = None,
         base_url: str | None = None,
@@ -47,13 +48,17 @@ class LLMService:
         # Auto-resolve API keys from environment if not explicitly passed
         resolved_key = (
             api_key
+            or os.environ.get("GROQ_API_KEY")
             or os.environ.get("OPENAI_API_KEY")
             or os.environ.get("ANTHROPIC_API_KEY")
             or ""
         )
         resolved_provider = provider
         if not api_key:
-            if os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
+            if os.environ.get("GROQ_API_KEY"):
+                resolved_provider = "groq"
+                resolved_key = os.environ.get("GROQ_API_KEY", "")
+            elif os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
                 resolved_provider = "anthropic"
                 resolved_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -90,6 +95,16 @@ class LLMService:
             if self.config.api_key:
                 kwargs["api_key"] = self.config.api_key
             return ChatAnthropic(**kwargs)
+            
+        elif self.config.provider == "groq":
+            from langchain_groq import ChatGroq
+            kwargs = {
+                "model_name": self.config.model,
+                "temperature": self.config.temperature,
+            }
+            if self.config.api_key:
+                kwargs["api_key"] = self.config.api_key
+            return ChatGroq(**kwargs)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config.provider}")
 

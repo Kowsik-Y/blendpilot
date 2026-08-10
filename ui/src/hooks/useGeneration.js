@@ -108,6 +108,9 @@ export const useGeneration = () => {
             if (data.state.iteration_count !== undefined) {
               nextState.iteration = data.state.iteration_count;
             }
+            if (data.state.max_iterations !== undefined) {
+              nextState.maxIterations = data.state.max_iterations;
+            }
           }
           
           return nextState;

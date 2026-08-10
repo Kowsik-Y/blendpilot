@@ -39,7 +39,7 @@ class GeometryQAAgent:
         # 1. Missing objects check
         expected_objects = []
         for step in plan.steps:
-            if step.operation in ["create_primitive", "import_mesh", "create_mesh"]:
+            if getattr(step, "tool", getattr(step, "operation", "")) in ["create_primitive", "import_mesh", "create_mesh"]:
                 if "object_name" in step.parameters:
                     expected_objects.append(step.parameters["object_name"])
                 elif "name" in step.parameters:

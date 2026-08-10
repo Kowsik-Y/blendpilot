@@ -26,7 +26,8 @@ dependencies = [
     "langgraph>=0.0.30",
     "openai>=1.0",
     "langchain-openai",
-    "langchain-anthropic"
+    "langchain-anthropic",
+    "langchain-groq"
 ]
 
 [project.optional-dependencies]

@@ -19,6 +19,7 @@ from backend.api.export import router as export_router
 from backend.api.workflow import router as workflow_router
 from backend.routers.copilot import router as copilot_router
 from backend.config import settings
+from services.blender_process import blender_manager
 
 # Configure root logger
 logging.basicConfig(
@@ -34,8 +35,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s (v%s)...", settings.app_name, settings.app_version)
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs(settings.checkpoints_dir, exist_ok=True)
+    
+    # Start Blender process if configured
+    try:
+        await blender_manager.start()
+    except Exception as e:
+        logger.error(f"Failed to start blender manager: {e}")
+        # we do not necessarily exit here; let the FastAPI server run so errors can be surfaced to UI
+        
     yield
     logger.info("Shutting down %s...", settings.app_name)
+    blender_manager.stop()
 
 
 app = FastAPI(

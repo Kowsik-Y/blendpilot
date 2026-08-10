@@ -26,7 +26,7 @@ class VisionCriticAgent:
         """Critique the rendered image against the original intent."""
         
         # If in mock mode, immediately return a passing validation report
-        if self.mock_mode or not self.llm_service.config.api_key and self.llm_service.config.provider != "custom":
+        if self.mock_mode:
             logger.info("VisionCriticAgent running in mock mode. Returning PASS.")
             report = VisionReport(
                 object_presence=True,
@@ -38,6 +38,9 @@ class VisionCriticAgent:
                 overall_result="PASS"
             )
             return {"passed": True, "vision_report": report.model_dump()}
+
+        if not self.llm_service.config.api_key and self.llm_service.config.provider != "custom":
+            raise ValueError(f"LLM API key is missing for provider '{self.llm_service.config.provider}'. Cannot execute real vision evaluation.")
 
         prompt = f"""
 You are an expert 3D Technical Art Director.

@@ -38,11 +38,14 @@ def check_zero_dimensions(name: str) -> dict[str, Any]:
     _validate_mesh_object(name)
     obj = bpy.data.objects[name]
     dims = obj.dimensions
-    passed = all(d >= 0.001 for d in dims)
+    # For a mesh to be valid, at least 2 dimensions should be > 0 (to form a face).
+    # A single line (1 dimension) or a point (0 dimensions) is invalid.
+    valid_dims = sum(1 for d in dims if d >= 0.001)
+    passed = valid_dims >= 2
     return {
         "passed": passed,
         "dimensions": tuple(dims),
-        "message": "Dimensions are valid." if passed else f"Mesh '{name}' has zero or near-zero dimensions: {tuple(dims)}.",
+        "message": "Dimensions are valid." if passed else f"Mesh '{name}' has insufficient dimensions (point or line): {tuple(dims)}.",
     }
 
 
@@ -121,18 +124,18 @@ def check_normals(name: str) -> dict[str, Any]:
     bm.from_mesh(obj.data)
     bm.faces.ensure_lookup_table()
 
-    # Check for inconsistent normals by looking at face winding
-    # A more practical check: look for faces with normals pointing inward
+    # Check for inconsistent normals by comparing with recalculated normals
     flipped_faces = []
-    for face in bm.faces:
-        # Calculate the centroid of the face
-        centroid = face.calc_center_median()
-        # If normal points away from origin (roughly), it's probably correct
-        # This is a heuristic — proper check would compare adjacent face normals
-        dot = centroid.dot(face.normal)
-        if dot < 0 and centroid.length > 0.001:
-            flipped_faces.append(face.index)
-
+    
+    # Recalculate normals on a copy of the mesh to see what they "should" be
+    bm_recalc = bm.copy()
+    bmesh.ops.recalc_face_normals(bm_recalc, faces=bm_recalc.faces)
+    
+    for f1, f2 in zip(bm.faces, bm_recalc.faces):
+        if f1.normal.dot(f2.normal) < -0.5:  # If normals point in opposite directions
+            flipped_faces.append(f1.index)
+            
+    bm_recalc.free()
     bm.free()
 
     passed = len(flipped_faces) == 0
@@ -168,8 +171,13 @@ def check_non_manifold(name: str) -> dict[str, Any]:
     bm.from_mesh(obj.data)
     bm.edges.ensure_lookup_table()
 
-    non_manifold_edges = [e.index for e in bm.edges if not e.is_manifold]
-    non_manifold_verts = [v.index for v in bm.verts if not v.is_manifold]
+    # An edge is manifold if it connects exactly 2 faces. A boundary edge connects exactly 1.
+    # We want to flag edges with > 2 faces (internal) or 0 faces (loose).
+    non_manifold_edges = [e.index for e in bm.edges if not e.is_manifold and not e.is_boundary]
+    
+    # Vertices are non-manifold if they don't form a single closed fan of faces. 
+    # Boundaries are fine for open meshes.
+    non_manifold_verts = [v.index for v in bm.verts if not v.is_manifold and not v.is_boundary]
 
     bm.free()
 

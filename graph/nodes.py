@@ -560,7 +560,7 @@ async def node_vision_critic(state: BlendPilotState) -> dict[str, Any]:
         
         agent = VisionCriticAgent(
             llm_service=_get_llm_service(state),
-            mock_mode=state.get("provider") == "mock" or not _get_llm_service(state).config.api_key
+            mock_mode=state.get("provider") == "mock"
         )
         
         spec_dict = state.get("design_spec") or state.get("intent") or {}
@@ -611,25 +611,19 @@ async def node_render(
     """Render the scene preview."""
     logger.info("[Node] Render")
     try:
-        try:
-            import bpy
-            mock_mode = False
-        except ImportError:
-            mock_mode = True
-
+        from backend.config import settings
+        
         spec_dict = state.get("intent") or state.get("design_spec") or {}
         obj_type = spec_dict.get("object_type", spec_dict.get("asset_type", "generic_prop"))
         preview_path = f"output/{obj_type}/preview.png"
         
-        if mock_mode:
-            logger.info("Mock mode: skipping real render.")
-        else:
-            server = mcp_server or BlenderMCPServer()
-            # In a real environment, we would invoke the rendering tool here.
-            # But we are just extracting the step into a node, the execution agent
-            # actually might still handle it if it wasn't stripped from all plans.
-            # We simulate a successful call here.
-            pass
+        server = mcp_server or BlenderMCPServer()
+        
+        logger.info(f"Rendering preview to {preview_path}")
+        # Note: setup_preview_camera and setup_studio_lighting should theoretically be called first,
+        # but generation_agent might have done that, or render_preview does it itself if missing.
+        # We'll just call render_preview directly.
+        await server.call_tool("render_preview", {"output_path": preview_path})
 
         _record_event(state, "render", "COMPLETED", "Rendered scene preview")
         
@@ -727,11 +721,43 @@ async def node_repair(
 # Node 7: Export Agent (Stub)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def node_export(state: BlendPilotState) -> dict[str, Any]:
-    """Placeholder for Export Agent."""
+async def node_export(
+    state: BlendPilotState,
+    mcp_server: BlenderMCPServer | None = None,
+) -> dict[str, Any]:
+    """Export the finished asset using the Export Agent."""
     logger.info("[Node] Export Agent")
-    _record_event(state, "export_agent", "COMPLETED", "Export completed.")
-    return {"current_agent": "END", "status": "COMPLETED"}
+    try:
+        server = mcp_server or BlenderMCPServer()
+        
+        spec_dict = state.get("intent") or state.get("design_spec") or {}
+        obj_type = spec_dict.get("object_type", spec_dict.get("asset_type", "generic_prop"))
+        out_dir = f"output/{obj_type}"
+        
+        # Save project first
+        blend_path = f"{out_dir}/{obj_type}.blend"
+        await server.call_tool("save_project", {"filepath": blend_path})
+        
+        # Export objects
+        created_objects = state.get("created_objects", [])
+        if created_objects:
+            await server.call_tool("export_asset", {
+                "object_names": created_objects,
+                "output_path": f"{out_dir}/{obj_type}.glb",
+                "format": "GLB"
+            })
+            await server.call_tool("export_asset", {
+                "object_names": created_objects,
+                "output_path": f"{out_dir}/{obj_type}.fbx",
+                "format": "FBX"
+            })
+            
+        _record_event(state, "export_agent", "COMPLETED", "Export completed.")
+        return {"current_agent": "END", "status": "COMPLETED"}
+    except Exception as exc:
+        logger.exception("[Node] Export failed: %s", exc)
+        _record_event(state, "export_agent", "FAILED", f"Export failed: {exc}")
+        return {"current_agent": "END", "status": "COMPLETED"}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Node 8: Human Review

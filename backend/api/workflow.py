@@ -100,9 +100,12 @@ async def _run_workflow_task(session_id: str, state: BlendPilotState) -> None:
                     partial_state = {"_raw_output": str(partial_state)}
 
                 if session_id in _active_sessions:
-                    _active_sessions[session_id]["state"].update(partial_state)
+                    # Fetch fully reduced state from checkpointer to preserve accumulated events
+                    full_state = _compiled_app.get_state(config).values
+                    _active_sessions[session_id]["state"] = full_state
+                    
                     current_agent = partial_state.get("current_agent", node_name)
-                    _active_sessions[session_id]["status"] = partial_state.get("status", "RUNNING")
+                    _active_sessions[session_id]["status"] = full_state.get("status", "RUNNING")
 
                 # Build JSON-safe SSE event payload
                 safe_state = _make_json_safe(partial_state)

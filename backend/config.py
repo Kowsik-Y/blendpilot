@@ -26,12 +26,18 @@ class Settings(BaseSettings):
     blender_bridge_host: str = "127.0.0.1"
     blender_bridge_port: int = 9876
     blender_bridge_timeout: float = 30.0
+    blender_executable: str = Field(default="", description="Path to the Blender executable. If set, runs real Blender.")
+    
+    @property
+    def require_real_blender(self) -> bool:
+        return bool(self.blender_executable)
 
     # LLM Settings
     openai_api_key: str = Field(default="", description="OpenAI API Key")
     anthropic_api_key: str = Field(default="", description="Anthropic API Key")
-    default_llm_provider: str = "openai"
-    default_llm_model: str = "gpt-4o"
+    groq_api_key: str = Field(default="", description="Groq API Key")
+    default_llm_provider: str = "groq"
+    default_llm_model: str = "llama-3.3-70b-versatile"
 
     # Storage Paths
     output_dir: str = "output"

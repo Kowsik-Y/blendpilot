@@ -20,6 +20,12 @@ import time
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blendpilot.bridge.launcher")
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 
 def find_blender_binary() -> str:
     """Find Blender executable on the current system."""
@@ -35,6 +41,14 @@ def find_blender_binary() -> str:
     for path in mac_paths:
         if os.path.exists(path):
             return path
+
+    # Windows standard locations
+    if sys.platform == "win32":
+        import glob
+        win_paths = glob.glob(r"C:\Program Files\Blender Foundation\Blender *\blender.exe")
+        for path in win_paths:
+            if os.path.exists(path):
+                return path
 
     # Linux / PATH
     import shutil

@@ -45,7 +45,7 @@ def handle_export_asset(params: dict[str, Any]) -> dict[str, Any]:
 
     return export_asset(
         object_names=params["object_names"],
-        export_format=params.get("export_format", "FBX"),
+        export_format=params.get("format", "FBX"),
         output_path=params["output_path"],
         apply_modifiers=params.get("apply_modifiers", True),
     )

@@ -260,8 +260,9 @@ def render_preview(
     scene.render.image_settings.color_mode = "RGBA" if transparent else "RGB"
     scene.render.film_transparent = transparent
 
-    # Set output path
-    scene.render.filepath = output_path
+    # Set output path (must be absolute for Blender background rendering to work reliably)
+    abs_path = os.path.abspath(output_path)
+    scene.render.filepath = abs_path
 
     logger.info(
         "Rendering preview: %dx%d, %d samples, engine=%s → %s",

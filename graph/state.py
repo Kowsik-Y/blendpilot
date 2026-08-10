@@ -77,6 +77,7 @@ class BlendPilotState(TypedDict, total=False):
     repair_plan: dict[str, Any] | None
     errors: list[str]
     iteration_count: int
+    max_iterations: int
 
 
 def create_initial_state(
@@ -132,6 +133,7 @@ def create_initial_state(
         "repair_plan": None,
         "errors": [],
         "iteration_count": 0,
+        "max_iterations": 3,
     }
 
     if overrides:
