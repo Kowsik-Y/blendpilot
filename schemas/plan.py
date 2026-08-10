@@ -32,16 +32,16 @@ class PlanStep(BaseModel):
     step_id: int = Field(..., ge=1, description="Sequential step number")
     action: str = Field(default="", description="What to do, e.g. 'Create main crate body'")
     description: str | None = Field(default=None, description="Description alias for action")
-    target_object: str = Field(
+    target_object: str | list[str] | None = Field(
         default="",
         description="Name of the Blender object this step operates on",
     )
-    expected_result: str = Field(
+    expected_result: str | None = Field(
         default="",
         description="What the scene should look like after this step",
     )
     expected_outcome: str | None = Field(default=None, description="Alias for expected_result")
-    required_tool: str = Field(
+    required_tool: str | None = Field(
         default="",
         description="The MCP tool needed, e.g. 'create_primitive', 'add_modifier'",
     )
@@ -58,6 +58,11 @@ class PlanStep(BaseModel):
     error_message: str | None = None
 
     def model_post_init(self, __context: Any) -> None:
+        if isinstance(self.target_object, list):
+            self.target_object = ", ".join(self.target_object)
+        elif self.target_object is None:
+            self.target_object = ""
+
         if not self.action and self.description:
             self.action = self.description
         if not self.description and self.action:

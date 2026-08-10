@@ -38,7 +38,8 @@ async function streamOpenAI(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal
 ): Promise<string> {
-  const baseUrl = config.baseUrl || "https://api.openai.com/v1";
+  const defaultBase = config.provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1";
+  const baseUrl = config.baseUrl || defaultBase;
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",

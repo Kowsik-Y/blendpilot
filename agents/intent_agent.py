@@ -54,7 +54,7 @@ class IntentAgent:
                 )
                 user_msg = INTENT_USER_PROMPT.format(
                     user_prompt=user_prompt,
-                    reference_info=f"Reference images: {len(reference_images or [])}",
+                    reference_images=f"{len(reference_images or [])} reference image(s)",
                 )
                 response = await self.llm_service.generate(
                     prompt=user_msg,
@@ -62,7 +62,15 @@ class IntentAgent:
                     response_format={"type": "json_object"},
                 )
                 # Clean JSON fences if present
-                clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+                clean_json = response.strip()
+                json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", clean_json)
+                if json_match:
+                    clean_json = json_match.group(1).strip()
+                else:
+                    brace_match = re.search(r"(\{[\s\S]*\})", clean_json)
+                    if brace_match:
+                        clean_json = brace_match.group(1).strip()
+
                 data = json.loads(clean_json)
                 data["user_prompt"] = user_prompt
                 if reference_images:

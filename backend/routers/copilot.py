@@ -63,12 +63,12 @@ async def chat_with_copilot(req: CopilotChatRequest) -> CopilotChatResponse:
         api_key=req.api_key,
     )
 
-    # If real API key is provided, execute real LLM reasoning
+    # If API key is available or auto-resolved from environment, execute live LLM reasoning
     if llm_service.config.api_key:
         try:
             context_str = f"User Query: {req.message}\n"
             if req.asset_spec:
-                context_str += f"Current Spec: {req.asset_spec}\n"
+                context_str += f"Current 3D Spec: {req.asset_spec}\n"
             if req.current_plan:
                 context_str += f"Current Plan Steps ({len(req.current_plan)} steps): {req.current_plan}\n"
 
@@ -80,67 +80,21 @@ async def chat_with_copilot(req: CopilotChatRequest) -> CopilotChatResponse:
                 return CopilotChatResponse(
                     reply=llm_reply,
                     suggested_actions=[
-                        "🚀 Apply Changes & Rerun Pipeline",
-                        "📐 Inspect Bevel & Modifier Stack",
+                        "🚀 Launch 10-Agent Pipeline",
+                        "🛠️ Add 0.02m Bevel Modifier",
                         "🎨 Tune PBR Material Nodes",
                     ],
-                    provider_used=req.provider,
+                    provider_used=llm_service.config.provider,
                 )
         except Exception as e:
-            logger.warning("Copilot LLM call failed (%s), falling back to heuristic assistant", e)
-
-    # Heuristic Copilot responses for instant interactive feedback without requiring API key
-    msg_lower = req.message.lower()
-    spec = req.asset_spec or {"asset_type": "crate", "dimensions": {"width": 1.0, "depth": 0.7, "height": 0.6}}
-    asset_name = spec.get("asset_type", "model")
-
-    if "bevel" in msg_lower or "edge" in msg_lower or "smooth" in msg_lower:
-        reply = (
-            f"🛠️ **Bevel & Edge Flow Adjustment for {asset_name.title()}**\n\n"
-            f"I recommend adding a 2-segment non-destructive `BEVEL` modifier with width `0.02m` and angle limit `30°`. "
-            f"This prevents harsh razor edges and catches specular highlights realistically."
-        )
-        actions = ["Apply 0.02m Bevel Modifier", "Enable Smooth Shading", "Run Topology QA"]
-
-    elif "dimension" in msg_lower or "size" in msg_lower or "wider" in msg_lower or "taller" in msg_lower:
-        reply = (
-            f"📐 **Dimension Optimization**\n\n"
-            f"Current dimensions: `{spec.get('dimensions', {})}`.\n"
-            f"For Unity/Unreal scale conformity (1 unit = 1 meter), the proportions have been calibrated for standard character interaction bounds."
-        )
-        actions = ["Scale Width +20%", "Scale Height +15%", "Reset to Default 1x1x1"]
-
-    elif "plan" in msg_lower or "steps" in msg_lower:
-        reply = (
-            f"📋 **Step-by-Step 10-Agent Plan for {asset_name.title()}**:\n\n"
-            f"1. **Intent Parser**: Validate boundary dimensions & triangle quota (< 8,000 tris).\n"
-            f"2. **Base Primitive**: Spawn bounding primitive with centered pivot at ground `Z=0`.\n"
-            f"3. **Boolean & Modifiers**: Carve inset details and apply non-destructive Bevel.\n"
-            f"4. **PBR Shader Tree**: Assign Principled BSDF with metallic and roughness nodes.\n"
-            f"5. **Topology QA**: Verify manifold geometry, 0 non-manifold edges, 0 loose vertices."
-        )
-        actions = ["Execute 10-Step Pipeline", "Customize Material Nodes", "Export Multi-format"]
-
-    elif "material" in msg_lower or "color" in msg_lower or "texture" in msg_lower:
-        reply = (
-            f"🎨 **PBR Material Configuration**\n\n"
-            f"Configured with PBR Principled BSDF shader:\n"
-            f"- Base Color: Dark Gunmetal `#1e293b`\n"
-            f"- Metallic: `0.85`, Roughness: `0.35`\n"
-            f"- Emissive Strip: Cyan `#06b6d4` with strength `1.5` for sci-fi accentuation."
-        )
-        actions = ["Switch to Warm Orange Glow", "Increase Roughness to 0.7", "Add Weathered Scratches"]
-
-    else:
-        reply = (
-            f"🤖 **BlendPilot Copilot Ready**\n\n"
-            f"I am analyzing your **{asset_name.title()}** 3D model. You can instruct me to adjust dimensions, "
-            f"tweak modifier stacks, change PBR material finishes, or generate an atomic step-by-step modeling plan."
-        )
-        actions = ["Generate Detailed Modeling Plan", "Add Bevel Modifier", "Run Quality Check"]
+            logger.warning("Copilot LLM call failed (%s)", e)
 
     return CopilotChatResponse(
-        reply=reply,
-        suggested_actions=actions,
-        provider_used="heuristic_assistant",
+        reply=(
+            "⚠️ **API Key Required**\n\n"
+            "Please configure your LLM API Key (Groq, OpenAI, Anthropic) in `.env` or in the Studio Settings "
+            "to enable live agent thinking and autonomous 3D pipeline execution."
+        ),
+        suggested_actions=["🔑 Configure LLM Key", "🚀 Launch 10-Agent Pipeline"],
+        provider_used="none",
     )

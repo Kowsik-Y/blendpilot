@@ -28,10 +28,11 @@ class Settings(BaseSettings):
     blender_bridge_timeout: float = 30.0
 
     # LLM Settings
+    groq_api_key: str = Field(default="", description="Groq API Key")
     openai_api_key: str = Field(default="", description="OpenAI API Key")
     anthropic_api_key: str = Field(default="", description="Anthropic API Key")
-    default_llm_provider: str = "openai"
-    default_llm_model: str = "gpt-4o"
+    default_llm_provider: str = "groq"
+    default_llm_model: str = "llama-3.3-70b-versatile"
 
     # Storage Paths
     output_dir: str = "output"

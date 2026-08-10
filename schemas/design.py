@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 class Dimensions(BaseModel):
     """Physical dimensions of the target asset in meters."""
 
-    width: float = Field(..., gt=0, description="Width in meters (X axis)")
-    depth: float = Field(..., gt=0, description="Depth in meters (Y axis)")
-    height: float = Field(..., gt=0, description="Height in meters (Z axis)")
+    width: float = Field(default=1.0, gt=0, description="Width in meters (X axis)")
+    depth: float = Field(default=1.0, gt=0, description="Depth in meters (Y axis)")
+    height: float = Field(default=1.0, gt=0, description="Height in meters (Z axis)")
 
 
 class DesignSpec(BaseModel):
@@ -26,7 +26,7 @@ class DesignSpec(BaseModel):
     """
 
     asset_type: str = Field(
-        ...,
+        default="generic_prop",
         min_length=1,
         description="Type of asset, e.g. 'sci-fi crate', 'dining table'",
     )
@@ -35,7 +35,7 @@ class DesignSpec(BaseModel):
         description="Visual style, e.g. 'low-poly', 'realistic', 'stylized'",
     )
     dimensions: Dimensions = Field(
-        ...,
+        default_factory=lambda: Dimensions(width=1.0, depth=1.0, height=1.0),
         description="Target dimensions in meters",
     )
     triangle_limit: int = Field(

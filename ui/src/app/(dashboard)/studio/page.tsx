@@ -78,12 +78,17 @@ export default function StudioPage() {
     setCompletedNodes([]);
 
     try {
+      const userApiKey = typeof window !== "undefined" ? localStorage.getItem("blendpilot_user_api_key") || "" : "";
+      const userProvider = typeof window !== "undefined" ? localStorage.getItem("blendpilot_user_provider") || "groq" : "groq";
+
       const res = await fetch(`${API_BASE}/api/workflow/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_prompt: promptToRun,
           enable_human_interrupt: true,
+          api_key: userApiKey,
+          provider: userProvider,
         }),
       });
 

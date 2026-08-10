@@ -6,71 +6,99 @@ import { RAGService } from "@/lib/rag";
 import { type LLMProvider } from "@/types/llm";
 import { NextRequest, NextResponse } from "next/server";
 
-const COPILOT_SYSTEM_PROMPT = `You are BlendPilot AI Copilot, an elite 3D Technical Director and Blender specialist.
-You coordinate a 10-agent autonomous 3D pipeline:
-1. Intent Understanding (Dimensions, triangle quota, asset taxonomy)
-2. Scene Understanding (Collision check, origin calibration)
-3. Technical Research (Engine profiles, non-manifold checks)
-4. Step Planning (Atomic modeling step sequences)
-5. Autonomous Modeling (bmesh primitives, insets, bevel modifiers)
-6. Materials & Lighting (Principled BSDF, roughness, metallic, emissive)
-7. Geometry Topology QA (Manifold verification, edge flow)
-8. Visual Critique (Lighting distribution, bevel reflection)
-9. Human Review (Approval gate)
-10. Production Export (.blend, .fbx, .glb bundles)
+const COPILOT_SYSTEM_PROMPT = `You are BlendPilot AI Copilot, an elite 3D Technical Director, autonomous agent coordinator, and Blender specialist.
+You manage a 10-agent autonomous 3D modeling pipeline:
+1. Intent Understanding (Dimensions, triangle quota, bounding boxes, topology taxonomy)
+2. Scene Understanding (Mesh collision checks, origin calibration, object hierarchy)
+3. Technical Research (Engine profiles for Unity/Unreal/glTF, non-manifold constraints)
+4. Step Planning (Synthesizing atomic procedural modeling sequences)
+5. Autonomous Modeling (bmesh primitives, insets, bevel modifiers, booleans)
+6. Materials & Lighting (Principled BSDF shader networks, metallic/roughness, emissive accents)
+7. Geometry Topology QA (Manifold verification, edge flow, vertex/face checks)
+8. Visual Critique (Lighting distribution, silhouette balance, specular catch)
+9. Human Review (Interactive approval & revision gate)
+10. Production Export (.blend, .fbx, .glb bundles with clean metadata)
 
 Your interaction style:
-- Deliver deeply knowledgeable, practical 3D modeling advice (proportions in meters, non-destructive modifier stacks, UV unwrapping, PBR material nodes).
-- Answer greetings naturally and conversationally.
-- For 3D modeling questions, provide clean Python bpy/bmesh snippets and exact modifier settings.
-- Structure responses with crisp Markdown formatting (bold headers, bullet points, code blocks).`;
+- Think deeply and provide expert, actionable 3D advice (proportions in meters, non-destructive modifier stacks, UV unwrapping, PBR material nodes).
+- Deliver precise Python bpy / bmesh code snippets whenever appropriate.
+- Answer user queries, greetings, and design thoughts naturally, intelligently, and contextually.
+- At the end of your response, you may suggest 2 to 3 concise, highly relevant next actions prefixed with an emoji.
+- Use crisp Markdown formatting (bold headers, bullet points, code blocks).`;
 
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
     const body = await req.json().catch(() => ({}));
-    const { message, asset_spec, current_plan, conversation_history = [], api_key: inlineApiKey, provider: inlineProvider, model: inlineModel } = body;
+    const {
+      message,
+      asset_spec,
+      current_plan,
+      conversation_history = [],
+      api_key: inlineApiKey,
+      provider: inlineProvider,
+      model: inlineModel,
+    } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
 
-    // 1. Fetch User Settings from Database
+    // 1. Resolve LLM Configuration strictly from user input (Request Payload -> User Settings in DB)
     let apiKey = inlineApiKey || "";
-    let provider: LLMProvider = (inlineProvider as LLMProvider) || "openai";
-    let model = inlineModel || "gpt-4o";
+    let provider: LLMProvider = (inlineProvider as LLMProvider) || "groq";
+    let model = inlineModel || "";
     let baseUrl = "";
     let temperature = 0.7;
     let maxTokens = 4096;
     let ragEnabled = true;
 
-    if (session?.user?.id && !apiKey) {
-      const settings = await db.userSettings.findUnique({
-        where: { userId: session.user.id },
-      });
-      if (settings) {
-        provider = (settings.llmProvider || provider) as LLMProvider;
-        model = settings.llmModel || model;
-        if (settings.llmApiKey) {
-          apiKey = decrypt(settings.llmApiKey);
+    // Check DB User Settings if not sent inline
+    if (session?.user?.id && (!apiKey || apiKey.trim().length < 5)) {
+      try {
+        const settings = await db.userSettings.findUnique({
+          where: { userId: session.user.id },
+        });
+        if (settings) {
+          provider = (settings.llmProvider || provider) as LLMProvider;
+          model = settings.llmModel || model;
+          if (settings.llmApiKey) {
+            apiKey = decrypt(settings.llmApiKey);
+          }
+          baseUrl = settings.llmBaseUrl || "";
+          temperature = settings.llmTemperature ?? 0.7;
+          maxTokens = settings.llmMaxTokens || 4096;
+          ragEnabled = settings.ragEnabled ?? true;
         }
-        baseUrl = settings.llmBaseUrl || "";
-        temperature = settings.llmTemperature || 0.7;
-        maxTokens = settings.llmMaxTokens || 4096;
-        ragEnabled = settings.ragEnabled ?? true;
+      } catch (dbErr) {
+        console.warn("[Copilot API] DB settings lookup warning:", dbErr);
       }
     }
 
-    // Fallback logic removed - strictly rely on user-configured API key
-    if (!apiKey) {
-      console.log("[Copilot API] No user API key found. Falling back to intelligent generative mode.");
+    // Set model defaults by provider if empty
+    if (!model) {
+      if (provider === "groq") model = "llama-3.3-70b-versatile";
+      else if (provider === "anthropic") model = "claude-3-5-sonnet-20241022";
+      else if (provider === "custom") model = "gemini-1.5-flash";
+      else model = "gpt-4o";
+    }
+
+    // 2. If no valid API key has been configured by the user in the UI, prompt the user to configure it
+    if (!apiKey || apiKey.includes("your_") || apiKey.trim().length < 5) {
+      return NextResponse.json({
+        reply: `🔑 **API Key Required**\n\nPlease configure your LLM API Key directly in the application to enable live AI reasoning and agent execution.\n\n* Click the **🔑 Configure API Key** button above to link your **Groq**, **OpenAI**, **Anthropic**, or **Gemini** key.`,
+        suggested_actions: ["🔑 Configure LLM Key"],
+        ragSources: [],
+        provider_used: "none",
+        is_live_llm: false,
+      });
     }
 
     // 2. Perform RAG Retrieval if enabled
     let ragContext = "";
     let ragSources: Array<{ title: string; source: string; score: number }> = [];
 
-    if (ragEnabled) {
+    if (ragEnabled && apiKey && apiKey.trim().length > 5) {
       try {
         const rag = new RAGService({ apiKey, baseUrl });
         if (session?.user?.id) {
@@ -83,14 +111,14 @@ export async function POST(req: NextRequest) {
         ragContext = retrieved.formattedContext;
         ragSources = retrieved.sources;
       } catch (e) {
-        console.warn("Copilot RAG retrieval warning:", e);
+        console.warn("[Copilot API] RAG retrieval warning:", e);
       }
     }
 
-    // 3. Build Rich Context Window with Scene State & Memory
+    // 3. Build Enriched Context Window with Active 3D Scene State & Conversation Memory
     let enrichedSystemPrompt = COPILOT_SYSTEM_PROMPT;
     if (asset_spec) {
-      enrichedSystemPrompt += `\n\n## Active 3D Scene State:\n- Asset Type: ${asset_spec.asset_type || "crate"}\n- Dimensions: Width ${asset_spec.dimensions?.width || 1.0}m, Depth ${asset_spec.dimensions?.depth || 0.7}m, Height ${asset_spec.dimensions?.height || 0.6}m\n- Budget: ${asset_spec.budget?.target_triangles || 8000} triangles`;
+      enrichedSystemPrompt += `\n\n## Active 3D Scene State:\n- Asset Type: ${asset_spec.asset_type || "3D Asset"}\n- Dimensions: Width ${asset_spec.dimensions?.width ?? 1.0}m, Depth ${asset_spec.dimensions?.depth ?? 1.0}m, Height ${asset_spec.dimensions?.height ?? 1.0}m\n- Budget: ${asset_spec.budget?.target_triangles ?? 8000} triangles\n- Target Engine: ${asset_spec.target_platform || "Unity/Unreal"}`;
     }
     if (current_plan && current_plan.length > 0) {
       enrichedSystemPrompt += `\n- Current Step Plan: ${JSON.stringify(current_plan)}`;
@@ -120,8 +148,8 @@ export async function POST(req: NextRequest) {
       rawMessages
     );
 
-    // 4. If API Key is present, call Real LLM Provider (OpenAI, Anthropic Claude, Gemini, Custom)
-    if (apiKey && apiKey.trim().length > 5) {
+    // 4. Live LLM Provider Execution
+    if (apiKey && apiKey.trim().length > 5 && !apiKey.includes("your_")) {
       try {
         let reply = "";
 
@@ -151,18 +179,23 @@ export async function POST(req: NextRequest) {
           if (res.ok) {
             const data = await res.json();
             reply = data.content?.[0]?.text || "";
+          } else {
+            const errText = await res.text();
+            console.error("[Copilot API] Anthropic error:", errText);
           }
         } else {
-          // OpenAI & OpenAI-compatible
-          const openaiEndpoint = (baseUrl || "https://api.openai.com/v1") + "/chat/completions";
-          const res = await fetch(openaiEndpoint, {
+          // Groq, OpenAI & OpenAI-compatible providers
+          const defaultBase = provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1";
+          const endpoint = (baseUrl || defaultBase) + "/chat/completions";
+
+          const res = await fetch(endpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-              model: model || "gpt-4o",
+              model: model || (provider === "groq" ? "llama-3.3-70b-versatile" : "gpt-4o"),
               messages: contextMessages.map((m) => ({ role: m.role, content: m.content })),
               max_tokens: maxTokens,
               temperature,
@@ -172,46 +205,38 @@ export async function POST(req: NextRequest) {
           if (res.ok) {
             const data = await res.json();
             reply = data.choices?.[0]?.message?.content || "";
+          } else {
+            const errText = await res.text();
+            console.error(`[Copilot API] ${provider.toUpperCase()} error:`, errText);
           }
         }
 
         if (reply) {
+          const suggested_actions = extractSuggestedActions(message, reply);
           return NextResponse.json({
             reply,
             ragSources,
-            suggested_actions: extractSuggestedActions(message, reply),
+            suggested_actions,
             provider_used: provider,
+            model_used: model,
             is_live_llm: true,
           });
         }
-      } catch (err) {
-        console.error("LLM Provider Call Error:", err);
+      } catch (err: any) {
+        console.error("[Copilot API] Live LLM Exception:", err);
       }
     }
 
-    // 5. If no API key is provided, return a prompt to configure it instead of generating a fake response
-    if (!apiKey || apiKey.trim().length <= 5) {
-      return NextResponse.json({
-        reply: `⚠️ **API Key Required**\n\nPlease configure your LLM API Key to enable chat and agent execution.\n\nClick the **⚙️ Settings / Key icon** at the top right to link your API key.`,
-        suggested_actions: ["🔑 Configure LLM Key"],
-        ragSources: [],
-        provider_used: "none",
-        is_live_llm: false,
-      });
-    }
-
-    // 6. Dynamic Generative Reasoning Engine (Fallback if API call fails)
-    const dynamicReply = generateFluidDynamicResponse(message, asset_spec, ragSources, !apiKey);
-
+    // 5. If no valid API key is configured anywhere, provide a clear, helpful message
     return NextResponse.json({
-      reply: dynamicReply.reply,
-      suggested_actions: dynamicReply.actions,
-      ragSources,
-      provider_used: "blendpilot-dynamic-reasoning",
+      reply: `⚠️ **LLM Connection Required**\n\nTo enable live AI agent reasoning and autonomous Blender generation, please configure your API key:\n\n* **Groq** (Recommended for ultra-fast reasoning: \`GROQ_API_KEY\`)\n* **OpenAI** (\`gpt-4o\` / \`gpt-4o-mini\`)\n* **Anthropic** (\`claude-3-5-sonnet\`)\n* **Local / Custom** (Ollama, LM Studio)\n\nClick the **⚙️ Settings / Key icon** at the top right to link your API key.`,
+      suggested_actions: ["🔑 Configure LLM Key", "🚀 Launch 10-Agent Pipeline"],
+      ragSources: [],
+      provider_used: "none",
       is_live_llm: false,
     });
   } catch (error: any) {
-    console.error("Copilot API Exception:", error);
+    console.error("[Copilot API] Route Exception:", error);
     return NextResponse.json(
       { error: error.message || "Failed to process Copilot request" },
       { status: 500 }
@@ -219,120 +244,37 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * Dynamically extract actionable chips from the user message and LLM reply.
+ */
 function extractSuggestedActions(userMsg: string, reply: string): string[] {
-  const lower = (userMsg + " " + reply).toLowerCase();
+  const combined = (userMsg + " " + reply).toLowerCase();
   const actions: string[] = [];
 
-  if (lower.includes("bevel") || lower.includes("edge")) {
+  // Check for dynamic intent patterns
+  if (combined.includes("launch") || combined.includes("create") || combined.includes("generate") || combined.includes("build") || combined.includes("pipeline")) {
+    actions.push("🚀 Launch 10-Agent Pipeline");
+  }
+  if (combined.includes("bevel") || combined.includes("chamfer") || combined.includes("modifier")) {
     actions.push("🛠️ Add 0.02m Bevel Modifier");
   }
-  if (lower.includes("dimension") || lower.includes("scale") || lower.includes("size")) {
-    actions.push("📐 Adjust Dimensions");
-  }
-  if (lower.includes("material") || lower.includes("shader") || lower.includes("color")) {
+  if (combined.includes("shader") || combined.includes("material") || combined.includes("bsdf") || combined.includes("color")) {
     actions.push("🎨 Tune PBR Shader Nodes");
   }
-  if (lower.includes("plan") || lower.includes("step")) {
+  if (combined.includes("dimension") || combined.includes("scale") || combined.includes("size") || combined.includes("width")) {
+    actions.push("📐 Adjust Proportions & Scale");
+  }
+  if (combined.includes("topology") || combined.includes("manifold") || combined.includes("qa") || combined.includes("check")) {
+    actions.push("🔍 Run Topology QA Check");
+  }
+  if (combined.includes("plan") || combined.includes("step") || combined.includes("sequence")) {
     actions.push("📋 Generate Step-by-Step Plan");
   }
+
+  // Ensure default helpful actions if none matched
   if (actions.length === 0) {
     actions.push("🚀 Launch 10-Agent Pipeline", "📋 Generate Modeling Plan", "🛠️ Add 0.02m Bevel Modifier");
   }
-  return actions.slice(0, 3);
-}
 
-function generateFluidDynamicResponse(
-  message: string,
-  assetSpec: any,
-  ragSources: any[],
-  needsKeyPrompt: boolean
-): { reply: string; actions: string[] } {
-  const clean = message.trim();
-  const lower = clean.toLowerCase();
-  const assetType = assetSpec?.asset_type || "asset";
-  const dims = assetSpec?.dimensions || { width: 1.0, depth: 0.7, height: 0.6 };
-
-  // Conversational greetings
-  if (
-    lower === "hello" ||
-    lower === "hi" ||
-    lower === "hey" ||
-    lower.startsWith("hello") ||
-    lower.startsWith("hi ") ||
-    lower.startsWith("hey ") ||
-    lower.includes("how are you") ||
-    lower.includes("who are you") ||
-    lower.includes("what can you do")
-  ) {
-    return {
-      reply: `### 👋 Hi there! I'm BlendPilot Copilot\n\nI am your **AI 3D Modeling Technical Director**, coordinating **10 autonomous agents** connected directly to Blender.\n\nHere is what I can do for you in real time:\n- 🚀 **Generate 3D Models**: Type any concept (e.g. *"Create a cyber katana sword"*, *"Make a medieval barrel"*, *"Build a sci-fi energy pylon"*).\n- 🛠️ **Modifier & Geometry Automation**: Add non-destructive bevels, subdivision, array modifiers, and vertex group creases.\n- 🎨 **PBR Shading**: Configure Principled BSDF node trees (metallic, roughness, subsurface, and neon emission).\n- 🔍 **Topology & QA Verification**: Validate manifold geometry, edge loops, and triangle budgets.\n\n${
-        needsKeyPrompt
-          ? "> 💡 **Tip**: Click the **⚙️ Settings / Key icon** at the top right to link your OpenAI (`gpt-4o`) or Anthropic (`claude-3-5-sonnet`) key for unconstrained live LLM generation!"
-          : ""
-      }\n\nWhat would you like to design or tweak today?`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🔑 Configure LLM Key", "📋 Generate Modeling Plan"],
-    };
-  }
-
-  // Specific 3D objects
-  if (lower.includes("sword") || lower.includes("blade") || lower.includes("katana") || lower.includes("weapon")) {
-    return {
-      reply: `### ⚔️ Cyber Katana / Blade Specification\n\nConfigured parameters for a **high-precision stylized weapon**:\n\n* **Dimensions**: \`0.08m (W) × 0.04m (D) × 1.15m (Length)\`\n* **Sub-Meshes**: Beveled curved blade spine + guard tsuba + wrapped hilt handle with metallic pommel.\n* **PBR Shaders**: Hardened Damascus Steel (\`Metallic: 0.95\`, \`Roughness: 0.15\`) with an optional glowing plasma edge.\n* **Triangle Budget**: **2,800 tris** (Target < 4,000).\n\nShall I construct this in the 3D viewport?`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "✨ Add Plasma Glow", "📐 Adjust Blade Length"],
-    };
-  }
-
-  if (lower.includes("tree") || lower.includes("foliage") || lower.includes("plant") || lower.includes("nature")) {
-    return {
-      reply: `### 🌲 Low-Poly Stylized Tree Specification\n\nReady to synthesize a **game-ready nature asset**:\n\n* **Dimensions**: \`1.50m × 1.50m × 3.20m\`\n* **Geometry**: Tapered cylindrical trunk with root flairs + 3-tiered faceted icosahedron foliage canopies.\n* **Materials**: Bark BSDF (\`Roughness: 0.85\`) and Emerald Foliage BSDF with subtle gradient ramp.\n* **Optimization**: Zero non-manifold edges, optimal for real-time wind vertex shader animation.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🍃 Add Branch Tier", "🔍 Run Topology QA"],
-    };
-  }
-
-  if (lower.includes("car") || lower.includes("vehicle") || lower.includes("ship") || lower.includes("spaceship")) {
-    return {
-      reply: `### 🚀 Sci-Fi Vehicle / Craft Specification\n\nPrepared blueprints for a **modular sci-fi vehicle**:\n\n* **Dimensions**: \`2.20m (W) × 4.40m (Length) × 1.30m (Height)\`\n* **Compound Sub-Meshes**: Aerodynamic chassis body, chamfered cockpit canopy glass, 4 high-traction wheel modules / thrusters with cyan emissive exhaust.\n* **Shader Setup**: Automotive clearcoat paint (\`Roughness: 0.10\`, \`Metallic: 0.85\`) + Tinted Glass BSDF (\`Transmission: 0.90\`).\n* **Polycount Target**: **6,500 tris**.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🔥 Tune Thruster Glow", "🛠️ Add Bevel Chamfer"],
-    };
-  }
-
-  if (lower.includes("table") || lower.includes("desk") || lower.includes("bench")) {
-    return {
-      reply: `### 🪵 Procedural 3D Table Specification\n\n* **Dimensions**: \`1.20m (W) × 0.80m (D) × 0.75m (H)\`\n* **Topology**: Beveled top slab (\`0.06m\` thickness) + 4 tapered legs (\`0.06m\` profile) with metallic foot caps.\n* **PBR Shader**: Oak Wood BSDF (\`Roughness: 0.65\`, \`Metallic: 0.05\`).\n* **Triangle Budget**: **3,200 tris** (Target < 5,000).`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "📐 Adjust Leg Taper", "🎨 Switch to Walnut Finish"],
-    };
-  }
-
-  if (lower.includes("barrel") || lower.includes("drum") || lower.includes("tank")) {
-    return {
-      reply: `### 🛢️ Medieval Wooden Barrel Design\n\n* **Dimensions**: \`0.50m × 0.50m × 0.80m\`\n* **Sub-Meshes**: Bulged stave cylinder + 4 forged iron hoop rings with rivet studs + inset lid bung.\n* **PBR Setup**: Aged pine staves (\`Roughness: 0.75\`) with galvanized dark steel bands (\`Metallic: 0.90\`, \`Roughness: 0.25\`).\n* **Topology**: Clean quad-dominant edge loops with 0 non-manifold edges.`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "🛠️ Add Metal Hoops", "🔍 Run Topology QA"],
-    };
-  }
-
-  if (lower.includes("pylon") || lower.includes("tower") || lower.includes("beacon") || lower.includes("energy")) {
-    return {
-      reply: `### ⚡ Sci-Fi Energy Pylon Architecture\n\n* **Dimensions**: \`0.60m × 0.60m × 2.20m\`\n* **Components**: Stepped composite base platform, 4 angled vertical pylon prongs, floating octahedral energy core with orbital ring.\n* **Emissive Setup**: Neon Cyan (\`#06B6D4\`) with \`3.0x\` emission intensity and Bloom pass.\n* **Triangle Count**: **4,800 tris** (Budget: 9,000).`,
-      actions: ["🚀 Launch 10-Agent Pipeline", "✨ Increase Core Glow", "📋 Inspect Plan Steps"],
-    };
-  }
-
-  if (lower.includes("bevel") || lower.includes("edge") || lower.includes("smooth") || lower.includes("chamfer")) {
-    return {
-      reply: `### 🛠️ Non-Destructive Bevel & Edge Flow\n\nTo achieve realistic specular highlights without increasing base cage density:\n\n\`\`\`python\nimport bpy\nobj = bpy.context.active_object\nmod = obj.modifiers.new(name="EdgeBevel", type="BEVEL")\nmod.width = 0.02  # 20mm chamfer\nmod.segments = 2   # 2-segment rounded profile\nmod.limit_method = "ANGLE"\nmod.angle_limit = 0.523599  # 30 degrees\n\`\`\`\n\n* **Edge Flow Benefits**: Highlights silhouette geometry, catches rim lights, and satisfies all manifold geometry criteria.`,
-      actions: ["🛠️ Apply 0.02m Bevel", "📐 Test 3-Segment Profile", "🔍 Run Topology QA"],
-    };
-  }
-
-  // Dynamic generic 3D reasoning for any other prompt
-  const detectedSubject = clean.replace(/^(create|make|build|design|generate|add|render|show me)\s+/i, "");
-
-  return {
-    reply: `### 🎨 3D Design Architecture for "${detectedSubject}"\n\nI have analyzed your instruction: **"${clean}"** and synthesized a technical specification:\n\n* **Inferred Dimensions**: \`${dims.width.toFixed(2)}m (W) × ${dims.depth.toFixed(2)}m (D) × ${dims.height.toFixed(2)}m (H)\`\n* **Topology Strategy**: Multi-part compound bmesh hierarchy with beveled edge loops and quad-dominant subdivision.\n* **PBR Shader Graph**: Base Color + Normal Map + Roughness/Metallic channels mapped for Unity & Unreal Engine.\n* **Agent Orchestration**: Step planner is ready to sequence the atomic Blender modeling operations.\n\n${
-      needsKeyPrompt
-        ? "> 🔑 *To enable full unconstrained Claude / GPT-4o conversational chat, click the **⚙️ Settings / Key icon** at the top right to link your API key.*"
-        : ""
-    }`,
-    actions: ["🚀 Launch 10-Agent Pipeline", "📋 Generate Modeling Plan", "🛠️ Add 0.02m Bevel Modifier"],
-  };
+  return Array.from(new Set(actions)).slice(0, 3);
 }

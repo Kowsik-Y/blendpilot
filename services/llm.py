@@ -12,6 +12,9 @@ import logging
 import os
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("blendpilot.services.llm")
@@ -47,27 +50,41 @@ class LLMService:
         # Auto-resolve API keys from environment if not explicitly passed
         resolved_key = (
             api_key
+            or os.environ.get("GROQ_API_KEY")
             or os.environ.get("OPENAI_API_KEY")
             or os.environ.get("ANTHROPIC_API_KEY")
             or ""
         )
         resolved_provider = provider
+        resolved_model = model
+
         if not api_key:
-            if os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
+            if os.environ.get("GROQ_API_KEY") and not (os.environ.get("OPENAI_API_KEY") and not os.environ.get("OPENAI_API_KEY", "").startswith("your_")):
+                resolved_provider = "groq"
+                resolved_key = os.environ.get("GROQ_API_KEY", "")
+                if resolved_model == "gpt-4o":
+                    resolved_model = "llama-3.3-70b-versatile"
+            elif os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
                 resolved_provider = "anthropic"
                 resolved_key = os.environ.get("ANTHROPIC_API_KEY", "")
+                if resolved_model == "gpt-4o":
+                    resolved_model = "claude-3-5-sonnet-20241022"
+
+        resolved_base_url = base_url or os.environ.get("LLM_BASE_URL")
+        if resolved_provider == "groq" and not resolved_base_url:
+            resolved_base_url = "https://api.groq.com/openai/v1"
 
         self.config = LLMConfig(
             provider=resolved_provider,
-            model=model,
+            model=resolved_model,
             temperature=temperature,
             api_key=resolved_key,
-            base_url=base_url or os.environ.get("LLM_BASE_URL"),
+            base_url=resolved_base_url,
         )
 
     def get_chat_model(self) -> Any:
         """Return a LangChain ChatModel instance for text generation."""
-        if self.config.provider == "openai":
+        if self.config.provider in ["openai", "groq", "custom"]:
             from langchain_openai import ChatOpenAI
             kwargs: dict[str, Any] = {
                 "model": self.config.model,

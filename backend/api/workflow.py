@@ -38,6 +38,8 @@ class StartWorkflowRequest(BaseModel):
     reference_images: list[str] = Field(default_factory=list, description="Base64 or URLs to reference images")
     overrides: dict[str, Any] | None = Field(default=None, description="Optional manual parameter overrides")
     enable_human_interrupt: bool = Field(default=False, description="Whether to pause at human feedback stage")
+    api_key: str | None = Field(default=None, description="User configured API key")
+    provider: str | None = Field(default=None, description="User configured LLM provider")
 
 
 class HumanFeedbackRequest(BaseModel):
@@ -59,6 +61,10 @@ async def start_workflow(request: StartWorkflowRequest) -> dict[str, Any]:
         reference_images=request.reference_images,
         overrides=request.overrides,
     )
+    if request.api_key:
+        initial_state["api_key"] = request.api_key
+    if request.provider:
+        initial_state["provider"] = request.provider
 
     _active_sessions[session_id] = {
         "state": initial_state,

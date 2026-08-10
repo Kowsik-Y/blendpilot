@@ -47,15 +47,25 @@ class PlanningAgent:
                 user_msg = PLANNING_USER_PROMPT.format(
                     design_spec=spec.model_dump_json(indent=2),
                     scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
-                    research_notes=json.dumps(research or []),
+                    research_results=json.dumps(research or []),
                 )
                 response = await self.llm_service.generate(
                     prompt=user_msg,
                     system_prompt=system_prompt,
                     response_format={"type": "json_object"},
                 )
-                clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+                clean_json = response.strip()
+                json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", clean_json)
+                if json_match:
+                    clean_json = json_match.group(1).strip()
+                else:
+                    brace_match = re.search(r"(\{[\s\S]*\})", clean_json)
+                    if brace_match:
+                        clean_json = brace_match.group(1).strip()
+
                 data = json.loads(clean_json)
+                if isinstance(data, list):
+                    data = {"steps": data}
                 return DesignPlan.model_validate(data)
             except Exception as e:
                 logger.warning("LLM planning failed (%s), using robust procedural plan generator", e)
