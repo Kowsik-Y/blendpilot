@@ -58,6 +58,7 @@ async def validate_asset(client: BlenderClient, params: dict[str, Any]) -> dict[
     return {
         "success": True,
         "passed": response.result.get("passed", False),
+        "status": "PASS" if response.result.get("passed", False) else "FAIL",
         "result": response.result,
     }
 

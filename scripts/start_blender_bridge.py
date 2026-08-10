@@ -77,12 +77,19 @@ def start_bridge(
     bootstrap_code = f"""
 import sys, os
 sys.path.insert(0, {repr(project_root)})
-from blender_addon.bridge import start_bridge_server
+from blender_addon.bridge import start_bridge_server, start_bridge_server_blocking
 from blender_addon.operators import register_all_operators
 
-register_all_operators()
-start_bridge_server(host={repr(host)}, port={port})
-print(f"BlendPilot Bridge active on http://{host}:{port}")
+import bpy
+
+if bpy.app.background:
+    # Keep Blender background bridge process alive after initialization.
+    # We use blocking mode so Blender main thread handles requests securely.
+    start_bridge_server_blocking(host={repr(host)}, port={port})
+else:
+    register_all_operators()
+    start_bridge_server(host={repr(host)}, port={port})
+    print(f"BlendPilot Bridge active on http://{{host}}:{{port}}")
 """
 
     cmd = [bin_path]

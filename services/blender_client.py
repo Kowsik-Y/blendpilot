@@ -60,7 +60,7 @@ class BlenderClient:
         self,
         host: str = "127.0.0.1",
         port: int = 9876,
-        timeout: float = 5.0,
+        timeout: float = 300.0,
         mock_mode: bool = False,
     ):
         self.base_url = f"http://{host}:{port}"
@@ -98,12 +98,12 @@ class BlenderClient:
                     result = BridgeResponse.model_validate(response.json())
                     return result
             except Exception as e:
-                if settings.require_real_blender:
-                    logger.error("Real Blender is required but bridge is unreachable: %s", e)
-                    raise RuntimeError(f"Failed to connect to Blender bridge at {self.base_url}/execute. Ensure Blender is running.")
-                logger.debug("Live Blender bridge not reachable (%s), executing in simulated fallback mode", e)
+                logger.error("Real Blender execution failed: bridge is unreachable: %s", e)
+                raise RuntimeError(f"Failed to connect to Blender bridge at {self.base_url}/execute. Ensure Blender is running.")
+                
+            raise RuntimeError(f"Blender bridge returned an error HTTP status.")
 
-        # Simulated fallback execution
+        # Simulated fallback execution (only reached if self.mock_mode == True)
         return self._simulate_command(req)
 
     def _simulate_command(self, req: BridgeCommand) -> BridgeResponse:

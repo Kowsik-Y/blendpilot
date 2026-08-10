@@ -80,8 +80,11 @@ IMPORTANT: Return ONLY the raw JSON string. Do not wrap in ```json ```.
                 image_paths=[preview_image_path] if preview_image_path else []
             )
             
-            # Clean response
+            # Clean response — strip <think>...</think> reasoning blocks (Qwen)
             cleaned_response = response_text.strip()
+            if "<think>" in cleaned_response and "</think>" in cleaned_response:
+                think_end = cleaned_response.rfind("</think>")
+                cleaned_response = cleaned_response[think_end + len("</think>"):].strip()
             if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]
             if cleaned_response.startswith("```"):

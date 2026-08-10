@@ -1,5 +1,5 @@
-"""
-BlendPilot AI — Unified Blender Generation Agent
+﻿"""
+BlendPilot AI - Unified Blender Generation Agent
 
 Workflow 5: Translates a validated ModelingPlan into direct Blender core operations.
 """
@@ -55,21 +55,11 @@ class GenerationAgent:
         plan: ModelingPlan | Any,
         output_image_path: str | None = None,
     ) -> dict[str, Any]:
-        """Run the full generation pipeline by executing ModelingPlan steps.
-
-        Args:
-            spec: The design spec (DesignSpec or IntentSpec).
-            plan: The modeling plan (ModelingPlan or DesignPlan).
-            output_image_path: Path to write the preview render to.
-
-        Returns:
-            dict matching PlanExecution structure.
-        """
+        """Run the full generation pipeline by executing ModelingPlan steps."""
         # Coerce DesignPlan to ModelingPlan if needed
         if not isinstance(plan, ModelingPlan):
             steps = []
             for step in getattr(plan, "steps", []):
-                # Map PlanStep to ModelingStep
                 steps.append(
                     ModelingStep(
                         step_id=step.step_id,
@@ -85,7 +75,7 @@ class GenerationAgent:
         if output_image_path is None:
             output_image_path = f"output/{asset_type}/preview.png"
 
-        logger.info("GenerationAgent starting execution for '%s' — %d plan steps", asset_type, len(plan.steps))
+        logger.info("GenerationAgent starting execution for '%s' - %d plan steps", asset_type, len(plan.steps))
 
         created_objects: list[str] = []
         materials_created: list[str] = []
@@ -100,7 +90,6 @@ class GenerationAgent:
             details = {}
 
             if self.mock_mode:
-                # Simulated/mock mode to bypass Blender environment
                 success = True
                 msg = f"Mock execution of {step.operation} succeeded"
                 details = {"mocked": True}
@@ -108,7 +97,7 @@ class GenerationAgent:
                 try:
                     res = await self._execute_core_operation(step, output_image_path)
                     success = res.get("success", False)
-                    msg = res.get("message", res.get("error", ""))
+                    msg = res.get("message") or res.get("error") or ""
                     details = res
                 except Exception as e:
                     logger.exception("Step %d execution failed with exception", step.step_id)
@@ -150,33 +139,88 @@ class GenerationAgent:
         return execution_result.model_dump()
 
     async def _execute_core_operation(self, step: ModelingStep, default_output_path: str) -> dict[str, Any]:
-        """Execute a single core Blender operation by routing to the MCP Server."""
+        """Execute a single core Blender operation by routing to the MCP Server.
+
+        Normalizes LLM-generated parameter field names to match the canonical
+        MCP tool schemas defined in mcp_servers/blender/schemas.py.
+        """
         op = step.operation
         params = dict(step.parameters or {})
-        
-        # Adjust params for some operations that expect specific names or paths
+
         if op == "create_primitive":
+            # Schema: primitive_type (not "type"), name
+            if "primitive_type" not in params and "type" in params:
+                params["primitive_type"] = params.pop("type")
             if "name" not in params:
                 params["name"] = step.target
-        elif op in ["set_transform", "duplicate_object", "delete_object", "assign_material", "add_modifier", "apply_modifier"]:
+
+        elif op in ("set_transform", "duplicate_object", "delete_object"):
+            # Schema: name (not "object_name")
+            if "name" not in params:
+                params["name"] = params.pop("object_name", step.target)
+            elif "object_name" in params:
+                params.pop("object_name", None)
+
+        elif op == "assign_material":
+            # Schema: object_name, material_name (not "material")
+            if "material_name" not in params and "material" in params:
+                params["material_name"] = params.pop("material")
             if "object_name" not in params:
                 params["object_name"] = step.target
+
+        elif op in ("add_modifier", "apply_modifier"):
+            # Schema: object_name
+            if "object_name" not in params:
+                params["object_name"] = params.pop("name", step.target)
+
         elif op == "create_material":
+            # Schema: name
             if "name" not in params:
                 params["name"] = step.target
+
+        elif op == "edit_mesh":
+            # Schema: object_name, operation
+            if "object_name" not in params:
+                params["object_name"] = params.pop("name", step.target)
+            if "operation" not in params:
+                # LLM often sends mesh_type instead of operation
+                mesh_type = params.pop("mesh_type", "")
+                op_map = {
+                    "low-poly": "recalculate_normals",
+                    "low_poly": "recalculate_normals",
+                    "smooth": "smooth_normals",
+                    "bevel": "bevel",
+                    "subdivide": "subdivide",
+                    "decimate": "decimate",
+                }
+                params["operation"] = op_map.get(mesh_type, "recalculate_normals")
+
         elif op == "render_preview":
+            # Schema: output_path
             if "output_path" not in params:
                 params["output_path"] = default_output_path
+
+        elif op in ("save_checkpoint", "save_project", "restore_checkpoint"):
+            # Schema: filepath
+            if "filepath" not in params:
+                alt = params.pop("path", params.pop("file", "output/checkpoint.blend"))
+                params["filepath"] = alt
+
+        elif op == "export_asset":
+            # Schema: object_names (list), output_path
+            if "object_names" not in params and "object_name" in params:
+                params["object_names"] = [params.pop("object_name")]
+            if "output_path" not in params:
+                params["output_path"] = params.pop("path", "output/export.fbx")
 
         if not self.mcp_server:
             from mcp_servers.blender.server import BlenderMCPServer
             self.mcp_server = BlenderMCPServer()
 
-        logger.info(f"Routing '{op}' through MCP Server with params {params}")
+        logger.info("Routing '%s' through MCP Server with params %s", op, params)
         result = await self.mcp_server.call_tool(op, params)
-        
-        # call_tool might return {"success": True, "result": {...}}
-        # We need to flatten it back for the original calling logic that expects result directly
+
+        # Flatten nested result dicts from call_tool
         if "result" in result and isinstance(result["result"], dict):
             out = dict(result["result"])
             out["success"] = result.get("success", False)

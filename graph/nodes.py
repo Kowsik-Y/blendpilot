@@ -390,11 +390,7 @@ async def node_executor(
     """Execute the list of operations in the Blender context."""
     logger.info("[Node] Executor Agent")
     try:
-        try:
-            import bpy
-            mock_mode = False
-        except ImportError:
-            mock_mode = True
+        mock_mode = state.get("baseline_mode", False)
 
         agent = GenerationAgent(
             mcp_server=mcp_server,
@@ -464,7 +460,12 @@ async def node_scene_state(
     try:
         server = mcp_server or BlenderMCPServer()
         result = await server.call_tool("get_scene_summary", {})
-        scene_dict = result if isinstance(result, dict) else {}
+        # call_tool returns {"success": bool, "result": {...scene data...}, "error": ...}
+        # Unwrap the inner "result" key to get the actual scene dict
+        if isinstance(result, dict) and "result" in result and isinstance(result["result"], dict):
+            scene_dict = result["result"]
+        else:
+            scene_dict = result if isinstance(result, dict) else {}
 
         # Build a minimal scene_summary compatible with frontend schema
         objects = scene_dict.get("objects", [])

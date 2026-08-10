@@ -260,6 +260,44 @@ def start_bridge_server(host: str = "127.0.0.1", port: int = 9876) -> None:
     logger.info("Bridge server started on http://%s:%d", host, port)
 
 
+def start_bridge_server_blocking(host: str = "127.0.0.1", port: int = 9876) -> None:
+    """Start the bridge HTTP server synchronously on the current thread.
+
+    This is the safest mechanism for Blender background mode, ensuring
+    all bpy operations execute securely on the main thread without
+    silently stalling background jobs (like rendering).
+    """
+    global _server, _start_time
+
+    if _server is not None:
+        raise RuntimeError("Bridge server is already running.")
+
+    if host != "127.0.0.1":
+        logger.warning(
+            "Security: Forcing bridge server to bind to 127.0.0.1 "
+            "(requested: %s)", host,
+        )
+        host = "127.0.0.1"
+
+    from blender_addon.operators import register_all_operators
+    register_all_operators()
+
+    _server = HTTPServer((host, port), BridgeRequestHandler)
+    _start_time = time.time()
+    
+    logger.info("Bridge server started on http://%s:%d (Blocking Mode)", host, port)
+
+    _server.timeout = 0.5
+    try:
+        while True:
+            _server.handle_request()
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received. Shutting down bridge.")
+    finally:
+        stop_bridge_server()
+
+
+
 def stop_bridge_server() -> None:
     """Stop the bridge HTTP server."""
     global _server, _server_thread

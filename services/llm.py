@@ -140,7 +140,6 @@ class LLMService:
             return ""
 
         try:
-            from langchain_core.messages import HumanMessage
             content_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
 
             for img_path in image_paths:
@@ -152,10 +151,21 @@ class LLMService:
                             "image_url": {"url": f"data:image/png;base64,{b64}"},
                         })
 
+            if self.config.provider == "groq":
+                import groq
+                client = groq.AsyncGroq(api_key=self.config.api_key)
+                model_name = "qwen/qwen3.6-27b"
+                res = await client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": content_parts}]
+                )
+                return str(res.choices[0].message.content)
+
+            from langchain_core.messages import HumanMessage
             model = self.get_chat_model()
             msg = HumanMessage(content=content_parts)
             res = await model.ainvoke([msg])
             return str(res.content)
         except Exception as e:
             logger.warning("Vision LLM evaluation failed: %s", e)
-            return ""
+            raise RuntimeError(f"Vision LLM evaluation failed: {e}")
