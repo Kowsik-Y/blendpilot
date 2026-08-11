@@ -246,11 +246,11 @@ export default function StudioPage() {
             setSceneObjects(prev => {
               const src = prev.find(p => p.name === input.name);
               if (!src) return prev;
-              
-              const newLocation: [number, number, number] = input.offset 
+
+              const newLocation: [number, number, number] = input.offset
                 ? [src.location[0] + (input.offset[0] || 0), src.location[1] + (input.offset[1] || 0), src.location[2] + (input.offset[2] || 0)]
                 : [...src.location];
-                
+
               return [
                 ...prev.filter(p => p.name !== input.new_name),
                 {
@@ -278,7 +278,7 @@ export default function StudioPage() {
           }
         }
       }
-      
+
       if (currentPayload.event === "on_tool_end" && node === "save_checkpoint") {
         setCheckpointRefreshTrigger(prev => prev + 1);
       }
@@ -305,7 +305,7 @@ export default function StudioPage() {
       if (state.current_agent === "human_feedback" && liveWorkflowRef.current) {
         setHumanReviewOpen(true);
       }
-      
+
       // Sync ground truth from Blender anytime it is provided
       if (currentPayload.scene_objects) {
         setSceneObjects(prev => {
@@ -322,6 +322,20 @@ export default function StudioPage() {
         setActiveNode(null);
         liveWorkflowRef.current = false;
         toast.success("3D Asset generated successfully!");
+      } else if (
+        currentPayload.event === "workflow_failed" ||
+        currentPayload.event === "workflow_missing" ||
+        state.status === "FAILED" ||
+        currentPayload.status === "FAILED"
+      ) {
+        setRunning(false);
+        setActiveNode(null);
+        liveWorkflowRef.current = false;
+        if (currentPayload.event === "workflow_missing") {
+          toast.info("Previous workflow session ended (server restarted).");
+        } else {
+          toast.error(`Workflow failed: ${currentPayload.error || "Unknown error"}`);
+        }
       }
     });
   }, []);
@@ -445,18 +459,18 @@ export default function StudioPage() {
       {/* Main Studio Workspace: viewport + editor rail + chat */}
       <div className={cn(
         "flex-1 grid grid-cols-1 gap-4 items-stretch overflow-hidden",
-        versionHistoryOpen 
+        versionHistoryOpen
           ? "xl:grid-cols-[240px_minmax(0,1.45fr)_minmax(0,0.95fr)]"
           : "xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]"
       )}>
-        
+
         {/* Left Sidebar: Version History */}
         {versionHistoryOpen && (
           <div className="hidden xl:flex flex-col min-w-0 h-full overflow-hidden">
-            <VersionHistory 
-              projectId={projectId} 
+            <VersionHistory
+              projectId={projectId}
               refreshTrigger={checkpointRefreshTrigger}
-              onRestore={(path) => handleStartPipeline(`Restore the scene to checkpoint: ${path}`)} 
+              onRestore={(path) => handleStartPipeline(`Restore the scene to checkpoint: ${path}`)}
             />
           </div>
         )}
@@ -472,7 +486,7 @@ export default function StudioPage() {
             />
           </div>
 
-          <Card className="border-border/70 bg-card/80 backdrop-blur-xl shadow-lg">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center justify-between gap-2">
                 <span>Live Workflow</span>
@@ -566,142 +580,142 @@ export default function StudioPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 p-0">
                   <fieldset disabled={running} className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 border-0 m-0">
-                  <div className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-background/60 p-2">
-                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                      Scene Outliner
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {sceneObjects.length === 0 ? (
-                        <div className="px-2 py-3 text-sm text-muted-foreground">Waiting for workflow-generated geometry.</div>
-                      ) : (
-                        sceneObjects.map((object) => (
-                          <Button
-                            key={object.name}
-                            type="button"
-                            variant={object.name === resolvedSelectedObjectName ? "secondary" : "ghost"}
-                            className="justify-start gap-2 text-left"
-                            onClick={() => handleSelectObject(object.name)}
-                          >
-                            <span className="truncate">{object.name}</span>
-                            <Badge variant="outline" className="ml-auto text-[10px]">
-                              {object.primitiveType}
-                            </Badge>
-                          </Button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {selectedObject ? (
-                    <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/60 p-3 overflow-auto">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Properties</div>
-                          <div className="text-sm font-medium text-foreground">Selected object</div>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" onClick={handleDuplicateSelected}>
-                          Duplicate
-                        </Button>
+                    <div className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-background/60 p-2">
+                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                        Scene Outliner
                       </div>
-
-                      <div className="grid gap-3">
-                        <div className="grid gap-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Name</label>
-                          <Input
-                            value={selectedObject.name}
-                            onChange={(event) => {
-                              const nextName = event.target.value.trim();
-                              if (!nextName) return;
-                              updateSceneObject(selectedObject.name, (item) => ({ ...item, name: nextName }));
-                              setSelectedObjectName(nextName);
-                            }}
-                          />
-                        </div>
-
-                        <div className="grid gap-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Material</label>
-                          <Input
-                            value={selectedObject.materialName || ""}
-                            onChange={(event) => updateSelectedObject((item) => ({ ...item, materialName: event.target.value }))}
-                            placeholder="e.g. brushed_metal"
-                          />
-                        </div>
-
-                        <div className="grid gap-2">
-                          <label className="text-xs font-medium text-muted-foreground">Dimensions</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {["X", "Y", "Z"].map((axis, index) => (
-                              <InspectorNumberInput
-                                key={axis}
-                                value={selectedObject.dimensions[index]}
-                                onChange={(nextValue) => {
-                                  updateSelectedObject((item) => {
-                                    const nextDimensions: [number, number, number] = [...item.dimensions] as [number, number, number];
-                                    nextDimensions[index] = nextValue;
-                                    return { ...item, dimensions: nextDimensions };
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2">
-                          <label className="text-xs font-medium text-muted-foreground">Location</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {["X", "Y", "Z"].map((axis, index) => (
-                              <InspectorNumberInput
-                                key={axis}
-                                value={selectedObject.location[index]}
-                                onChange={(nextValue) => {
-                                  updateSelectedObject((item) => {
-                                    const nextLocation: [number, number, number] = [...item.location] as [number, number, number];
-                                    nextLocation[index] = nextValue;
-                                    return { ...item, location: nextLocation };
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2">
-                          <label className="text-xs font-medium text-muted-foreground">Rotation</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {["X", "Y", "Z"].map((axis, index) => (
-                              <InspectorNumberInput
-                                key={axis}
-                                value={selectedObject.rotation?.[index] ?? 0}
-                                onChange={(nextValue) => {
-                                  updateSelectedObject((item) => {
-                                    const nextRotation: [number, number, number] = [...(item.rotation || [0, 0, 0])] as [number, number, number];
-                                    nextRotation[index] = nextValue;
-                                    return { ...item, rotation: nextRotation };
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {(selectedObject.modifiers || []).length > 0 ? (
-                            selectedObject.modifiers?.map((modifier) => (
-                              <Badge key={modifier} variant="outline" className="text-[10px]">
-                                {modifier}
+                      <div className="flex flex-col gap-1">
+                        {sceneObjects.length === 0 ? (
+                          <div className="px-2 py-3 text-sm text-muted-foreground">Waiting for workflow-generated geometry.</div>
+                        ) : (
+                          sceneObjects.map((object) => (
+                            <Button
+                              key={object.name}
+                              type="button"
+                              variant={object.name === resolvedSelectedObjectName ? "secondary" : "ghost"}
+                              className="justify-start gap-2 text-left"
+                              onClick={() => handleSelectObject(object.name)}
+                            >
+                              <span className="truncate">{object.name}</span>
+                              <Badge variant="outline" className="ml-auto text-[10px]">
+                                {object.primitiveType}
                               </Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-muted-foreground">No modifiers assigned yet.</span>
-                          )}
-                        </div>
+                            </Button>
+                          ))
+                        )}
                       </div>
                     </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-border/60 bg-background/60 p-4 text-sm text-muted-foreground">
-                      Select an object in the outliner or viewport to inspect and edit its properties.
-                    </div>
-                  )}
+
+                    {selectedObject ? (
+                      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/60 p-3 overflow-auto">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Properties</div>
+                            <div className="text-sm font-medium text-foreground">Selected object</div>
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={handleDuplicateSelected}>
+                            Duplicate
+                          </Button>
+                        </div>
+
+                        <div className="grid gap-3">
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Name</label>
+                            <Input
+                              value={selectedObject.name}
+                              onChange={(event) => {
+                                const nextName = event.target.value.trim();
+                                if (!nextName) return;
+                                updateSceneObject(selectedObject.name, (item) => ({ ...item, name: nextName }));
+                                setSelectedObjectName(nextName);
+                              }}
+                            />
+                          </div>
+
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Material</label>
+                            <Input
+                              value={selectedObject.materialName || ""}
+                              onChange={(event) => updateSelectedObject((item) => ({ ...item, materialName: event.target.value }))}
+                              placeholder="e.g. brushed_metal"
+                            />
+                          </div>
+
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium text-muted-foreground">Dimensions</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {["X", "Y", "Z"].map((axis, index) => (
+                                <InspectorNumberInput
+                                  key={axis}
+                                  value={selectedObject.dimensions[index]}
+                                  onChange={(nextValue) => {
+                                    updateSelectedObject((item) => {
+                                      const nextDimensions: [number, number, number] = [...item.dimensions] as [number, number, number];
+                                      nextDimensions[index] = nextValue;
+                                      return { ...item, dimensions: nextDimensions };
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium text-muted-foreground">Location</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {["X", "Y", "Z"].map((axis, index) => (
+                                <InspectorNumberInput
+                                  key={axis}
+                                  value={selectedObject.location[index]}
+                                  onChange={(nextValue) => {
+                                    updateSelectedObject((item) => {
+                                      const nextLocation: [number, number, number] = [...item.location] as [number, number, number];
+                                      nextLocation[index] = nextValue;
+                                      return { ...item, location: nextLocation };
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium text-muted-foreground">Rotation</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {["X", "Y", "Z"].map((axis, index) => (
+                                <InspectorNumberInput
+                                  key={axis}
+                                  value={selectedObject.rotation?.[index] ?? 0}
+                                  onChange={(nextValue) => {
+                                    updateSelectedObject((item) => {
+                                      const nextRotation: [number, number, number] = [...(item.rotation || [0, 0, 0])] as [number, number, number];
+                                      nextRotation[index] = nextValue;
+                                      return { ...item, rotation: nextRotation };
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {(selectedObject.modifiers || []).length > 0 ? (
+                              selectedObject.modifiers?.map((modifier) => (
+                                <Badge key={modifier} variant="outline" className="text-[10px]">
+                                  {modifier}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No modifiers assigned yet.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border/60 bg-background/60 p-4 text-sm text-muted-foreground">
+                        Select an object in the outliner or viewport to inspect and edit its properties.
+                      </div>
+                    )}
                   </fieldset>
                 </CardContent>
               </Card>

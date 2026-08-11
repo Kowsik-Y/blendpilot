@@ -348,7 +348,7 @@ export function ThreeViewport({
   };
 
   return (
-    <div className="relative w-full h-full min-h-120 rounded-2xl overflow-hidden border border-border bg-card shadow-2xl flex flex-col">
+    <div className="relative w-full h-full min-h-120 rounded-2xl overflow-hidden border border-border bg-card flex flex-col">
       <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-2 pointer-events-auto">
           <Badge variant="outline" className="bg-background/85 backdrop-blur-md border-cyan-500/40 text-cyan-300 text-xs px-2.5 py-1 font-semibold">
@@ -362,24 +362,30 @@ export function ThreeViewport({
 
         <div className="flex items-center gap-1 pointer-events-auto bg-background/85 backdrop-blur-md p-1 rounded-xl border border-border shadow-lg">
           <div className="flex bg-muted/40 p-0.5 rounded-lg mr-1">
-            <button
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => handleSetView("iso")}
-              className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${cameraView === "iso" ? "bg-card text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              className={`h-7 px-2 text-xs ${cameraView === "iso" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
             >
               Iso
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => handleSetView("front")}
-              className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${cameraView === "front" ? "bg-card text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              className={`h-7 px-2 text-xs ${cameraView === "front" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
             >
               Front
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => handleSetView("top")}
-              className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${cameraView === "top" ? "bg-card text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              className={`h-7 px-2 text-xs ${cameraView === "top" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
             >
               Top
-            </button>
+            </Button>
           </div>
 
           <Button
@@ -413,18 +419,6 @@ export function ThreeViewport({
       )}
 
       <div ref={containerRef} className="w-full flex-1 min-h-110 cursor-grab active:cursor-grabbing" />
-
-      <div className="px-4 py-2 bg-card/70 backdrop-blur-md border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-foreground font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            Live WebSocket Scene Preview
-          </span>
-          <span>•</span>
-          <span>No static model generation</span>
-        </div>
-        <span className="font-mono text-[10px] text-muted-foreground/60">WebGL 2.0</span>
-      </div>
     </div>
   );
 }
