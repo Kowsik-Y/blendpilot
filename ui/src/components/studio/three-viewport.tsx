@@ -105,7 +105,7 @@ export function ThreeViewport({
       45,
       container.clientWidth / container.clientHeight,
       0.1,
-      100
+      10000
     );
     camera.position.set(2.4, 2.0, 3.2);
     cameraRef.current = camera;
@@ -129,7 +129,7 @@ export function ThreeViewport({
     controls.target.set(0, 0.4, 0);
     controls.maxPolarAngle = Math.PI / 2 + 0.05;
     controls.minDistance = 0.5;
-    controls.maxDistance = 15;
+    controls.maxDistance = Infinity;
     controlsRef.current = controls;
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
@@ -202,7 +202,7 @@ export function ThreeViewport({
     hemiLight.name = "hemiLight";
     scene.add(hemiLight);
 
-    const gridHelper = new THREE.GridHelper(100, 100, 0x0ea5e9, isDark ? 0x334155 : 0xe2e8f0);
+    const gridHelper = new THREE.GridHelper(10000, 1000, 0x0ea5e9, isDark ? 0x334155 : 0xcbd5e1);
     gridHelper.name = "gridHelper";
     gridHelper.material.transparent = true;
     gridHelper.material.onBeforeCompile = (shader) => {
@@ -220,7 +220,7 @@ export function ThreeViewport({
         `vec4 diffuseColor = vec4( diffuse, opacity );`,
         `
         float dist = length(vWorldPosition.xz);
-        float fade = 1.0 - smoothstep(4.0, 12.0, dist);
+        float fade = 1.0 - smoothstep(3000.0, 5000.0, dist);
         vec4 diffuseColor = vec4( diffuse, opacity * fade );
         `
       );
@@ -228,7 +228,7 @@ export function ThreeViewport({
     scene.add(gridHelper);
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
+      new THREE.PlaneGeometry(10000, 10000),
       new THREE.ShadowMaterial({ opacity: isDark ? 0.4 : 0.18, transparent: true })
     );
     floor.name = "floor";
@@ -249,7 +249,7 @@ export function ThreeViewport({
         `gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );`,
         `
         float dist = length(vWorldPosition.xz);
-        float fade = 1.0 - smoothstep(2.0, 10.0, dist);
+        float fade = 1.0 - smoothstep(3000.0, 5000.0, dist);
         gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) * fade );
         `
       );
@@ -310,7 +310,16 @@ export function ThreeViewport({
     if (renderer && camera) {
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2();
+      let pointerDownPos = { x: 0, y: 0 };
       const handlePointerDown = (event: PointerEvent) => {
+        pointerDownPos = { x: event.clientX, y: event.clientY };
+      };
+
+      const handlePointerUp = (event: PointerEvent) => {
+        // If the user dragged more than 5 pixels, treat it as an orbit/pan, not a click
+        const dist = Math.hypot(event.clientX - pointerDownPos.x, event.clientY - pointerDownPos.y);
+        if (dist > 5) return;
+
         const rect = renderer.domElement.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
 
@@ -320,12 +329,14 @@ export function ThreeViewport({
 
         const intersections = raycaster.intersectObjects(group.children, true);
         const hit = intersections.find((intersection) => intersection.object instanceof THREE.Mesh)?.object;
-        onObjectSelect?.(hit?.name || null);
+        onObjectSelect?.(hit ? hit.name : null);
       };
 
       renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+      renderer.domElement.addEventListener("pointerup", handlePointerUp);
       return () => {
         renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+        renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       };
     }
   }, [sceneObjects, effectiveWireframe, selectedObjectName, onObjectSelect]);

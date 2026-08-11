@@ -137,10 +137,9 @@ export default function StudioPage() {
   });
   const [humanReviewOpen, setHumanReviewOpen] = useState(false);
 
-  const resolvedSelectedObjectName =
-    (selectedObjectName && sceneObjects.some((item) => item.name === selectedObjectName)
-      ? selectedObjectName
-      : sceneObjects[0]?.name) || null;
+  const resolvedSelectedObjectName = selectedObjectName === null 
+    ? null 
+    : (sceneObjects.some((item) => item.name === selectedObjectName) ? selectedObjectName : null);
   const selectedObject = sceneObjects.find((item) => item.name === resolvedSelectedObjectName) || null;
 
   const updateSceneObject = useCallback(
@@ -578,7 +577,7 @@ export default function StudioPage() {
                     </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 p-0">
+                <CardContent className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 p-0 mx-3">
                   <fieldset disabled={running} className="flex flex-col gap-4 overflow-hidden flex-1 min-h-0 border-0 m-0">
                     <div className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-background/60 p-2">
                       <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">

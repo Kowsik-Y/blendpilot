@@ -68,12 +68,13 @@ Each step must contain:
 7. **Stack objects correctly** — Blender is Z-up. To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Objects like TableTops must be placed ON TOP of legs (higher Z), not at the origin. Do NOT build inverted objects.
 8. **Plan materials last** — geometry must be finalized first
 9. **End with render and export** — always produce a preview
-
+10. **Respect existing objects** — If the request is to add details or modify an existing object (e.g. adding a backrest to a chair), do NOT delete the existing scene objects unless explicitly asked. Build ON TOP of or MODIFY the existing objects listed in the `Current Scene State`.
+11. **Do not create unrelated large objects** — If the request is to modify an existing object, only create the requested details. Do not create an entirely new base asset (like creating a table when asked to add to a chair).
 ## Example Plan
 
 For "Create a simple red table with four legs":
 
-1. Delete default objects
+1. Delete default objects (if starting from scratch and not modifying an existing scene)
 2. Create TableTop (cube, 1.2×0.8×0.05, at z=0.725)
 3. Create LegFrontLeft (cube, 0.06×0.06×0.7, at correct position)
 4. Create LegFrontRight (duplicate of LegFrontLeft, offset)

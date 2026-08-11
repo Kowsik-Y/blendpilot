@@ -10,17 +10,21 @@ export const WebSearchToolUI = makeAssistantToolUI({
     let searchResults: Array<{ title: string; domain: string; url?: string }> = [];
     
     if (result) {
-      try {
-        const parsed = typeof result === "string" ? JSON.parse(result) : result;
-        if (parsed.results && Array.isArray(parsed.results)) {
-          searchResults = parsed.results.map((r: any) => ({
-            title: r.title || "Unknown Title",
-            domain: r.source_domain || (r.url ? new URL(r.url).hostname : "unknown"),
-            url: r.url
-          }));
+      let parsed: any = result;
+      if (typeof result === "string") {
+        try {
+          parsed = JSON.parse(result);
+        } catch (e) {
+          // Result is just a string (e.g. "Success"), not JSON
         }
-      } catch (e) {
-        console.error("Failed to parse web_search result:", e);
+      }
+      
+      if (parsed && typeof parsed === "object" && parsed.results && Array.isArray(parsed.results)) {
+        searchResults = parsed.results.map((r: any) => ({
+          title: r.title || "Unknown Title",
+          domain: r.source_domain || (r.url ? new URL(r.url).hostname : "unknown"),
+          url: r.url
+        }));
       }
     }
 
@@ -56,12 +60,17 @@ export const ImageGenerationToolUI = makeAssistantToolUI({
     let images: Array<{ url: string; meta?: string }> = [];
     
     if (result) {
-      try {
-        const parsed = typeof result === "string" ? JSON.parse(result) : result;
-        if (parsed.images && Array.isArray(parsed.images)) {
-          images = parsed.images;
+      let parsed: any = result;
+      if (typeof result === "string") {
+        try {
+          parsed = JSON.parse(result);
+        } catch (e) {
+          // Result is just a string
         }
-      } catch (e) {}
+      }
+      if (parsed && typeof parsed === "object" && parsed.images && Array.isArray(parsed.images)) {
+        images = parsed.images;
+      }
     }
     
     return (

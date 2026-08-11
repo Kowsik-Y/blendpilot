@@ -41,8 +41,8 @@ class ResearchAgent:
 
         # Dynamic Web Research via Tavily Search API
         try:
-            # e.g., query for dimensions and specifics
-            search_query = f"{spec.asset_type} dimensions and {spec.target_platform} import requirements"
+            # e.g., query for dimensions, layout, and specifics
+            search_query = f"{spec.asset_type} dimensions, standard layout positioning, and {spec.target_platform} import requirements"
             search_response = await self.search_service.search(search_query)
             
             for result in search_response.results:
@@ -96,7 +96,7 @@ class ResearchAgent:
             f"Generate 3-5 specific technical research findings as a JSON array. Each finding:\n"
             f'{{"category": str, "title": str, "source": str, "notes": str}}\n\n'
             f"Cover: topology techniques, PBR material values, edge flow strategies, "
-            f"engine-specific optimization tips, and reference dimension ratios."
+            f"engine-specific optimization tips, reference dimension ratios, and standard layout positioning."
         )
 
         response = await self.llm_service.generate(
