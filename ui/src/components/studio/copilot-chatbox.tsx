@@ -472,34 +472,7 @@ export function CopilotChatbox({
 
 
   return (
-    <>
-      <Card className="bg-card border-border py-0 flex flex-col h-full overflow-hidden">
-        {/* Header Bar with Store Connection & Key Config Dialog */}
-        <CardHeader className="p-3 pb-2 bg-muted/50">
-          <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
-            <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <span className="font-medium text-foreground">{llmProvider.toUpperCase()}</span>
-              <span>({llmModel})</span>
-              {hasApiKey ? (
-                <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Connected
-                </span>
-              ) : (
-                <span className="flex items-center gap-0.5 text-orange-400 font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                  No Key
-                </span>
-              )}
-            </div>
-            {pipelineRunning && (
-              <Badge variant="outline" className="text-[9px]">
-                Running
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-
+      <Card className="py-0 flex flex-col h-full overflow-hidden">
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden p-3 relative bg-muted/20">
             <div className="flex-1 min-h-0 relative">
@@ -578,9 +551,6 @@ export function CopilotChatbox({
           </div>
         </CardContent>
       </Card>
-
-
-    </>
   );
 }
 function setKeyDialogOpen(arg0: boolean) {

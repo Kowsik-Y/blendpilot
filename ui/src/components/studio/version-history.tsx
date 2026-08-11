@@ -40,7 +40,7 @@ export function VersionHistory({ projectId, refreshTrigger, onRestore }: Version
   }, [projectId, refreshTrigger]);
 
   return (
-    <Card className="border-border/70 bg-card/80 backdrop-blur-xl shadow-lg h-full flex flex-col">
+    <Card className="h-full flex flex-col">
       <CardHeader className="pb-3 border-b border-border/50">
         <CardTitle className="text-sm flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
