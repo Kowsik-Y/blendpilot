@@ -19,10 +19,10 @@ export function ComposerMenu({
       data-open={open || undefined}
       className={cn(
         "bg-popover text-popover-foreground border shadow-md",
-        "absolute bottom-full z-10 mb-2 flex w-72 flex-col gap-0.5 rounded-2xl p-1.5",
+        "absolute bottom-full z-10 mb-2 flex w-72 flex-col gap-0.5 rounded-2xl p-1.5 max-h-[50vh] overflow-y-auto",
         align === "start"
-          ? "start-0 origin-bottom-left"
-          : "end-0 origin-bottom-right",
+          ? "inset-s-0 origin-bottom-left"
+          : "inset-e-0 origin-bottom-right",
         "transition-[opacity,scale] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
         open
           ? "scale-100 opacity-100"
@@ -46,7 +46,7 @@ export function ComposerMenuItem({
       data-active={active || undefined}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors",
-        active ? "bg-accent text-accent-foreground" : "hover:bg-foreground/[0.04]",
+        active ? "bg-accent text-accent-foreground" : "hover:bg-foreground/4",
         className,
       )}
       {...props}
@@ -69,7 +69,7 @@ export function ComposerModelTrigger({
       aria-expanded={open}
       data-slot="composer-model-trigger"
       className={cn(
-        "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/90 dark:hover:bg-foreground/[0.09] flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors",
+        "text-foreground/55 hover:bg-foreground/6 hover:text-foreground/90 dark:hover:bg-foreground/9 flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors",
         className,
       )}
       {...props}

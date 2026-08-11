@@ -406,7 +406,7 @@ export function ThreeViewport({
             onClick={() => setWireframe((prev) => !prev)}
             title="Toggle Wireframe Overlay"
           >
-            <BoneFracture className="w-3.5 h-3.5 mr-1" />
+            <BoneFracture className="w-3.5 h-3.5" />
           </Button>
 
           <Button
@@ -416,7 +416,7 @@ export function ThreeViewport({
             onClick={() => setAutoRotate((prev) => !prev)}
             title="Toggle Turntable Rotation"
           >
-            <Rotate3d className="w-3.5 h-3.5 mr-1" />
+            <Rotate3d className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>

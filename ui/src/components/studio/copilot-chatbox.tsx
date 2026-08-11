@@ -133,6 +133,23 @@ export function CopilotChatbox({
   const [availableModels, setAvailableModels] = useState<{id: string, name: string}[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(event.target as Node)) {
+        setModelPickerOpen(false);
+      }
+    }
+    if (modelPickerOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [modelPickerOpen]);
 
   const [liveThinking, setLiveThinking] = useState<LiveThinkingState>({
     active: false,
@@ -519,7 +536,7 @@ export function CopilotChatbox({
                       })()
                     },
                     ModelPicker: (
-                      <div className="relative">
+                      <div className="relative" ref={modelPickerRef}>
                         <ComposerMenu open={modelPickerOpen}>
                           {availableModels.length > 0 ? (
                             availableModels.map((m) => {
