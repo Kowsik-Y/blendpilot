@@ -2,23 +2,28 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const projects = await db.project.findMany({
-    where: { userId: session.user.id },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      sessions: {
-        select: { id: true, title: true },
+    const projects = await db.project.findMany({
+      where: { userId: session.user.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        sessions: {
+          select: { id: true, title: true },
+        },
       },
-    },
-  });
+    });
 
-  return NextResponse.json(projects);
+    return NextResponse.json(projects);
+  } catch (error: any) {
+    console.error("GET /api/projects error:", error);
+    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {

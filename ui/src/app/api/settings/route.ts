@@ -5,7 +5,7 @@ import { testConnection } from "@/lib/llm/client";
 import { type LLMProvider } from "@/types/llm";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

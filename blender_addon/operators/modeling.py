@@ -36,9 +36,20 @@ def handle_apply_modifier(params: dict[str, Any]) -> dict[str, Any]:
         modifier_name=params["modifier_name"],
     )
 
+def handle_edit_mesh(params: dict[str, Any]) -> dict[str, Any]:
+    """Handle edit_mesh command."""
+    from core.modifiers import edit_mesh
+
+    return edit_mesh(
+        object_name=params["object_name"],
+        operation=params["operation"],
+        parameters=params.get("parameters"),
+    )
+
 
 def register() -> None:
     """Register all modeling command handlers."""
     register_command("add_modifier", handle_add_modifier)
     register_command("apply_modifier", handle_apply_modifier)
+    register_command("edit_mesh", handle_edit_mesh)
     logger.debug("Modeling operators registered.")

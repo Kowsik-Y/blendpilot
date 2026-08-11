@@ -30,6 +30,7 @@ Modeling tools:
 - `add_modifier(object_name, modifier_type, params)` — Add bevel, solidify, \
 subdivision, mirror, array, boolean, decimate, edge_split, weighted_normal
 - `apply_modifier(object_name, modifier_name)` — Bake modifier to mesh
+- `edit_mesh(object_name, operation, parameters)` — Perform operations like shade_smooth or shade_flat
 
 Material tools:
 - `create_material(name, base_color, metallic, roughness, emission_color, \

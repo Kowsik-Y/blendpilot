@@ -60,7 +60,7 @@ class BlenderClient:
         self,
         host: str = "127.0.0.1",
         port: int = 9876,
-        timeout: float = 5.0,
+        timeout: float = 60.0,
         mock_mode: bool = False,
     ):
         self.base_url = f"http://{host}:{port}"

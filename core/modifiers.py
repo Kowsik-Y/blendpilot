@@ -182,5 +182,61 @@ def apply_modifier(
     logger.info("Applied modifier '%s' on '%s'", modifier_name, object_name)
     return {
         "success": True,
-        "message": f"Applied modifier '{modifier_name}' on '{object_name}'.",
+        "object_name": object_name,
+        "modifier_name": modifier_name,
     }
+
+
+def edit_mesh(
+    object_name: str,
+    operation: str,
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Perform a mesh editing operation such as smooth shading.
+    
+    Args:
+        object_name: The name of the object to edit.
+        operation: The operation to perform (e.g. 'shade_smooth').
+        parameters: Additional parameters for the operation.
+        
+    Returns:
+        Dict with 'success' and 'result'.
+    """
+    if not object_name or not object_name.strip():
+        raise ValueError("Object name cannot be empty.")
+    
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object '{object_name}' not found in scene.")
+        
+    if operation == "shade_smooth":
+        if obj.type != 'MESH':
+            raise ValueError(f"Object '{object_name}' is not a mesh.")
+            
+        # Apply smooth shading
+        for p in obj.data.polygons:
+            p.use_smooth = True
+        obj.data.update()
+        
+        return {
+            "success": True,
+            "object_name": object_name,
+            "operation": operation,
+            "result": "Smooth shading applied successfully"
+        }
+    elif operation == "shade_flat":
+        if obj.type != 'MESH':
+            raise ValueError(f"Object '{object_name}' is not a mesh.")
+            
+        for p in obj.data.polygons:
+            p.use_smooth = False
+        obj.data.update()
+        
+        return {
+            "success": True,
+            "object_name": object_name,
+            "operation": operation,
+            "result": "Flat shading applied successfully"
+        }
+    else:
+        raise ValueError(f"Unsupported edit_mesh operation: {operation}")
