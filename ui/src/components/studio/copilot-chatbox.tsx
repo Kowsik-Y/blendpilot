@@ -261,7 +261,14 @@ export function CopilotChatbox({
                ...prev,
                tools: prev.tools.map(t => t.id === toolId ? { ...t, status: "done" } : t)
              }));
-          // Removed on_chat_model_end block to accumulate tools for the entire workflow turn
+          } else if (payload.event === "on_chat_model_end") {
+             setLiveThinking(prev => {
+                const finalContent = prev.content.trimEnd();
+                if (finalContent && !finalContent.endsWith("\n\n")) {
+                  return { ...prev, content: finalContent + "\n\n" };
+                }
+                return prev;
+             });
           } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing" || payload.event === "workflow_failed") {
              setLiveThinking(prev => {
                 const finalContent = prev.content.trim();
@@ -275,14 +282,17 @@ export function CopilotChatbox({
                     }
                     return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
-                } else if (payload.event === "workflow_failed") {
+                }
+                
+                if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {
-                    id: activeMessageIdRef.current || nextMessageId("error"),
+                    id: nextMessageId("error"),
                     role: "assistant",
                     content: `⚠️ Agent Error: ${payload.error || "Workflow crashed (e.g. LLM recursion limit)"}`,
                     time: "Just now"
                   }]);
                 }
+                
                 return { active: false, content: "", tools: [] };
              });
           }
