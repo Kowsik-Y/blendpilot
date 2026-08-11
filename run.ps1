@@ -47,17 +47,16 @@ function Cleanup {
         Stop-Job -Job $Job
         Remove-Job -Job $Job -Force
     }
+    if ($BlenderProcess) {
+        Stop-Process -Id $BlenderProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    Stop-Process -Name blender -Force -ErrorAction SilentlyContinue
     Write-Host "[OK] All services stopped cleanly. Goodbye!" -ForegroundColor Green
 }
 
 # -- 3. Start Blender Bridge Server -----------------------------------
 Write-Host "[+] Starting Blender Bridge Server..." -ForegroundColor Green
-$BlenderJob = Start-Job -Name "BlenderBridge" -ScriptBlock {
-    param($Python, $ProjectDir)
-    Set-Location $ProjectDir
-    & $Python "$ProjectDir\scripts\start_blender_bridge.py" --host 127.0.0.1 --port 9876
-} -ArgumentList $VENV_PYTHON, $PROJECT_DIR
-$Jobs += $BlenderJob
+$BlenderProcess = Start-Process -FilePath $VENV_PYTHON -ArgumentList "$PROJECT_DIR\scripts\start_blender_bridge.py --host 127.0.0.1 --port 9876" -WorkingDirectory $PROJECT_DIR -PassThru
 Write-Host "[OK] Blender Bridge starting on http://127.0.0.1:9876" -ForegroundColor Green
 
 # -- 4. Start FastAPI Backend API ------------------------------------
@@ -85,13 +84,13 @@ Start-Sleep -Seconds 5
 Write-Host "`n===============================================================" -ForegroundColor Green
 Write-Host " [OK] All BlendPilot Services are Live and Connected!" -ForegroundColor Green
 Write-Host "   -> Next.js Frontend UI:   http://localhost:3000" -ForegroundColor Cyan
-Write-Host "   -> 3D Studio Workspace:  http://localhost:3000/studio" -ForegroundColor Cyan
+Write-Host "   -> 3D Studio Workspace:  http://localhost:3000/projects" -ForegroundColor Cyan
 Write-Host "   -> FastAPI Backend API:   http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host "   -> Blender Bridge:       http://127.0.0.1:9876" -ForegroundColor Cyan
 Write-Host "===============================================================" -ForegroundColor Green
 Write-Host "Press [Ctrl+C] anytime to stop all services.`n" -ForegroundColor Yellow
 
-Start-Process "http://localhost:3000/"
+Start-Process "http://localhost:3000/projects"
 
 try {
     while ($true) {

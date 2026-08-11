@@ -92,13 +92,6 @@ from blender_addon.operators import register_all_operators
 register_all_operators()
 start_bridge_server(host={repr(host)}, port={port})
 print(f"BlendPilot Bridge active on http://{host}:{port}")
-
-import time
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    pass
 """
 
     # Blender exits after a background Python expression completes. Keep the

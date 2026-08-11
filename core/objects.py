@@ -82,10 +82,10 @@ def create_primitive(
     parts = operator_path.split(".")
     op = getattr(bpy.ops, parts[0])
     op_func = getattr(op, parts[1])
-    op_func(location=location, rotation=rotation)
+    op_func('EXEC_DEFAULT', location=location, rotation=rotation)
 
     # Rename the newly created object
-    obj = bpy.context.active_object
+    obj = bpy.context.view_layer.objects.active
     if obj is None:
         return {
             "success": False,
@@ -101,7 +101,7 @@ def create_primitive(
         logger.info("Set dimensions of '%s' to %s", name, dimensions)
 
     # Deselect all to clean up
-    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.object.select_all('EXEC_DEFAULT', action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
 
@@ -202,13 +202,13 @@ def duplicate_object(
         raise ValueError(f"Source object '{name}' not found in scene.")
 
     # Select only the source object
-    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.object.select_all('EXEC_DEFAULT', action="DESELECT")
     src.select_set(True)
     bpy.context.view_layer.objects.active = src
 
     # Duplicate
-    bpy.ops.object.duplicate(linked=False)
-    dup = bpy.context.active_object
+    bpy.ops.object.duplicate('EXEC_DEFAULT', linked=False)
+    dup = bpy.context.view_layer.objects.active
 
     if dup is None:
         return {
@@ -262,10 +262,10 @@ def delete_object(name: str) -> dict[str, Any]:
         }
 
     # Select the object and delete
-    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.object.select_all('EXEC_DEFAULT', action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.delete(use_global=False)
+    bpy.ops.object.delete('EXEC_DEFAULT', use_global=False)
 
     logger.info("Deleted object '%s'", name)
     return {

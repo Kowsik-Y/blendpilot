@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 from pydantic import BaseModel, Field
+import os
+import tempfile
 
 from schemas.scene import ObjectInfo, SceneSummary, MeshStatistics
 from services.blender_client import BlenderClient
@@ -89,7 +91,7 @@ async def scene_snapshot(client: BlenderClient, params: dict[str, Any] | None = 
     """Create a fast memory snapshot of the current Blender scene before destructive operations."""
     validated = SceneSnapshotInput.model_validate(params or {})
     # Map fast snapshot to checkpoint API with a temporary file path
-    filepath = f"/tmp/blendpilot_snapshot_{validated.snapshot_name}.blend"
+    filepath = os.path.join(tempfile.gettempdir(), f"blendpilot_snapshot_{validated.snapshot_name}.blend")
     response = await client.save_checkpoint(filepath=filepath)
     return {
         "success": response.success,
@@ -101,7 +103,7 @@ async def scene_snapshot(client: BlenderClient, params: dict[str, Any] | None = 
 async def scene_rollback(client: BlenderClient, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Roll back the active scene to a previously taken fast snapshot."""
     validated = SceneRollbackInput.model_validate(params or {})
-    filepath = f"/tmp/blendpilot_snapshot_{validated.snapshot_name}.blend"
+    filepath = os.path.join(tempfile.gettempdir(), f"blendpilot_snapshot_{validated.snapshot_name}.blend")
     response = await client.restore_checkpoint(filepath=filepath)
     return {
         "success": response.success,
