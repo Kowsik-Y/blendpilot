@@ -27,6 +27,7 @@ class BlendPilotState(TypedDict, total=False):
     project_id: str
     session_id: str
     user_prompt: str
+    enhanced_prompt: str | None
     reference_images: list[str]
     current_agent: str
     status: str  # IDLE, RUNNING, INTERRUPTED, COMPLETED, FAILED
@@ -112,6 +113,7 @@ def create_initial_state(
         "project_id": pid,
         "session_id": sid,
         "user_prompt": user_prompt,
+        "enhanced_prompt": None,
         "reference_images": reference_images or [],
         "current_agent": "intent_agent",
         "status": "RUNNING",

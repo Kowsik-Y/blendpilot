@@ -21,7 +21,7 @@ Scene tools:
 
 Object tools:
 - `create_primitive(primitive_type, name, dimensions, location)` — Create cube, \
-sphere, cylinder, plane, cone, torus, ico_sphere
+uv_sphere, cylinder, plane, cone, torus, ico_sphere
 - `set_transform(name, location, rotation, scale)` — Move/rotate/scale object
 - `duplicate_object(name, new_name, offset)` — Duplicate an object
 - `delete_object(name)` — Delete an object

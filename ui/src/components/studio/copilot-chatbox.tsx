@@ -261,28 +261,19 @@ export function CopilotChatbox({
                ...prev,
                tools: prev.tools.map(t => t.id === toolId ? { ...t, status: "done" } : t)
              }));
-          } else if (payload.event === "on_chat_model_end") {
-             setLiveThinking(prev => {
-                const finalContent = prev.content.trim();
-                if (finalContent || prev.tools.length > 0) {
-                  setMessages(m => {
-                    const last = m[m.length - 1];
-                    if (last && last.role === "assistant" && last.content === finalContent) return m;
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
-                  });
-                }
-                return { ...prev, content: "", tools: [] };
-             });
+          // Removed on_chat_model_end block to accumulate tools for the entire workflow turn
           } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing" || payload.event === "workflow_failed") {
              setLiveThinking(prev => {
                 const finalContent = prev.content.trim();
                 if (finalContent || prev.tools.length > 0) {
                   setMessages(m => {
-                    const last = m[m.length - 1];
-                    if (last && last.role === "assistant" && (last.content === finalContent)) {
-                       return m;
+                    const existingIdx = m.findIndex(msg => msg.id === activeMessageIdRef.current);
+                    if (existingIdx !== -1) {
+                       const newM = [...m];
+                       newM[existingIdx] = { ...newM[existingIdx], content: finalContent, tools: prev.tools };
+                       return newM;
                     }
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
                 } else if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {

@@ -134,7 +134,7 @@ class BlendPilotAgent:
 
         async for event in self.agent_executor.astream_events(
             {"messages": [("user", user_input)]},
-            config={"configurable": {"thread_id": session_id}},
+            config={"configurable": {"thread_id": session_id}, "recursion_limit": 150},
             version="v2",
         ):
             yield event

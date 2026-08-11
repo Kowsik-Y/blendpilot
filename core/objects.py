@@ -20,6 +20,7 @@ logger = logging.getLogger("blendpilot.core.objects")
 PRIMITIVE_TYPES: dict[str, str] = {
     "cube": "mesh.primitive_cube_add",
     "sphere": "mesh.primitive_uv_sphere_add",
+    "uv_sphere": "mesh.primitive_uv_sphere_add",
     "cylinder": "mesh.primitive_cylinder_add",
     "plane": "mesh.primitive_plane_add",
     "cone": "mesh.primitive_cone_add",
@@ -38,7 +39,7 @@ def create_primitive(
     """Create a Blender mesh primitive.
 
     Args:
-        primitive_type: One of 'cube', 'sphere', 'cylinder', 'plane',
+        primitive_type: One of 'cube', 'uv_sphere', 'cylinder', 'plane',
                        'cone', 'torus', 'ico_sphere'.
         name: Name for the new object.
         dimensions: Optional (width, depth, height) to set after creation.

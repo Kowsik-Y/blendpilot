@@ -13,6 +13,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from graph.nodes import (
+    node_enhancer,
     node_export,
     node_geometry_qa,
     node_geometry_repair,
@@ -47,6 +48,7 @@ def build_blendpilot_graph(
     workflow = StateGraph(BlendPilotState)
 
     # ── Register Nodes ──────────────────────────────────────────
+    workflow.add_node("enhancer", node_enhancer)
     workflow.add_node("intent", node_intent)
     workflow.add_node("scene", node_scene)
     workflow.add_node("research", node_research)
@@ -61,7 +63,8 @@ def build_blendpilot_graph(
     workflow.add_node("export", node_export)
 
     # ── Add Sequential Edges ────────────────────────────────────
-    workflow.add_edge(START, "intent")
+    workflow.add_edge(START, "enhancer")
+    workflow.add_edge("enhancer", "intent")
     workflow.add_edge("intent", "scene")
     workflow.add_edge("scene", "research")
     workflow.add_edge("research", "planning")
@@ -133,6 +136,6 @@ async def run_pipeline(
         overrides=runtime_overrides,
     )
     graph = build_blendpilot_graph(enable_human_interrupt=False)
-    config = {"configurable": {"thread_id": initial_state["session_id"]}}
+    config = {"configurable": {"thread_id": initial_state["session_id"]}, "recursion_limit": 150}
     final_state = await graph.ainvoke(initial_state, config=config)
     return final_state
