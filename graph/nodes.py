@@ -20,6 +20,7 @@ from agents.modeling_agent import ModelingAgent
 from agents.planning_agent import PlanningAgent
 from agents.research_agent import ResearchAgent
 from agents.scene_agent import SceneAgent
+from agents.enhancer_agent import EnhancerAgent
 from agents.visual_critic_agent import VisualCriticAgent
 from graph.state import BlendPilotState
 from mcp_servers.blender.server import BlenderMCPServer
@@ -113,24 +114,38 @@ def _get_mcp_server(state: BlendPilotState, provided: BlenderMCPServer | None = 
     return BlenderMCPServer(client=BlenderClient(mock_mode=state.get("blender_mock_mode", False)))
 
 
+# ── Workflow Pre: Prompt Enhancer Node ──────────────────────
+async def node_enhancer(state: BlendPilotState) -> dict[str, Any]:
+    """Enhance the user prompt with technical details."""
+    logger.info("[Node] Running Enhancer Agent")
+    await _emit_agent_state(state, "enhancer", "enhancer_agent", "RUNNING", "Enhancing user prompt with 3D technical details")
+    try:
+        agent = EnhancerAgent(llm_service=_get_llm_service(state))
+        enhanced = await agent.execute(user_prompt=state["user_prompt"])
+        _record_event(state, "enhancer_agent", "COMPLETED", "Enhanced user prompt")
+        return {
+            "current_agent": "intent_agent",
+            "enhanced_prompt": enhanced,
+        }
+    except Exception as e:
+        logger.exception("[Node] Enhancer Agent failed: %s", e)
+        _record_event(state, "enhancer_agent", "FAILED", f"Enhancer failed: {e}")
+        return {
+            "current_agent": "intent_agent",
+            "enhanced_prompt": state["user_prompt"],
+        }
+
+
 # ── Workflow 1: Intent Understanding Node ───────────────────
 async def node_intent(state: BlendPilotState) -> dict[str, Any]:
     """Parse user request into structured DesignSpec."""
     logger.info("[Node] Running Intent Agent")
     await _emit_agent_state(state, "intent", "intent_agent", "RUNNING", "Parsing prompt into structured design spec")
     try:
-        llm = _get_llm_service(state)
-        
-        # Enhance the user prompt with professional 3D details
-        enhanced_prompt = await llm.generate(
-            prompt=f"Enhance this 3D modeling request with professional details, styling, and realistic dimensions: {state['user_prompt']}",
-            system_prompt="You are a 3D design prompt engineer. Take the user's brief request and expand it into a detailed, professional specification for a 3D artist. Do not change the core intent, just add professional details like material types, specific styles, and realistic proportions. Return ONLY the enhanced prompt without any conversational text."
-        )
-        final_prompt = enhanced_prompt.strip() if enhanced_prompt else state["user_prompt"]
-        
-        agent = IntentAgent(llm_service=llm)
+        agent = IntentAgent(llm_service=_get_llm_service(state))
+        prompt_to_use = state.get("enhanced_prompt") or state["user_prompt"]
         spec = await agent.execute(
-            user_prompt=final_prompt,
+            user_prompt=prompt_to_use,
             reference_images=state.get("reference_images", []),
         )
         spec_dict = _safe_model_dump(spec)

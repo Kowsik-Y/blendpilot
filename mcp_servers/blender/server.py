@@ -187,7 +187,7 @@ class BlenderMCPServer:
                 "type": "object",
                 "properties": {
                     "object_name": {"type": "string", "description": "Target object name"},
-                    "modifier_type": {"type": "string", "enum": ["BEVEL", "SUBSURF", "SOLIDIFY", "MIRROR", "BOOLEAN", "DECIMATE", "EDGE_SPLIT"]},
+                    "modifier_type": {"type": "string", "enum": ["bevel", "solidify", "subdivision", "mirror", "array", "boolean", "decimate", "edge_split", "weighted_normal"]},
                     "modifier_name": {"type": "string"},
                     "properties": {"type": "object", "description": "Modifier properties, e.g. width, segments, thickness"},
                 },

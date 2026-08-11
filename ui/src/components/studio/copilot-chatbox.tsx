@@ -266,27 +266,39 @@ export function CopilotChatbox({
                 const finalContent = prev.content.trim();
                 if (finalContent || prev.tools.length > 0) {
                   setMessages(m => {
-                    const last = m[m.length - 1];
-                    if (last && last.role === "assistant" && last.content === finalContent) return m;
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
+                    const existingIdx = m.findIndex(msg => msg.id === activeMessageIdRef.current);
+                    if (existingIdx !== -1) {
+                       const newM = [...m];
+                       newM[existingIdx] = { ...newM[existingIdx], content: finalContent, tools: prev.tools };
+                       return newM;
+                    }
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
                 }
-                return { ...prev, content: "", tools: [] };
+                
+                // Prepare a new ID for the NEXT turn of the model in the same workflow
+                activeMessageIdRef.current = nextMessageId("copilot");
+                
+                return { active: true, id: activeMessageIdRef.current, content: "", tools: [] };
              });
           } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing" || payload.event === "workflow_failed") {
              setLiveThinking(prev => {
                 const finalContent = prev.content.trim();
                 if (finalContent || prev.tools.length > 0) {
                   setMessages(m => {
-                    const last = m[m.length - 1];
-                    if (last && last.role === "assistant" && (last.content === finalContent)) {
-                       return m;
+                    const existingIdx = m.findIndex(msg => msg.id === activeMessageIdRef.current);
+                    if (existingIdx !== -1) {
+                       const newM = [...m];
+                       newM[existingIdx] = { ...newM[existingIdx], content: finalContent, tools: prev.tools };
+                       return newM;
                     }
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
-                } else if (payload.event === "workflow_failed") {
+                } 
+                
+                if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {
-                    id: activeMessageIdRef.current || nextMessageId("error"),
+                    id: nextMessageId("error"),
                     role: "assistant",
                     content: `⚠️ Agent Error: ${payload.error || "Workflow crashed (e.g. LLM recursion limit)"}`,
                     time: "Just now"
