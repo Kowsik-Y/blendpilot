@@ -36,6 +36,15 @@ def find_blender_binary() -> str:
         if os.path.exists(path):
             return path
 
+    # Windows standard locations
+    import glob
+    win_base = r"C:\Program Files\Blender Foundation"
+    if os.path.exists(win_base):
+        for version_dir in sorted(os.listdir(win_base), reverse=True):
+            win_path = os.path.join(win_base, version_dir, "blender.exe")
+            if os.path.exists(win_path):
+                return win_path
+
     # Linux / PATH
     import shutil
     which_blender = shutil.which("blender")
@@ -69,6 +78,13 @@ from blender_addon.operators import register_all_operators
 register_all_operators()
 start_bridge_server(host={repr(host)}, port={port})
 print(f"BlendPilot Bridge active on http://{host}:{port}")
+
+import time
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    pass
 """
 
     cmd = [bin_path]
