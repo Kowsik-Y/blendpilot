@@ -37,7 +37,11 @@ import {
   ThreadPrimitive,
   type ToolCallMessagePartComponent,
   useAuiState,
+  unstable_useSlashCommandAdapter,
+  unstable_useMentionAdapter,
+  useAui,
 } from "@assistant-ui/react";
+import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -73,13 +77,14 @@ export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
-  Composer?: ComponentType | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
   ReasoningGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
+  ModelPicker?: React.ReactNode | undefined;
+  ComposerContextUsage?: { system: number; tools: number; messages: number; total: number } | undefined;
 };
 
 export type ThreadProps = {
@@ -108,8 +113,7 @@ export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS }) => {
 };
 
 const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
-  const components = useContext(ThreadComponentsContext);
-  const { Welcome = ThreadWelcome } = components;
+  const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
     <ThreadPrimitive.Root
@@ -146,20 +150,20 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             </ThreadPrimitive.Messages>
           </div>
 
-            <ThreadPrimitive.ViewportFooter
-              className={cn(
-                "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
-                !isEmpty &&
-                  "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
-              )}
-            >
-              <ThreadScrollToBottom />
-              <ThreadFollowupSuggestions />
-              {components?.Composer ? <components.Composer /> : <Composer />}
-              <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
-                <ThreadSuggestions />
-              </AuiIf>
-            </ThreadPrimitive.ViewportFooter>
+          <ThreadPrimitive.ViewportFooter
+            className={cn(
+              "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              !isEmpty &&
+                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+            )}
+          >
+            <ThreadScrollToBottom />
+            <ThreadFollowupSuggestions />
+            <Composer />
+            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+              <ThreadSuggestions />
+            </AuiIf>
+          </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -212,28 +216,208 @@ const ThreadSuggestionItem: FC = () => {
 };
 
 const Composer: FC = () => {
+  const { composer } = useAui();
+
+  const slashCommandAdapter = unstable_useSlashCommandAdapter({
+    commands: [
+      { 
+        id: "graph", 
+        label: "Graph", 
+        description: "Generate a Blender graph prompt",
+        execute: () => {
+          composer.setText("Generate a LangGraph-driven Blender asset with live tool feedback, repair loops, and export readiness.");
+        }
+      },
+      { 
+        id: "clear", 
+        label: "Clear", 
+        description: "Clear the composer",
+        execute: () => {
+          composer.setText("");
+        }
+      }
+    ],
+    removeOnExecute: true,
+  });
+
+  const mentionAdapter = unstable_useMentionAdapter({
+    items: [
+      { id: "web_search", type: "tool", label: "Web Search", description: "Use Tavily to search the web" },
+      { id: "blender", type: "tool", label: "Blender", description: "Focus on 3D mesh operations" }
+    ]
+  });
+
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone render={<div data-slot="aui_composer-shell" className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none" />}><ComposerAttachments /><ComposerPrimitive.Input
-                      placeholder="Send a message..."
-                      className="aui-composer-input caret-primary placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
-                      rows={1}
-                      autoFocus
-                      enterKeyHint="send"
-                      aria-label="Message input"
-                    /><ComposerAction /></ComposerPrimitive.AttachmentDropzone>
+      <ComposerPrimitive.AttachmentDropzone render={<div data-slot="aui_composer-shell" className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none" />}><ComposerAttachments />
+        <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+          <ComposerPrimitive.Input
+            placeholder="Send a message..."
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
+            rows={1}
+            autoFocus
+            enterKeyHint="send"
+            aria-label="Message input"
+          />
+          
+          <ComposerTriggerPopover
+            char="/"
+            adapter={slashCommandAdapter.adapter}
+            action={slashCommandAdapter.action}
+            iconMap={slashCommandAdapter.iconMap}
+            fallbackIcon={slashCommandAdapter.fallbackIcon}
+          />
+          <ComposerTriggerPopover
+            char="@"
+            adapter={mentionAdapter.adapter}
+            directive={mentionAdapter.directive}
+            iconMap={mentionAdapter.iconMap}
+            fallbackIcon={mentionAdapter.fallbackIcon}
+          />
+        </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+        
+        <ComposerAction />
+      </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+export interface ComposerUsage {
+  system: number;
+  tools: number;
+  messages: number;
+  total: number;
+}
+
+const pct = (val: number, max: number) => (max === 0 ? 0 : (val / max) * 100);
+const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
+
+export function ComposerContext({
+  usage,
+  className,
+  ...props
+}: Omit<React.ComponentProps<"div">, "children"> & { usage: ComposerUsage }) {
+  const used = usage.system + usage.tools + usage.messages;
+  const fraction = usage.total === 0 ? 0 : used / usage.total;
+  const warn = fraction > 0.85;
+  const circumference = 2 * Math.PI * 6;
+  const segments = [
+    { label: "System", value: usage.system, className: "bg-foreground/25" },
+    { label: "Tools", value: usage.tools, className: "bg-foreground/45" },
+    { label: "Messages", value: usage.messages, className: "bg-foreground/80" },
+  ];
+
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+    <div
+      data-slot="composer-context"
+      className={cn("group/ctx relative", className)}
+      {...props}
+    >
+      <div
+        className={cn(
+          "bg-popover text-popover-foreground border shadow-md",
+          "absolute inset-e-0 bottom-full z-10 mb-2 flex w-60 origin-bottom-right flex-col gap-3.5 rounded-2xl p-4",
+          "transition-[opacity,scale] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
+          "pointer-events-none scale-[0.97] opacity-0",
+          "group-hover/ctx:pointer-events-auto group-hover/ctx:scale-100 group-hover/ctx:opacity-100",
+          "group-focus-within/ctx:pointer-events-auto group-focus-within/ctx:scale-100 group-focus-within/ctx:opacity-100",
+        )}
+      >
+        <div className="flex items-baseline justify-between">
+          <p className="text-[13.5px] font-medium">Context</p>
+          <p
+            className={cn(
+              "font-mono tabular-nums",
+              warn ? "text-red-500 dark:text-red-400" : "text-foreground/35",
+            )}
+          >
+            {Math.round(fraction * 100)}%
+          </p>
+        </div>
+        <div className="bg-foreground/6 flex h-1.25 w-full gap-px overflow-hidden rounded-full">
+          {segments.map((segment) => (
+            <span
+              key={segment.label}
+              className={cn(
+                "h-full transition-[width] duration-700 motion-reduce:transition-none",
+                segment.className,
+              )}
+              style={{ width: `${pct(segment.value, usage.total)}%` }}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-2">
+          {segments.map((segment) => (
+            <div
+              key={segment.label}
+              className="text-foreground/55 flex items-center gap-2.5 text-[13px]"
+            >
+              <span
+                aria-hidden
+                className={cn("size-1.5 rounded-full", segment.className)}
+              />
+              <span className="flex-1">{segment.label}</span>
+              <span className={cn("font-mono text-foreground/40 tabular-nums")}>
+                {segment.value}k
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="bg-foreground/6 h-px" />
+        <div className="text-foreground/55 flex items-center justify-between text-[13px]">
+          <span>Total</span>
+          <span className={cn("font-mono text-foreground/40 tabular-nums")}>
+            {used}k / {usage.total}k
+          </span>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-label="Context usage"
+        className={cn(
+          "hover:bg-accent hover:text-accent-foreground size-8 flex items-center justify-center rounded-full cursor-default",
+          warn && "text-red-500 dark:text-red-400",
+        )}
+      >
+        <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden>
+          <circle
+            cx="8"
+            cy="8"
+            r="6"
+            fill="none"
+            strokeWidth="2.5"
+            className="stroke-foreground/10"
+          />
+          <circle
+            cx="8"
+            cy="8"
+            r="6"
+            fill="none"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            className="stroke-current transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - clamp(fraction, 0, 1))}
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+const ComposerAction: FC = () => {
+  const { ModelPicker, ComposerContextUsage } = useContext(ThreadComponentsContext);
+  return (
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between mt-2">
+      <div className="flex items-center gap-2">
+        <ComposerAddAttachment />
+        {ModelPicker}
+      </div>
       <div className="flex items-center gap-1.5">
+        <ComposerContext usage={ComposerContextUsage || { system: 1.2, tools: 0.5, messages: 12.3, total: 128 }} />
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
-            <ComposerPrimitive.Dictate render={<TooltipIconButton tooltip="Voice input" side="bottom" type="button" variant="ghost" size="icon" className="aui-composer-dictate size-7 rounded-full" aria-label="Start voice input" />}><MicIcon className="aui-composer-dictate-icon size-4" /></ComposerPrimitive.Dictate>
+            <ComposerPrimitive.Dictate render={<TooltipIconButton tooltip="Voice input" side="bottom" type="button" variant="ghost" size="icon" className="aui-composer-dictate size-7 rounded-full" aria-label="Start voice input" />}><MicIcon className="aui-composer-dictate-icon size-4 text-muted-foreground" /></ComposerPrimitive.Dictate>
           </AuiIf>
           <AuiIf condition={(s) => s.composer.dictation != null}>
             <ComposerPrimitive.StopDictation render={<TooltipIconButton tooltip="Stop dictation" side="bottom" type="button" variant="ghost" size="icon" className="aui-composer-stop-dictation text-destructive size-7 rounded-full" aria-label="Stop voice input" />}><SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" /></ComposerPrimitive.StopDictation>
@@ -260,7 +444,7 @@ const MessageError: FC = () => {
   );
 };
 
-export const AssistantMessage: FC = () => {
+const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
@@ -377,7 +561,7 @@ const AssistantActionBar: FC = () => {
           side="bottom"
           align="start"
           sideOffset={6}
-          className="aui-action-bar-more-content bg-popover/95 text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur-sm"
+          className="aui-action-bar-more-content bg-popover/95 text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur-sm"
         >
           <ActionBarPrimitive.ExportMarkdown render={<ActionBarMorePrimitive.Item className="aui-action-bar-more-item hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none" />}><DownloadIcon className="size-4" />Export as Markdown
                               </ActionBarPrimitive.ExportMarkdown>
@@ -400,7 +584,7 @@ const UserMessage: FC = () => {
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts />
         </div>
-        <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
+        <div className="aui-user-action-bar-wrapper absolute inset-s-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
           <UserActionBar />
         </div>
       </div>

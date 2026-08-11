@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   AiBrain01Icon,
   Analytics01Icon,
@@ -23,14 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ComposerMenu, ComposerModelItem, ComposerModelTrigger } from "@/components/elements/composer";
 import { Thread } from "@/components/assistant-ui/thread";
 import {
   useExternalStoreRuntime,
@@ -38,24 +32,7 @@ import {
   AssistantRuntimeProvider,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
-import {
-  PromptInput,
-  PromptInputActionGroup,
-  PromptInputActions,
-  PromptInputTextarea,
-} from "@/components/nexus-ui/prompt-input";
-import {
-  AttachmentList,
-  AttachmentPicker,
-  Citations,
-  FeedbackBar,
-  ImageStatus,
-  Suggestions,
-  TextShimmer,
-  type CopilotAttachment,
-  type CopilotCitation,
-} from "@/components/nexus-ui/copilot-parts";
-
+import { WebSearchToolUI, ResearchReportToolUI, ImageGenerationToolUI } from "@/components/assistant-ui/tools";
 import { AGENT_DEFINITIONS } from "@/components/studio/agent-timeline";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -77,26 +54,25 @@ import {
   Command,
   WandSparkles,
   Maximize2,
+  ChevronDown,
 } from "lucide-react";
+
+export type CopilotAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  url?: string;
+};
 
 export interface CopilotMessage {
   id: string;
-  role: "user" | "copilot" | "agent";
-  agentName?: string;
-  agentStep?: number;
-  content: string;
-  actions?: string[];
-  status?: "pending" | "running" | "done" | "failed";
-  time: string;
-  isLiveLLM?: boolean;
-  eventKey?: string;
+  role: "user" | "assistant" | "agent" | "copilot";
+  content: string | Record<string, any>;
   attachments?: CopilotAttachment[];
-  citations?: CopilotCitation[];
-  thinking?: string;
+  time?: string;
   tools?: { id: string; name: string; status: "running" | "done" | "failed"; input?: any }[];
+  thinking?: string;
 }
-
-
 
 interface StudioAssetSpec {
   asset_type?: string;
@@ -125,6 +101,7 @@ interface CopilotChatboxProps {
 
 interface LiveThinkingState {
   active: boolean;
+  id?: string;
   content: string;
   tools: { id: string; name: string; status: "running" | "done" | "failed"; input?: any }[];
 }
@@ -151,10 +128,11 @@ export function CopilotChatbox({
   const [llmProvider, setLlmProvider] = useState<string>("openai");
   const [llmModel, setLlmModel] = useState<string>("gpt-4o");
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
-  const [apiKeyInput, setApiKeyInput] = useState<string>("");
-  const [showKeyText, setShowKeyText] = useState(false);
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
+  const [hasTavilyApiKey, setHasTavilyApiKey] = useState<boolean>(false);
+  
+  const [availableModels, setAvailableModels] = useState<{id: string, name: string}[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   const [liveThinking, setLiveThinking] = useState<LiveThinkingState>({
     active: false,
@@ -168,7 +146,6 @@ export function CopilotChatbox({
 
 
 
-  // Auto-fetch user settings on mount
   const loadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
@@ -177,9 +154,49 @@ export function CopilotChatbox({
         setLlmProvider(data.llmProvider || "openai");
         setLlmModel(data.llmModel || "gpt-4o");
         setHasApiKey(data.hasApiKey || false);
+        setHasTavilyApiKey(data.hasTavilyApiKey || false);
+        
+        // Fetch dynamic models in the background
+        fetchModels(data.llmProvider || "openai", data.llmBaseUrl || "", data.llmApiKeyMasked || "");
       }
     } catch {
       // Fallback
+    }
+  };
+
+  const fetchModels = async (prov: string, url: string, key: string) => {
+    setFetchingModels(true);
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: prov, baseUrl: url, apiKey: key }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableModels(data.models || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch models", e);
+    } finally {
+      setFetchingModels(false);
+    }
+  };
+
+  const handleModelChange = async (newModel: string | null | any) => {
+    if (!newModel || typeof newModel !== "string") return;
+    setLlmModel(newModel);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ llmModel: newModel }),
+      });
+      if (res.ok) {
+        toast.success(`Switched to ${newModel}`);
+      }
+    } catch {
+      toast.error("Failed to save model preference");
     }
   };
 
@@ -205,36 +222,7 @@ export function CopilotChatbox({
     void Promise.resolve().then(loadSettings);
   }, []);
 
-  // Save API Key & Model Configuration directly from Studio
-  const handleSaveKeySettings = async () => {
-    setSavingKey(true);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          llmProvider,
-          llmModel,
-          llmApiKey: apiKeyInput.trim(),
-        }),
-      });
 
-      if (!res.ok) {
-        throw new Error("Failed to save settings");
-      }
-
-      toast.success(`Connected to ${llmProvider.toUpperCase()} (${llmModel})!`);
-      setHasApiKey(true);
-      setKeyDialogOpen(false);
-      setApiKeyInput("");
-      loadSettings();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to save API settings";
-      toast.error(message);
-    } finally {
-      setSavingKey(false);
-    }
-  };
 
   const activeMessageIdRef = useRef<string | null>(null);
 
@@ -243,8 +231,9 @@ export function CopilotChatbox({
     if (!pipelineSessionId) return;
 
     handledWorkflowEventsRef.current.clear();
-    activeMessageIdRef.current = nextMessageId("copilot");
-    setLiveThinking({ active: true, content: "", tools: [] });
+    const newId = nextMessageId("copilot");
+    activeMessageIdRef.current = newId;
+    setLiveThinking({ active: true, id: newId, content: "", tools: [] });
 
     const stream = connectWorkflowStream({
       sessionId: pipelineSessionId,
@@ -278,8 +267,8 @@ export function CopilotChatbox({
                 if (finalContent || prev.tools.length > 0) {
                   setMessages(m => {
                     const last = m[m.length - 1];
-                    if (last && last.role === "agent" && last.content === finalContent) return m;
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                    if (last && last.role === "assistant" && last.content === finalContent) return m;
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
                   });
                 }
                 return { ...prev, content: "", tools: [] };
@@ -290,15 +279,15 @@ export function CopilotChatbox({
                 if (finalContent || prev.tools.length > 0) {
                   setMessages(m => {
                     const last = m[m.length - 1];
-                    if (last && last.role === "agent" && (last.content === finalContent || last.tools?.length === prev.tools.length)) {
+                    if (last && last.role === "assistant" && (last.content === finalContent)) {
                        return m;
                     }
-                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "agent", content: finalContent, tools: prev.tools, time: "Just now" }];
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, time: "Just now" }];
                   });
                 } else if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {
                     id: activeMessageIdRef.current || nextMessageId("error"),
-                    role: "agent",
+                    role: "assistant",
                     content: `⚠️ Agent Error: ${payload.error || "Workflow crashed (e.g. LLM recursion limit)"}`,
                     time: "Just now"
                   }]);
@@ -332,14 +321,14 @@ export function CopilotChatbox({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const threadMessages = useExternalMessageConverter<CopilotMessage>({
+  const threadMessages = useExternalMessageConverter<any>({
     callback: (m) => {
       const parts: any[] = [];
       if (m.thinking) {
         parts.push({ type: "reasoning", text: m.thinking });
       }
       if (m.tools && m.tools.length > 0) {
-        m.tools.forEach(t => {
+        m.tools.forEach((t: any) => {
           const toolPart: any = {
             type: "tool-call",
             toolName: t.name,
@@ -355,12 +344,34 @@ export function CopilotChatbox({
         });
       }
       if (m.content) {
-        parts.push({ type: "text", text: m.content });
+        let rewrittenContent = m.content as string;
+        
+        rewrittenContent = rewrittenContent.replace(
+          /(^|[^\(])(\/(?:Users|home|tmp|var|mnt)[a-zA-Z0-9_.\-\/]+\.(?:png|jpe?g|gif|webp|svg))\b/gi,
+          (match, prefix, pth) => `${prefix}\n\n![Preview](/api/local-image?path=${encodeURIComponent(pth)})\n\n`
+        );
+        
+        rewrittenContent = rewrittenContent.replace(
+          /!\[([^\]]*)\]\((\/[^\)]+\.(?:png|jpe?g|gif|webp|svg))\)/gi,
+          (match, alt, pth) => {
+            if (pth.startsWith('/api/')) return match;
+            return `![${alt}](/api/local-image?path=${encodeURIComponent(pth)})`;
+          }
+        );
+        
+        parts.push({ type: "text", text: rewrittenContent });
       }
+      
+      // If there are parts, use them. Otherwise, if there is string content, use it. Otherwise, assistant-ui requires at least an empty text part.
+      let finalContent = parts;
+      if (parts.length === 0) {
+          finalContent = [{ type: "text", text: m.content || "" }];
+      }
+
       return {
         id: m.id,
         role: (m.role === "agent" || m.role === "copilot") ? "assistant" : m.role,
-        content: parts,
+        content: finalContent,
       };
     },
     messages: [
@@ -368,8 +379,8 @@ export function CopilotChatbox({
       ...(liveThinking.active
         ? [
             {
-              id: activeMessageIdRef.current || "live-thinking",
-              role: "agent" as const,
+              id: liveThinking.id || "live-thinking",
+              role: "assistant" as const,
               content: liveThinking.content,
               tools: liveThinking.tools,
               time: "Just now",
@@ -384,28 +395,36 @@ export function CopilotChatbox({
     messages: threadMessages,
     isRunning: pipelineRunning || loading,
     onNew: async (msg) => {
-      if (msg.content[0]?.type === "text") {
-        await handleSend(msg.content[0].text);
+      let text = "";
+      if (typeof msg.content === "string") {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        text = msg.content.find(c => c.type === "text")?.text || "";
       }
+      
+      const mappedAttachments = (msg.attachments as any)?.map((a: any) => ({
+         id: a.id || crypto.randomUUID(),
+         name: a.name,
+         type: a.contentType || "application/octet-stream",
+         url: a.url
+      })) || [];
+      
+      await handleSend(text, mappedAttachments);
     },
     onReload: async (parentId) => {
-      // Find the user message we are reloading from
       const targetIndex = messages.findIndex(m => m.id === parentId);
       if (targetIndex === -1) return;
       
       const targetMessage = messages[targetIndex];
       
-      // Trim all messages after the parent user message
       setMessages(messages.slice(0, targetIndex + 1));
       
-      // Trigger the pipeline again with the user's original text
       if (onStartPipeline && targetMessage.content) {
         handledWorkflowEventsRef.current.clear();
         onStartPipeline(targetMessage.content as string);
       }
     },
     onEdit: async (message) => {
-      // Find the user message we are editing
       const targetIndex = messages.findIndex(m => m.id === message.sourceId);
       if (targetIndex === -1) return;
       
@@ -413,14 +432,12 @@ export function CopilotChatbox({
         ? message.content.find((c: any) => c.type === "text")?.text || ""
         : message.content;
       
-      // Update the user message and trim all messages after it
       const newMessages = [...messages.slice(0, targetIndex), {
         ...messages[targetIndex],
         content: newText as string,
       }];
       setMessages(newMessages);
       
-      // Trigger the pipeline again with the user's new text
       if (onStartPipeline && newText) {
         handledWorkflowEventsRef.current.clear();
         onStartPipeline(newText as string);
@@ -428,20 +445,17 @@ export function CopilotChatbox({
     }
   });
 
-  const handleSend = async (textToSend?: string) => {
+  const handleSend = async (textToSend?: string, customAttachments?: CopilotAttachment[]) => {
     const text = (textToSend || input).trim();
     if (!text || loading) return;
 
-    if (text.includes("Configure LLM Key")) {
-      setKeyDialogOpen(true);
-      return;
-    }
+    const finalAttachments = customAttachments || attachments;
 
     const userMsg: CopilotMessage = {
       id: nextMessageId("user"),
       role: "user",
       content: text,
-      attachments,
+      attachments: finalAttachments,
       time: "Just now",
     };
 
@@ -487,160 +501,89 @@ export function CopilotChatbox({
         </CardHeader>
 
         <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden p-3 relative">
+          <div className="flex-1 flex flex-col overflow-hidden p-3 relative bg-muted/20">
             <div className="flex-1 min-h-0 relative">
               <AssistantRuntimeProvider runtime={runtime}>
-                <Thread components={{ Composer: () => null }} />
+                <WebSearchToolUI />
+                <ResearchReportToolUI />
+                <ImageGenerationToolUI />
+                <Thread
+                  components={{
+                    ComposerContextUsage: { 
+                      system: 1.2, 
+                      tools: 0.5, 
+                      messages: (() => {
+                        let chars = 0;
+                        messages.forEach(m => {
+                          if (typeof m.content === "string") chars += m.content.length;
+                          else chars += JSON.stringify(m.content).length;
+                          if (m.thinking) chars += m.thinking.length;
+                          if (m.tools) chars += JSON.stringify(m.tools).length;
+                        });
+                        const tokens = chars / 4;
+                        const kTokens = tokens / 1000;
+                        return Math.max(0.1, parseFloat(kTokens.toFixed(1)));
+                      })(),
+                      total: (() => {
+                        const name = (availableModels.find(m => m.id === llmModel)?.name || llmModel).toLowerCase();
+                        if (name.includes("claude-3")) return 200;
+                        if (name.includes("gpt-4")) return 128;
+                        if (name.includes("gpt-3.5")) return 16;
+                        if (name.includes("qwen") || name.includes("llama")) return 32;
+                        return 128;
+                      })()
+                    },
+                    ModelPicker: (
+                      <div className="relative">
+                        <ComposerMenu open={modelPickerOpen}>
+                          {availableModels.length > 0 ? (
+                            availableModels.map((m) => {
+                              const entry = {
+                                name: m.name,
+                                meta: m.name.toLowerCase().includes("gpt") ? "OpenAI" : m.name.toLowerCase().includes("claude") ? "Anthropic" : "Local"
+                              };
+                              return (
+                                <ComposerModelItem 
+                                  key={m.id} 
+                                  entry={entry} 
+                                  selected={m.id === llmModel} 
+                                  onClick={() => {
+                                    handleModelChange(m.id);
+                                    setModelPickerOpen(false);
+                                  }} 
+                                />
+                              );
+                            })
+                          ) : (
+                            <div className="px-2 py-2 text-xs text-muted-foreground">No models</div>
+                          )}
+                          <div className="px-2.5 py-1.5 border-t border-border mt-1">
+                            <Link href="/settings" className="text-[11px] text-primary hover:underline flex items-center gap-1">
+                              <Key className="w-3 h-3" />
+                              Configure Keys
+                            </Link>
+                          </div>
+                        </ComposerMenu>
+                        <ComposerModelTrigger 
+                          model={availableModels.find(m => m.id === llmModel)?.name || llmModel || "Select Model"} 
+                          open={modelPickerOpen} 
+                          onClick={() => setModelPickerOpen(!modelPickerOpen)} 
+                        />
+                      </div>
+                    )
+                  }}
+                />
               </AssistantRuntimeProvider>
             </div>
-          </div>
-
-          {/* Chat Input Bar with Plan Toggle */}
-          <div className="border-t border-border p-3">
-            <PromptInput onSubmit={handleSend}>
-              <PromptInputTextarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Ask Copilot (e.g. ‘Make a sword’)"
-                disabled={loading || pipelineRunning}
-                className="min-h-12 px-3 py-2 text-xs"
-              />
-              <PromptInputActions>
-                <PromptInputActionGroup>
-                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={loading || pipelineRunning} />
-                  <ImageStatus count={attachments.filter((attachment) => attachment.type.startsWith("image/")).length} />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setKeyDialogOpen(true)}
-                    title="Configure the model that automatically selects the workflow tools"
-                  >
-                    <BotMessageSquare data-icon="inline-start" />
-                    Auto
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setInput("Generate a LangGraph-driven Blender asset with live tool feedback, repair loops, and export readiness.");
-                    }}
-                  >
-                    <Command data-icon="inline-start" />
-                    Graph prompt
-                  </Button>
-                </PromptInputActionGroup>
-                <PromptInputActionGroup>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    onClick={() => handleSend()}
-                    disabled={!input.trim() || loading || pipelineRunning}
-                    aria-label="Send message"
-                  >
-                    {loading ? <Loader2 className="animate-spin" /> : <Send />}
-                  </Button>
-                </PromptInputActionGroup>
-              </PromptInputActions>
-            </PromptInput>
           </div>
         </CardContent>
       </Card>
 
-      {/* Inline Quick LLM Key Configuration Dialog */}
-      <Dialog open={keyDialogOpen} onOpenChange={setKeyDialogOpen}>
-        <DialogContent className="max-w-md bg-card border-border shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <Key className="w-4 h-4 text-primary" />
-              Configure LLM Provider & Key
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Link your API Key to enable real-time Claude, GPT-4o, or Gemini streaming and agent execution.
-            </DialogDescription>
-          </DialogHeader>
 
-          <form onSubmit={(e) => { e.preventDefault(); handleSaveKeySettings(); }}>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-foreground font-medium">Provider</Label>
-                <Select value={llmProvider} onValueChange={(val) => {
-                  if (!val) return;
-                  setLlmProvider(val);
-                  if (val === "anthropic") setLlmModel("claude-3-5-sonnet-20241022");
-                  else if (val === "openai") setLlmModel("gpt-4o");
-                  else if (val === "custom") setLlmModel("gemini-1.5-pro");
-                }}>
-                  <SelectTrigger className="h-9 text-xs bg-background">
-                    <SelectValue placeholder="Select LLM Provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI (GPT-4o, GPT-4o-mini)</SelectItem>
-                    <SelectItem value="anthropic">Anthropic (Claude 3.5 Sonnet)</SelectItem>
-                    <SelectItem value="custom">Google Gemini / Custom Endpoint</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-foreground font-medium">Model Name</Label>
-                <Input
-                  value={llmModel}
-                  onChange={(e) => setLlmModel(e.target.value)}
-                  placeholder="gpt-4o or claude-3-5-sonnet-20241022"
-                  className="h-9 text-xs bg-background"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-foreground font-medium">
-                  API Key {hasApiKey && <span className="text-emerald-400 font-mono">(Key Already Configured)</span>}
-                </Label>
-                <div className="relative">
-                  <Input
-                    type={showKeyText ? "text" : "password"}
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder={hasApiKey ? "••••••••••••••••••••••••" : "Paste sk-... or api key here"}
-                    className="h-9 text-xs bg-background pr-9"
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKeyText(!showKeyText)}
-                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                  >
-                    {showKeyText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Keys are AES-256 encrypted server-side in your local database.
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter className="flex items-center justify-between sm:justify-between">
-              <Link href="/settings" className="text-xs text-cyan-400 hover:underline">
-                Advanced Settings →
-              </Link>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setKeyDialogOpen(false)} className="text-xs">
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={savingKey || (!apiKeyInput.trim() && !hasApiKey)}
-                  className="text-xs bg-primary text-primary-foreground gap-1.5"
-                >
-                  {savingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Save & Connect
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
+function setKeyDialogOpen(arg0: boolean) {
+  throw new Error("Function not implemented.");
+}
+

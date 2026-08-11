@@ -47,11 +47,13 @@ async def start_workflow(request: StartWorkflowRequest) -> dict[str, Any]:
         if request.overrides.get("base_url"): llm_kwargs["base_url"] = request.overrides["base_url"]
         if request.overrides.get("temperature") is not None: llm_kwargs["temperature"] = request.overrides["temperature"]
         if request.overrides.get("max_tokens") is not None: llm_kwargs["max_tokens"] = request.overrides["max_tokens"]
+        
+    tavily_api_key = request.overrides.get("tavily_api_key") if request.overrides else None
     
     llm_service = LLMService(**llm_kwargs)
 
     # Instantiate a new stateful agent for this session
-    agent = BlendPilotAgent(llm_service=llm_service)
+    agent = BlendPilotAgent(llm_service=llm_service, tavily_api_key=tavily_api_key)
 
     _active_sessions[session_id] = {
         "agent": agent,

@@ -5,7 +5,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Box, Layers, RotateCw, Sparkles } from "lucide-react";
+import { Bone, BoneFracture, Box, Layers, Rotate3d, RotateCw, Sparkles } from "lucide-react";
+
+import { useTheme } from "next-themes";
 
 export interface WorkflowSceneObject {
   name: string;
@@ -33,7 +35,7 @@ function createGeometry(object: WorkflowSceneObject) {
   const type = object.primitiveType;
 
   if (type === "cylinder") return new THREE.CylinderGeometry(w / 2, d / 2, h, 32);
-  if (type === "uv_sphere") return new THREE.SphereGeometry(Math.max(w, d, h) / 2, 32, 16);
+  if (type === "uv_sphere" || type === "sphere") return new THREE.SphereGeometry(Math.max(w, d, h) / 2, 32, 16);
   if (type === "ico_sphere") return new THREE.IcosahedronGeometry(Math.max(w, d, h) / 2, 2);
   if (type === "cone") return new THREE.ConeGeometry(Math.max(w, d) / 2, h, 32);
   if (type === "torus") return new THREE.TorusGeometry(Math.max(w, d) / 2, Math.max(0.01, h / 2), 16, 48);
@@ -72,6 +74,9 @@ export function ThreeViewport({
   selectedObjectName = null,
   onObjectSelect,
 }: ThreeViewportProps) {
+  const { theme, systemTheme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && systemTheme === "dark");
+
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -94,7 +99,6 @@ export function ThreeViewport({
     if (!container) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xffffff);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(
@@ -110,9 +114,10 @@ export function ThreeViewport({
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
+    renderer.setClearColor(0x000000, 0); // Transparent background
     rendererRef.current = renderer;
 
     container.innerHTML = "";
@@ -126,8 +131,6 @@ export function ThreeViewport({
     controls.minDistance = 0.5;
     controls.maxDistance = 15;
     controlsRef.current = controls;
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
     keyLight.position.set(4, 8, 5);
@@ -144,17 +147,6 @@ export function ThreeViewport({
     const rimLight = new THREE.DirectionalLight(0xa855f7, 1.2);
     rimLight.position.set(0, 5, -6);
     scene.add(rimLight);
-
-    const gridHelper = new THREE.GridHelper(10, 20, 0x0ea5e9, 0xe2e8f0);
-    scene.add(gridHelper);
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 20),
-      new THREE.ShadowMaterial({ opacity: 0.18 })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
 
     let animationFrameId: number;
     const animate = () => {
@@ -193,6 +185,77 @@ export function ThreeViewport({
       });
     };
   }, [onObjectSelect]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    const oldHemi = scene.getObjectByName("hemiLight");
+    if (oldHemi) scene.remove(oldHemi);
+    const oldGrid = scene.getObjectByName("gridHelper");
+    if (oldGrid) scene.remove(oldGrid);
+    const oldFloor = scene.getObjectByName("floor");
+    if (oldFloor) scene.remove(oldFloor);
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, isDark ? 0x444455 : 0x8d8d91, 0.6);
+    hemiLight.position.set(0, 10, 0);
+    hemiLight.name = "hemiLight";
+    scene.add(hemiLight);
+
+    const gridHelper = new THREE.GridHelper(100, 100, 0x0ea5e9, isDark ? 0x334155 : 0xe2e8f0);
+    gridHelper.name = "gridHelper";
+    gridHelper.material.transparent = true;
+    gridHelper.material.onBeforeCompile = (shader) => {
+      shader.vertexShader = `
+        varying vec3 vWorldPosition;
+        ${shader.vertexShader}
+      `.replace(
+        `#include <worldpos_vertex>`,
+        `#include <worldpos_vertex>\n vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;`
+      );
+      shader.fragmentShader = `
+        varying vec3 vWorldPosition;
+        ${shader.fragmentShader}
+      `.replace(
+        `vec4 diffuseColor = vec4( diffuse, opacity );`,
+        `
+        float dist = length(vWorldPosition.xz);
+        float fade = 1.0 - smoothstep(4.0, 12.0, dist);
+        vec4 diffuseColor = vec4( diffuse, opacity * fade );
+        `
+      );
+    };
+    scene.add(gridHelper);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.ShadowMaterial({ opacity: isDark ? 0.4 : 0.18, transparent: true })
+    );
+    floor.name = "floor";
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    (floor.material as THREE.ShadowMaterial).onBeforeCompile = (shader) => {
+      shader.vertexShader = `
+        varying vec3 vWorldPosition;
+        ${shader.vertexShader}
+      `.replace(
+        `#include <worldpos_vertex>`,
+        `#include <worldpos_vertex>\n vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;`
+      );
+      shader.fragmentShader = `
+        varying vec3 vWorldPosition;
+        ${shader.fragmentShader}
+      `.replace(
+        `gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );`,
+        `
+        float dist = length(vWorldPosition.xz);
+        float fade = 1.0 - smoothstep(2.0, 10.0, dist);
+        gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) * fade );
+        `
+      );
+    };
+    scene.add(floor);
+  }, [isDark]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -326,8 +389,7 @@ export function ThreeViewport({
             onClick={() => setWireframe((prev) => !prev)}
             title="Toggle Wireframe Overlay"
           >
-            <Layers className="w-3.5 h-3.5 mr-1" />
-            Wireframe
+            <BoneFracture className="w-3.5 h-3.5 mr-1" />
           </Button>
 
           <Button
@@ -337,8 +399,7 @@ export function ThreeViewport({
             onClick={() => setAutoRotate((prev) => !prev)}
             title="Toggle Turntable Rotation"
           >
-            <RotateCw className="w-3.5 h-3.5 mr-1" />
-            Turntable
+            <Rotate3d className="w-3.5 h-3.5 mr-1" />
           </Button>
         </div>
       </div>

@@ -17,6 +17,7 @@ import {
   Cpu,
   RefreshCw,
   Box,
+  Globe,
 } from "lucide-react";
 import { DEFAULT_MODELS, type LLMProvider } from "@/types/llm";
 import {
@@ -43,6 +44,9 @@ export default function SettingsPage() {
   const [blenderHost, setBlenderHost] = useState("127.0.0.1");
   const [blenderPort, setBlenderPort] = useState(9876);
 
+  const [availableModels, setAvailableModels] = useState<{id: string, name: string, contextWindow?: number}[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -66,6 +70,12 @@ export default function SettingsPage() {
         setMaskedTavilyKey(data.tavilyApiKeyMasked || "");
         setBlenderHost(data.blenderHost || "127.0.0.1");
         setBlenderPort(data.blenderPort ?? 9876);
+        
+        await fetchModels(
+          data.llmProvider || "openai", 
+          data.llmBaseUrl || "", 
+          data.llmApiKeyMasked || "" // The masked key tells the backend to use the real one
+        );
       }
     } catch {
       toast.error("Failed to load user settings");
@@ -83,6 +93,29 @@ export default function SettingsPage() {
       }
     } catch {
       // Ignore
+    }
+  };
+
+  const fetchModels = async (prov = provider, url = baseUrl, key = apiKey || maskedKey) => {
+    setFetchingModels(true);
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: prov, baseUrl: url, apiKey: key }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.models && data.models.length > 0) {
+          setAvailableModels(data.models);
+        } else {
+           setAvailableModels(DEFAULT_MODELS[prov] || []);
+        }
+      }
+    } catch {
+       setAvailableModels(DEFAULT_MODELS[prov] || []);
+    } finally {
+      setFetchingModels(false);
     }
   };
 
@@ -198,6 +231,10 @@ export default function SettingsPage() {
             <Box className="w-4 h-4" />
             <span>Blender Bridge</span>
           </TabsTrigger>
+          <TabsTrigger value="tavily" className="gap-2 py-2 px-3">
+            <Globe className="w-4 h-4" />
+            <span>Tavily Search</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* LLM Configuration Tab */}
@@ -225,6 +262,7 @@ export default function SettingsPage() {
                       if (DEFAULT_MODELS[p]?.[0]) {
                         setModel(DEFAULT_MODELS[p][0].id);
                       }
+                      fetchModels(p, baseUrl, apiKey || maskedKey);
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -239,50 +277,53 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Model Name</Label>
-                  {provider === "custom" ? (
-                    <Input
-                      placeholder="e.g. llama3.3:70b, mistral-large"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="bg-background border-input"
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      <Select
-                        value={DEFAULT_MODELS[provider]?.some(m => m.id === model) ? model : "custom-input"}
-                        onValueChange={(value) => {
-                          if (!value) return;
-                          if (value !== "custom-input") {
-                            setModel(value);
-                          } else {
-                            setModel("");
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DEFAULT_MODELS[provider]?.map((m) => (
-                            <SelectItem key={m.id} value={m.id}>
-                              {m.name} ({m.contextWindow.toLocaleString()} tokens)
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="custom-input">Custom Model...</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
-                      {!DEFAULT_MODELS[provider]?.some(m => m.id === model) && (
-                        <Input
-                          placeholder={`Enter custom ${provider} model name`}
-                          value={model}
-                          onChange={(e) => setModel(e.target.value)}
-                          className="bg-background border-input"
-                        />
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <Label>Model Name</Label>
+                    <Button 
+                       variant="ghost" 
+                       size="sm" 
+                       onClick={() => fetchModels()} 
+                       disabled={fetchingModels}
+                       className="h-6 px-2 text-xs text-muted-foreground"
+                    >
+                      <RefreshCw className={`w-3 h-3 mr-1 ${fetchingModels ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Select
+                      value={availableModels.some(m => m.id === model) ? model : "custom-input"}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        if (value !== "custom-input") {
+                          setModel(value);
+                        } else {
+                          setModel("");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name} {m.contextWindow ? `(${m.contextWindow.toLocaleString()} tokens)` : ""}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="custom-input">Custom Model...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    {!availableModels.some(m => m.id === model) && (
+                      <Input
+                        placeholder={`Enter custom ${provider} model name`}
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        className="bg-background border-input"
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -398,29 +439,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Tavily API Key */}
-              <div className="space-y-2 pt-4 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <Label>Tavily Search API Key</Label>
-                  {maskedTavilyKey && (
-                    <span className="text-xs text-foreground flex items-center gap-1 font-mono">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
-                      Configured: {maskedTavilyKey}
-                    </span>
-                  )}
-                </div>
-                <Input
-                  type="password"
-                  placeholder={maskedTavilyKey ? "Leave blank to keep existing key" : "tvly-..."}
-                  value={tavilyApiKey}
-                  onChange={(e) => setTavilyApiKey(e.target.value)}
-                  className="bg-background border-input font-mono"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Required for ResearchAgent dynamic web search.
-                </p>
-              </div>
-
               {/* RAG Knowledge Store Status */}
               <div className="pt-3 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
@@ -466,6 +484,53 @@ export default function SettingsPage() {
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {saving ? "Saving..." : "Save RAG Settings"}
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        {/* Tavily Web Search Tab */}
+        <TabsContent value="tavily" className="space-y-4">
+          <Card className="border-border bg-card text-card-foreground">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary" />
+                Tavily Web Search
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Configure your Tavily Search API key to enable live web research for the agent.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Tavily Search API Key</Label>
+                  {maskedTavilyKey && (
+                    <span className="text-xs text-foreground flex items-center gap-1 font-mono">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
+                      Configured: {maskedTavilyKey}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="password"
+                  placeholder={maskedTavilyKey ? "Leave blank to keep existing key" : "tvly-..."}
+                  value={tavilyApiKey}
+                  onChange={(e) => setTavilyApiKey(e.target.value)}
+                  className="bg-background border-input font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Required for ResearchAgent dynamic web search capabilities. Get a key at <a href="https://tavily.com" target="_blank" rel="noreferrer" className="text-primary hover:underline">tavily.com</a>.
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end border-t border-border pt-4">
+              <Button
+                onClick={() => handleSave(false)}
+                disabled={saving || testing}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {saving ? "Saving..." : "Save Settings"}
               </Button>
             </CardFooter>
           </Card>

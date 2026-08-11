@@ -558,6 +558,15 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
           argsText={argsText}
           className={cn(isCancelled && "opacity-60")}
         />
+        {isRequiresAction && (
+          <ToolFallbackApproval
+            addResult={addResult}
+            resume={resume}
+            interrupt={interrupt}
+            approval={approval}
+            respondToApproval={respondToApproval}
+          />
+        )}
         {!isCancelled && <ToolFallbackResult result={result} />}
       </ToolFallbackContent>
     </ToolFallbackRoot>

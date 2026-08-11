@@ -94,6 +94,7 @@ def create_primitive(
         }
 
     obj.name = name
+    obj["blendpilot_primitive_type"] = ptype
 
     # Set dimensions if provided
     if dimensions is not None:

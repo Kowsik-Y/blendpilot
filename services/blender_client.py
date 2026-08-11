@@ -218,6 +218,7 @@ class BlenderClient:
                 objs.append({
                     "name": name,
                     "type": "MESH",
+                    "primitiveType": obj.get("type", None),
                     "location": obj.get("location", [0.0, 0.0, 0.0]),
                     "rotation": [0.0, 0.0, 0.0],
                     "scale": [1.0, 1.0, 1.0],

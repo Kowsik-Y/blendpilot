@@ -118,8 +118,8 @@ export default function StudioPage() {
 
 
   const [assetSpec, setAssetSpec] = useState<StudioAssetSpec>({
-    asset_type: "crate",
-    dimensions: { width: 1.0, depth: 0.7, height: 0.6 },
+    asset_type: "model",
+    dimensions: { width: 1.0, depth: 1.0, height: 1.0 },
   });
   const [sceneObjects, setSceneObjects] = useState<WorkflowSceneObject[]>([]);
   const [qaState, setQaState] = useState<{
@@ -308,7 +308,13 @@ export default function StudioPage() {
       
       // Sync ground truth from Blender anytime it is provided
       if (currentPayload.scene_objects) {
-         setSceneObjects(currentPayload.scene_objects as WorkflowSceneObject[]);
+        setSceneObjects(prev => {
+          const prevMap = new Map(prev.map(p => [p.name, p.primitiveType]));
+          return (currentPayload.scene_objects as WorkflowSceneObject[]).map(obj => ({
+            ...obj,
+            primitiveType: obj.primitiveType || prevMap.get(obj.name) || (obj as any).type || "cube"
+          }));
+        });
       }
 
       if (currentPayload.event === "workflow_complete" || state.status === "COMPLETED") {

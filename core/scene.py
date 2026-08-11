@@ -38,6 +38,7 @@ def get_scene_summary() -> dict[str, Any]:
         obj_info: dict[str, Any] = {
             "name": obj.name,
             "type": obj.type,
+            "primitiveType": obj.get("blendpilot_primitive_type", None),
             "location": tuple(obj.location),
             "rotation": tuple(obj.rotation_euler),
             "scale": tuple(obj.scale),

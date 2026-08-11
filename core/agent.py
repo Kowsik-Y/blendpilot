@@ -13,7 +13,7 @@ from typing import Any, AsyncGenerator, Dict, List
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, Field
 
 from mcp_servers.blender.server import BlenderMCPServer, MCPToolDefinition
 from services.llm import LLMService
@@ -23,9 +23,10 @@ logger = logging.getLogger("blendpilot.core.agent")
 class BlendPilotAgent:
     """Dynamic LangChain Agent that controls Blender via MCP tools."""
 
-    def __init__(self, mcp_server: BlenderMCPServer | None = None, llm_service: LLMService | None = None):
+    def __init__(self, mcp_server: BlenderMCPServer | None = None, llm_service: LLMService | None = None, tavily_api_key: str | None = None):
         self.mcp_server = mcp_server or BlenderMCPServer()
         self.llm_service = llm_service or LLMService()
+        self.tavily_api_key = tavily_api_key
         self.tools = self._build_langchain_tools()
         self.memory = MemorySaver()
         self.agent_executor = self._build_agent_executor()
@@ -70,6 +71,28 @@ class BlendPilotAgent:
                 coroutine=make_coro(defn.name),
             )
             lc_tools.append(tool)
+            
+        if self.tavily_api_key:
+            from services.web_search import WebSearchService
+            
+            class WebSearchSchema(BaseModel):
+                query: str = Field(..., description="The search query to look up on the web.")
+                
+            async def _web_search(query: str) -> dict[str, Any]:
+                logger.info("Agent invoking web_search: %s", query)
+                searcher = WebSearchService(api_key=self.tavily_api_key)
+                res = await searcher.search(query)
+                return res.model_dump()
+                
+            web_search_tool = StructuredTool(
+                name="web_search",
+                description="Search the web for 3D reference data, requirements, and documentation.",
+                args_schema=WebSearchSchema,
+                func=None,
+                coroutine=_web_search,
+            )
+            lc_tools.append(web_search_tool)
+            
         return lc_tools
 
     def _build_agent_executor(self):

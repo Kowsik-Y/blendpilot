@@ -13,7 +13,6 @@ import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { SyntaxHighlighter } from "@/components/assistant-ui/syntax-highlighter";
 import { cn } from "@/lib/utils";
 
 const MarkdownTextImpl = () => {
@@ -257,5 +256,4 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
-  SyntaxHighlighter,
 });

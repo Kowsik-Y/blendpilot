@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
           context_window_size: settings.contextWindowSize,
           rag_enabled: settings.ragEnabled,
           rag_top_k: settings.ragTopK,
+          tavily_api_key: settings.tavilyApiKey ? decrypt(settings.tavilyApiKey) : "",
         };
       }
     }
