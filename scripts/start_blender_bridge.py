@@ -38,6 +38,14 @@ def find_blender_binary() -> str:
         if os.path.exists(path):
             return path
 
+    # Windows standard locations
+    if sys.platform == "win32":
+        import glob
+        win_paths = glob.glob(r"C:\Program Files\Blender Foundation\Blender *\blender.exe")
+        if win_paths:
+            win_paths.sort(reverse=True)
+            return win_paths[0]
+
     # Linux / PATH
     import shutil
     which_blender = shutil.which("blender")

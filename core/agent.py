@@ -49,7 +49,13 @@ class BlendPilotAgent:
                 elif prop.get("type") == "boolean":
                     ptype = bool
                 elif prop.get("type") == "array":
-                    ptype = list
+                    items_type = prop.get("items", {}).get("type")
+                    if items_type in ["number", "integer"]:
+                        ptype = list[float]
+                    elif items_type == "string":
+                        ptype = list[str]
+                    else:
+                        ptype = list
                 
                 default = ... if key in required else None
                 fields[key] = (ptype, default)
@@ -102,9 +108,10 @@ class BlendPilotAgent:
         system_prompt = (
              "You are BlendPilot, an autonomous expert 3D modeling AI. "
              "You have access to a suite of Blender MCP tools to create, modify, and render 3D scenes. "
-             "When the user asks you to create or change something, make a plan and execute the necessary tools. "
-             "Always explain what you are doing. If a tool fails, reason about the error and try again. "
-             "Once you finish your tasks, inform the user."
+             "When the user asks you to create or change something, make a highly detailed plan and execute the necessary tools precisely. "
+             "Your responses MUST NOT be vague. Clearly explain your mathematical reasoning, the exact dimensions, locations, and steps you are taking. "
+             "If a tool fails, carefully reason about the error (e.g., parameter formatting) and try again with corrected values. "
+             "Once you finish your tasks, give the user a precise summary of the final design."
         )
 
         return create_agent(
