@@ -263,11 +263,23 @@ export function CopilotChatbox({
              }));
           } else if (payload.event === "on_chat_model_end") {
              setLiveThinking(prev => {
-                const finalContent = prev.content.trimEnd();
-                if (finalContent && !finalContent.endsWith("\n\n")) {
-                  return { ...prev, content: finalContent + "\n\n" };
+                const finalContent = prev.content.trim();
+                if (finalContent || prev.tools.length > 0) {
+                  setMessages(m => {
+                    const existingIdx = m.findIndex(msg => msg.id === activeMessageIdRef.current);
+                    if (existingIdx !== -1) {
+                       const newM = [...m];
+                       newM[existingIdx] = { ...newM[existingIdx], content: finalContent, tools: prev.tools };
+                       return newM;
+                    }
+                    return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
+                  });
                 }
-                return prev;
+                
+                // Prepare a new ID for the NEXT turn of the model in the same workflow
+                activeMessageIdRef.current = nextMessageId("copilot");
+                
+                return { active: true, id: activeMessageIdRef.current, content: "", tools: [] };
              });
           } else if (payload.event === "workflow_complete" || payload.event === "workflow_missing" || payload.event === "workflow_failed") {
              setLiveThinking(prev => {
@@ -282,7 +294,7 @@ export function CopilotChatbox({
                     }
                     return [...m, { id: activeMessageIdRef.current || nextMessageId("copilot"), role: "assistant", content: finalContent, tools: prev.tools, time: "Just now" }];
                   });
-                }
+                } 
                 
                 if (payload.event === "workflow_failed") {
                   setMessages(m => [...m, {
@@ -292,7 +304,6 @@ export function CopilotChatbox({
                     time: "Just now"
                   }]);
                 }
-                
                 return { active: false, content: "", tools: [] };
              });
           }
