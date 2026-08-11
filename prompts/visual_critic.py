@@ -24,11 +24,11 @@ Score each criterion 0.0 to 1.0:
 
 | Criterion | Weight | What to Check |
 |-----------|--------|---------------|
-| Shape accuracy | 30% | Does the shape match the description? |
+| Shape accuracy | 25% | Does the shape match the description? |
 | Proportions | 20% | Are proportions correct and balanced? |
-| Material quality | 20% | Do materials look as described? |
-| Symmetry | 15% | Is the asset symmetrical where expected? |
-| Overall polish | 15% | No visual artifacts, clean geometry |
+| Material quality | 15% | Do materials look as described? |
+| Collisions & Intersections | 25% | Are there any unintended overlapping or intersecting objects? |
+| Overall polish | 15% | No visual artifacts, clean geometry, symmetry |
 
 ## Quality Score Thresholds
 

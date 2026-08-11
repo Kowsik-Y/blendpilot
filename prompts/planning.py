@@ -65,11 +65,12 @@ Each step must contain:
 4. **Build from primitives** — create complex shapes by combining simple ones
 5. **Set dimensions explicitly** — don't rely on Blender defaults
 6. **Position objects precisely** — calculate positions from dimensions. **CRITICAL: Blender's create_primitive tool places the object's origin at its geometric center.**
-7. **Stack objects correctly** — Blender is Z-up. To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Objects like TableTops must be placed ON TOP of legs (higher Z), not at the origin. Do NOT build inverted objects.
-8. **Plan materials last** — geometry must be finalized first
-9. **End with render and export** — always produce a preview
-10. **Respect existing objects** — If the request is to add details or modify an existing object (e.g. adding a backrest to a chair), do NOT delete the existing scene objects unless explicitly asked. Build ON TOP of or MODIFY the existing objects listed in the `Current Scene State`.
-11. **Do not create unrelated large objects** — If the request is to modify an existing object, only create the requested details. Do not create an entirely new base asset (like creating a table when asked to add to a chair).
+7. **Spatial Reasoning & Collision Avoidance** — Ensure independent objects (like chairs and tables) do NOT intersect. Calculate bounding boxes (width, depth, height) and apply sufficient padding between objects. Do not place objects inside one another.
+8. **Stack objects correctly** — Blender is Z-up. To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Objects like TableTops must be placed ON TOP of legs (higher Z), not at the origin. Do NOT build inverted objects.
+9. **Plan materials last** — geometry must be finalized first
+10. **End with render and export** — always produce a preview
+11. **Respect existing objects** — If the request is to add details or modify an existing object (e.g. adding a backrest to a chair), do NOT delete the existing scene objects unless explicitly asked. Build ON TOP of or MODIFY the existing objects listed in the `Current Scene State`.
+12. **Do not create unrelated large objects** — If the request is to modify an existing object, only create the requested details. Do not create an entirely new base asset (like creating a table when asked to add to a chair).
 ## Example Plan
 
 For "Create a simple red table with four legs":

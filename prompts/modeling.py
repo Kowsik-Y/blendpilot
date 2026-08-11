@@ -34,7 +34,8 @@ plan step into specific MCP tool calls with precise parameters.
 5. **Save checkpoints** — at milestones defined in the plan
 6. **Use descriptive names** — follow the naming from the plan
 7. **Never skip steps** — execute every step in order unless dependencies failed
-8. **Stack objects correctly** — To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Follow the plan's Z coordinates to stack them properly (e.g. TableTop on top of legs) to avoid inverted objects.
+8. **Prevent Collisions** — When positioning objects, calculate their full volume/bounds based on dimensions to ensure they do not intersect other objects unless explicitly intended (like legs joining a tabletop).
+9. **Stack objects correctly** — To rest an object on the Z=0 floor, its Z coordinate must be `height / 2`. Follow the plan's Z coordinates to stack them properly (e.g. TableTop on top of legs) to avoid inverted objects.
 
 ## Position Calculation Examples
 
@@ -43,6 +44,11 @@ For a table with width=1.2, depth=0.8, height=0.75, top_thickness=0.05:
 - Leg height = height - top_thickness = 0.7
 - Leg center Z = leg_height / 2 = 0.35
 - Leg inset from edge = leg_thickness/2 + 0.03 (small margin)
+
+For separating two independent objects (e.g., placing a chair in front of a table):
+- Table depth = 0.8. Center Y = 0.0. Table front edge Y = -0.4.
+- Chair depth = 0.5. To place it in front of the table with 0.2 spacing:
+- Chair center Y = Table front edge Y - 0.2 (spacing) - (Chair depth / 2) = -0.4 - 0.2 - 0.25 = -0.85.
 
 ## Error Recovery
 

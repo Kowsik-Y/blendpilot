@@ -119,9 +119,18 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
     logger.info("[Node] Running Intent Agent")
     await _emit_agent_state(state, "intent", "intent_agent", "RUNNING", "Parsing prompt into structured design spec")
     try:
-        agent = IntentAgent(llm_service=_get_llm_service(state))
+        llm = _get_llm_service(state)
+        
+        # Enhance the user prompt with professional 3D details
+        enhanced_prompt = await llm.generate(
+            prompt=f"Enhance this 3D modeling request with professional details, styling, and realistic dimensions: {state['user_prompt']}",
+            system_prompt="You are a 3D design prompt engineer. Take the user's brief request and expand it into a detailed, professional specification for a 3D artist. Do not change the core intent, just add professional details like material types, specific styles, and realistic proportions. Return ONLY the enhanced prompt without any conversational text."
+        )
+        final_prompt = enhanced_prompt.strip() if enhanced_prompt else state["user_prompt"]
+        
+        agent = IntentAgent(llm_service=llm)
         spec = await agent.execute(
-            user_prompt=state["user_prompt"],
+            user_prompt=final_prompt,
             reference_images=state.get("reference_images", []),
         )
         spec_dict = _safe_model_dump(spec)
