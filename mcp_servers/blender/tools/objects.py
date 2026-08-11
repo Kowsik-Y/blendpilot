@@ -19,16 +19,16 @@ class CreatePrimitiveInput(BaseModel):
         description="Type of primitive: 'cube', 'cylinder', 'uv_sphere', 'ico_sphere', 'plane', 'cone', 'torus'",
     )
     name: str = Field(..., description="Unique name for the created object")
-    dimensions: list[float] = Field(
-        default_factory=lambda: [1.0, 1.0, 1.0],
+    dimensions: list[float] | None = Field(
+        default=None,
         description="[width (X), depth (Y), height (Z)] in Blender units / meters",
     )
-    location: list[float] = Field(
-        default_factory=lambda: [0.0, 0.0, 0.0],
+    location: list[float] | None = Field(
+        default=None,
         description="[X, Y, Z] world position",
     )
-    rotation: list[float] = Field(
-        default_factory=lambda: [0.0, 0.0, 0.0],
+    rotation: list[float] | None = Field(
+        default=None,
         description="[X, Y, Z] Euler rotation in radians",
     )
 
@@ -62,9 +62,9 @@ async def create_primitive(client: BlenderClient, params: dict[str, Any]) -> dic
     response = await client.create_primitive(
         primitive_type=validated.primitive_type,
         name=validated.name,
-        dimensions=validated.dimensions,
-        location=validated.location,
-        rotation=validated.rotation,
+        dimensions=validated.dimensions if validated.dimensions is not None else [1.0, 1.0, 1.0],
+        location=validated.location if validated.location is not None else [0.0, 0.0, 0.0],
+        rotation=validated.rotation if validated.rotation is not None else [0.0, 0.0, 0.0],
     )
     return {
         "success": response.success,

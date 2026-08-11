@@ -49,8 +49,16 @@ export function Header() {
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56 bg-popover text-popover-foreground border-border" align="end">
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="font-normal">
+              <DropdownMenuLabel className="font-normal flex gap-2">
+                <div className="relative h-8 w-8 rounded-full border border-border cursor-pointer">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-muted text-foreground text-xs font-medium">
+                      {userInitials || "BP"}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
                 <div className="flex flex-col space-y-1">
+
                   <p className="text-sm font-medium text-foreground leading-none">{userName}</p>
                   <p className="text-xs text-muted-foreground leading-none">{session?.user?.email}</p>
                 </div>

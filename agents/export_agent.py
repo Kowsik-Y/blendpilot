@@ -83,13 +83,16 @@ class ExportAgent:
                 "glb": glb_path,
                 "preview": os.path.join(asset_folder, "preview.png"),
             },
-            "quality_assurance": {
-                "geometry_status": geometry_qa.status if geometry_qa else "PASS",
-                "geometry_score": geometry_qa.score if geometry_qa else 1.0,
-                "visual_score": visual_qa.overall_score if visual_qa else 0.92,
-                "approved": True,
-            },
+            "quality_assurance": {}
         }
+        
+        if geometry_qa:
+            report_data["quality_assurance"]["geometry_status"] = geometry_qa.status
+            report_data["quality_assurance"]["geometry_score"] = geometry_qa.score
+        
+        if visual_qa:
+            report_data["quality_assurance"]["visual_score"] = visual_qa.overall_score
+            report_data["quality_assurance"]["approved"] = visual_qa.approved
 
         report_path = os.path.join(asset_folder, "asset_report.json")
         with open(report_path, "w", encoding="utf-8") as f:

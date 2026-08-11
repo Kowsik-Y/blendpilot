@@ -97,10 +97,38 @@ class WebSearchService:
             SearchResponse with results marked as untrusted.
         """
         logger.info("Web search: '%s' (provider=%s)", query, self.search_provider)
-
-        # Phase 7: implement actual search provider integration
-        # For now, return empty results
-        logger.warning("Web search not yet implemented — returning empty results.")
+        
+        if self.search_provider == "tavily" and self.api_key:
+            try:
+                from tavily import AsyncTavilyClient
+                # Typically, Tavily client accepts the API key.
+                # In actual implementation, manage this carefully.
+                client = AsyncTavilyClient(api_key=self.api_key)
+                response = await client.search(
+                    query,
+                    search_depth="advanced",
+                    max_results=self.max_results,
+                    include_domains=[],
+                    exclude_domains=[],
+                )
+                
+                results = []
+                for result in response.get("results", []):
+                    results.append(SearchResult(
+                        title=result.get("title", ""),
+                        url=result.get("url", ""),
+                        snippet=result.get("content", ""),
+                        source_domain="",
+                        trust_level="untrusted"
+                    ))
+                    
+                return SearchResponse(query=query, results=results, total_results=len(results))
+            except Exception as e:
+                logger.error("Tavily search failed: %s", e)
+                return SearchResponse(query=query, results=[], total_results=0, error=str(e))
+                
+        # Fallback or stub if API key is missing
+        logger.warning("Web search stub fallback — returning empty results.")
         return SearchResponse(query=query, results=[], total_results=0)
 
     async def search_blender_docs(self, topic: str) -> SearchResponse:

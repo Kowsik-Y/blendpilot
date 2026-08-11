@@ -40,6 +40,38 @@ _start_time: float = 0.0
 _commands_processed: int = 0
 
 
+def _run_on_blender_main_thread(handler: Any, parameters: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
+    """Run a bridge handler through Blender's timer queue and wait for its result.
+
+    HTTP handlers run on the bridge server thread. Blender's data API and
+    operators must instead run on Blender's main thread; using them directly
+    from the HTTP thread produces incomplete ``bpy.context`` objects.
+    """
+    import bpy  # type: ignore[import-not-found]
+
+    completed = threading.Event()
+    outcome: dict[str, Any] = {}
+
+    def invoke() -> None:
+        try:
+            outcome["result"] = handler(parameters)
+        except BaseException as error:
+            outcome["error"] = error
+            outcome["traceback"] = traceback.format_exc()
+        finally:
+            completed.set()
+        return None
+
+    bpy.app.timers.register(invoke, first_interval=0.0)
+    if not completed.wait(timeout):
+        raise TimeoutError(f"Blender did not execute the command within {timeout:.0f} seconds.")
+    if "error" in outcome:
+        error = outcome["error"]
+        logger.error("Blender command failed on main thread:\n%s", outcome.get("traceback", ""))
+        raise error
+    return outcome.get("result", {})
+
+
 class BridgeRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the Blender bridge.
 
@@ -151,7 +183,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         start = time.perf_counter()
         try:
             logger.info("Executing command: %s (id=%s)", command_name, request_id)
-            result = handler(parameters)
+            result = _run_on_blender_main_thread(handler, parameters)
             elapsed_ms = (time.perf_counter() - start) * 1000.0
 
             _commands_processed += 1

@@ -3,7 +3,7 @@ BlendPilot AI — Blender Bridge Client
 
 HTTP client for communicating with the Blender add-on bridge server.
 Sends structured commands and receives validated responses.
-Includes automatic simulation fallback when the bridge is not running.
+Simulation is available only when explicitly enabled for tests.
 """
 
 from __future__ import annotations
@@ -51,8 +51,9 @@ class BlenderClient:
     """Async HTTP client for the Blender bridge server.
 
     Sends JSON commands to the bridge and returns structured responses.
-    If the bridge server is offline (e.g. during local tests), it falls back
-    to simulated execution so the agent graph runs seamlessly.
+    A disconnected bridge is an execution failure. It is never represented as
+    successful geometry creation in a production workflow. Tests may opt into
+    ``mock_mode`` to exercise the agent graph without a Blender process.
     """
 
     def __init__(
@@ -85,21 +86,27 @@ class BlenderClient:
             self._client = None
 
     async def execute(self, command: str, parameters: dict[str, Any] | None = None) -> BridgeResponse:
-        """Send a command to the Blender bridge with simulated fallback."""
+        """Send a command to Blender, or return an explicit bridge failure."""
         req = BridgeCommand(command=command, parameters=parameters or {})
 
-        if not self.mock_mode:
-            try:
-                client = await self._get_client()
-                response = await client.post("/execute", json=req.model_dump())
-                if response.status_code == 200:
-                    result = BridgeResponse.model_validate(response.json())
-                    return result
-            except Exception as e:
-                logger.debug("Live Blender bridge not reachable (%s), executing in simulated fallback mode", e)
+        if self.mock_mode:
+            return self._simulate_command(req)
 
-        # Simulated fallback execution
-        return self._simulate_command(req)
+        try:
+            client = await self._get_client()
+            response = await client.post("/execute", json=req.model_dump())
+            payload = response.json()
+            if response.status_code == 200:
+                return BridgeResponse.model_validate(payload)
+            return BridgeResponse(
+                request_id=req.request_id,
+                success=False,
+                error=str(payload.get("error") or f"Blender bridge returned HTTP {response.status_code}"),
+            )
+        except Exception as e:
+            message = f"Blender Bridge unavailable at {self.base_url}: {e}"
+            logger.warning(message)
+            return BridgeResponse(request_id=req.request_id, success=False, error=message)
 
     def _simulate_command(self, req: BridgeCommand) -> BridgeResponse:
         """Simulate Blender command execution for offline / testing environments."""

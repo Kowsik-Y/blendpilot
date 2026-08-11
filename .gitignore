@@ -68,3 +68,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+data/projects
+
+.kiro

@@ -91,7 +91,7 @@ Write-Host "   -> Blender Bridge:       http://127.0.0.1:9876" -ForegroundColor 
 Write-Host "===============================================================" -ForegroundColor Green
 Write-Host "Press [Ctrl+C] anytime to stop all services.`n" -ForegroundColor Yellow
 
-Start-Process "http://localhost:3000/studio"
+Start-Process "http://localhost:3000/"
 
 try {
     while ($true) {

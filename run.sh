@@ -59,47 +59,126 @@ elif command -v blender >/dev/null 2>&1; then
     BLENDER_BIN="$(command -v blender)"
 fi
 
-# Track child PIDs for clean exit
-PIDS=()
+# Track service process groups owned by this invocation, including any reused
+# healthy services so Ctrl+C can stop everything the launcher attached to.
+STOP_TARGETS=()
+CLEANED_UP=0
+
+register_stop_target() {
+    local target="$1"
+    if [ -n "$target" ] && [[ ! " ${STOP_TARGETS[*]} " =~ " ${target} " ]]; then
+        STOP_TARGETS+=("$target")
+    fi
+}
+
+register_port_owner() {
+    local port="$1"
+    local pid
+    pid="$(lsof -ti tcp:"$port" 2>/dev/null | head -n 1 || true)"
+    if [ -n "$pid" ]; then
+        local pgid
+        pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
+        if [ -n "$pgid" ]; then
+            register_stop_target "-$pgid"
+        else
+            register_stop_target "$pid"
+        fi
+    fi
+}
+
+is_healthy() {
+    curl --silent --show-error --fail --max-time 2 "$1" >/dev/null 2>&1
+}
+
+wait_for_service() {
+    local url="$1"
+    local label="$2"
+    local attempts=20
+
+    while [ "$attempts" -gt 0 ]; do
+        if is_healthy "$url"; then
+            return 0
+        fi
+        sleep 0.5
+        attempts=$((attempts - 1))
+    done
+
+    echo -e "${RED}[✘] ${label} did not become healthy at ${url}.${NC}"
+    return 1
+}
 
 cleanup() {
+    if [ "$CLEANED_UP" -eq 1 ]; then
+        return 0
+    fi
+    CLEANED_UP=1
+
     echo -e "\n${YELLOW}[*] Shutting down all BlendPilot services...${NC}"
-    for pid in "${PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
+    for target in "${STOP_TARGETS[@]}"; do
+        if [[ "$target" == -* ]]; then
+            kill -TERM -- "$target" 2>/dev/null || true
+        elif kill -0 "$target" 2>/dev/null; then
+            kill -TERM "$target" 2>/dev/null || true
+        fi
+    done
+    sleep 0.5
+    for target in "${STOP_TARGETS[@]}"; do
+        if [[ "$target" == -* ]]; then
+            kill -KILL -- "$target" 2>/dev/null || true
+        elif kill -0 "$target" 2>/dev/null; then
+            kill -KILL "$target" 2>/dev/null || true
         fi
     done
     echo -e "${GREEN}[✔] All services stopped cleanly. Goodbye!${NC}"
-    exit 0
 }
 trap cleanup SIGINT SIGTERM EXIT
 
 # ── 4. Start Blender Bridge Server ───────────────────────────
-if [ -n "$BLENDER_BIN" ]; then
+if is_healthy "http://127.0.0.1:9876/health"; then
+    echo -e "${GREEN}[✔] Reusing Blender Bridge at http://127.0.0.1:9876${NC}"
+    register_port_owner 9876
+elif [ -n "$BLENDER_BIN" ]; then
     echo -e "${GREEN}[+] Starting Blender Bridge Server (${BLENDER_BIN})...${NC}"
     "$VENV_PYTHON" "$PROJECT_DIR/scripts/start_blender_bridge.py" --host 127.0.0.1 --port 9876 &
     BLENDER_PID=$!
-    PIDS+=($BLENDER_PID)
+    register_stop_target "-$BLENDER_PID"
+    if ! wait_for_service "http://127.0.0.1:9876/health" "Blender Bridge"; then
+        exit 1
+    fi
     echo -e "${GREEN}[✔] Blender Bridge running on http://127.0.0.1:9876 (PID: ${BLENDER_PID})${NC}"
 else
     echo -e "${YELLOW}[!] Blender not found in standard paths. Operating in simulated fallback mode.${NC}"
 fi
 
 # ── 5. Start FastAPI Backend API ────────────────────────────
-echo -e "${GREEN}[+] Starting BlendPilot FastAPI Backend API on port 8000...${NC}"
-"$VENV_PYTHON" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
-BACKEND_PID=$!
-PIDS+=($BACKEND_PID)
+if is_healthy "http://127.0.0.1:8000/api/health"; then
+    echo -e "${GREEN}[✔] Reusing FastAPI Backend at http://localhost:8000${NC}"
+    register_port_owner 8000
+else
+    echo -e "${GREEN}[+] Starting BlendPilot FastAPI Backend API on port 8000...${NC}"
+    "$VENV_PYTHON" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+    BACKEND_PID=$!
+    register_stop_target "-$BACKEND_PID"
+    if ! wait_for_service "http://127.0.0.1:8000/api/health" "FastAPI Backend"; then
+        exit 1
+    fi
+fi
 
 # ── 6. Start Next.js Frontend ───────────────────────────────
 if [ -d "$PROJECT_DIR/ui" ]; then
-    echo -e "${GREEN}[+] Starting Next.js Frontend Dev Server on port 3000...${NC}"
-    (cd "$PROJECT_DIR/ui" && npm run dev) &
-    NEXT_PID=$!
-    PIDS+=($NEXT_PID)
+    if is_healthy "http://127.0.0.1:3000"; then
+        echo -e "${GREEN}[✔] Reusing Next.js Frontend at http://localhost:3000${NC}"
+        register_port_owner 3000
+    else
+        echo -e "${GREEN}[+] Starting Next.js Frontend Dev Server on port 3000...${NC}"
+        (cd "$PROJECT_DIR/ui" && npm run dev) &
+        NEXT_PID=$!
+        register_stop_target "-$NEXT_PID"
+        if ! wait_for_service "http://127.0.0.1:3000" "Next.js Frontend"; then
+            exit 1
+        fi
+    fi
 fi
-
-sleep 2
 
 echo -e "\n${BOLD}${GREEN}===============================================================${NC}"
 echo -e "${BOLD}${GREEN} ✔ All BlendPilot Services are Live and Connected!${NC}"
@@ -112,9 +191,9 @@ echo -e "${YELLOW}Press [Ctrl+C] anytime to stop all services.${NC}\n"
 
 # Automatically open Next.js UI in the browser
 if command -v open >/dev/null 2>&1; then
-    open "http://localhost:3000/studio"
+    open "http://localhost:3000/"
 elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "http://localhost:3000/studio"
+    xdg-open "http://localhost:3000/"
 fi
 
 # Wait on all background processes

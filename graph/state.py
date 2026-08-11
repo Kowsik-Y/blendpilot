@@ -35,6 +35,14 @@ class BlendPilotState(TypedDict, total=False):
     # Config
     api_key: str | None
     provider: str | None
+    model: str | None
+    base_url: str | None
+    temperature: float
+    max_tokens: int
+    context_window_size: int
+    rag_enabled: bool
+    rag_top_k: int
+    blender_mock_mode: bool
 
     # Workflow 1 — Design Intent
     design_spec: dict[str, Any] | None
@@ -84,6 +92,8 @@ class BlendPilotState(TypedDict, total=False):
 
     # Stream Events & Logs
     events: list[dict[str, Any]]
+    stream_events: list[dict[str, Any]]
+    stream_event_seq: int
     checkpoint_path: str | None
 
 
@@ -108,6 +118,14 @@ def create_initial_state(
         "error": None,
         "api_key": None,
         "provider": None,
+        "model": None,
+        "base_url": None,
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "context_window_size": 128000,
+        "rag_enabled": True,
+        "rag_top_k": 4,
+        "blender_mock_mode": False,
         "design_spec": None,
         "scene_summary": None,
         "research_results": [],
@@ -135,6 +153,8 @@ def create_initial_state(
         "exported_files": [],
         "asset_report": None,
         "events": [],
+        "stream_events": [],
+        "stream_event_seq": 0,
         "checkpoint_path": None,
     }
 

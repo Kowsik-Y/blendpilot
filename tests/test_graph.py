@@ -63,6 +63,7 @@ def test_graph_compilation():
 async def test_end_to_end_pipeline_execution():
     result = await run_pipeline(
         user_prompt="Create a low-poly barrel for Unity. Dimensions: 0.5m x 0.5m x 0.8m. Under 4,000 triangles.",
+        mock_mode=True,
     )
     assert result["status"] == "COMPLETED"
     assert result["current_agent"] == "completed"

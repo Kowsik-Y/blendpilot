@@ -25,6 +25,8 @@ from mcp_servers.blender.tools.scene import (
     get_mesh_statistics,
     get_object_details,
     get_scene_summary,
+    scene_snapshot,
+    scene_rollback,
 )
 from mcp_servers.blender.tools.validation import (
     check_non_manifold,
@@ -38,6 +40,8 @@ __all__ = [
     "get_scene_summary",
     "get_object_details",
     "get_mesh_statistics",
+    "scene_snapshot",
+    "scene_rollback",
     # Objects
     "create_primitive",
     "set_transform",

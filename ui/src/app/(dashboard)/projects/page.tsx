@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderKanban, Plus, MessageSquare, Box } from "lucide-react";
+import { FolderKanban, Plus, Box } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -50,7 +50,7 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => {
-    fetchProjects();
+    void Promise.resolve().then(fetchProjects);
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -162,11 +162,11 @@ export default function ProjectsPage() {
                 </div>
                 <div className="pt-2 border-t border-border flex items-center justify-between">
                   <Link
-                    href="/chat"
+                    href={`/studio/${p.id}`}
                     className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Open Chat
+                    <Box className="w-3.5 h-3.5" />
+                    Open Studio
                   </Link>
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Box className="w-3.5 h-3.5" />

@@ -1,11 +1,13 @@
 """
 BlendPilot AI — Step-by-Step Design Planning Agent
 
-Workflow 4: Deconstructs DesignSpec into an ordered, atomic sequence of PlanSteps.
+Workflow 4: Uses LLM to generate creative, context-aware modeling plans that
+leverage the full MCP tool registry. Falls back to enhanced procedural plans.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -19,9 +21,24 @@ from services.llm import LLMService
 
 logger = logging.getLogger("blendpilot.agents.planning")
 
+# Available MCP tools the LLM can use in its plan
+MCP_TOOLS_CONTEXT = """
+Available Blender MCP Tools (use these exact tool names in plan steps):
+- create_primitive: Create a mesh (cube, cylinder, uv_sphere, ico_sphere, plane, cone, torus) with name, dimensions [w,d,h], location [x,y,z]
+- set_transform: Set location/rotation/scale of an existing object
+- duplicate_object: Duplicate an object with optional offset [x,y,z]
+- delete_object: Delete an object by name
+- add_modifier: Add modifier (BEVEL, SUBSURF, SOLIDIFY, MIRROR, BOOLEAN, DECIMATE, EDGE_SPLIT) with properties
+- apply_modifier: Bake a modifier into the mesh
+- edit_mesh: Perform mesh operations (recalculate_normals, subdivide, bevel_edges)
+- create_material: Create PBR material with base_color [r,g,b,a], metallic, roughness, emission_color, emission_strength
+- assign_material: Assign material to object
+- save_checkpoint: Save a .blend checkpoint for rollback
+"""
+
 
 class PlanningAgent:
-    """Agent that creates structured, step-by-step 3D modeling plans."""
+    """Agent that creates structured, step-by-step 3D modeling plans using LLM reasoning."""
 
     def __init__(self, llm_service: LLMService | None = None):
         self.llm_service = llm_service or LLMService()
@@ -35,115 +52,66 @@ class PlanningAgent:
         """Generate a complete DesignPlan from DesignSpec."""
         logger.info("Generating design plan for %s...", spec.asset_type)
 
-        # Fallback procedural plan generator for deterministic reliability & testing
-        fallback_plan = self._generate_procedural_plan(spec)
+        # Strict LLM-powered plan generation
+        try:
+            plan = await self._llm_generate_plan(spec, scene, research)
+            if plan and len(plan.steps) > 0:
+                logger.info("LLM generated %d-step plan for %s", len(plan.steps), spec.asset_type)
+                return plan
+        except Exception as e:
+            logger.error("LLM planning failed (%s)", e)
+            raise RuntimeError(f"Failed to generate DesignPlan via LLM: {e}")
 
-        # Use LLM if configured
-        if self.llm_service and self.llm_service.config.api_key:
-            try:
-                system_prompt = PLANNING_SYSTEM_PROMPT.format(
-                    format_instructions="Return a JSON matching the DesignPlan schema with steps."
+        raise RuntimeError("LLM failed to return a valid DesignPlan and no fallback is permitted.")
+
+    async def _llm_generate_plan(
+        self,
+        spec: DesignSpec,
+        scene: SceneSummary | None,
+        research: list[dict[str, Any]] | None,
+    ) -> DesignPlan | None:
+        """Use LLM to generate creative, context-aware modeling plans."""
+        try:
+            system_prompt = PLANNING_SYSTEM_PROMPT.format(
+                format_instructions=(
+                    "Return a JSON object with this structure:\n"
+                    '{"spec_id": "plan_<asset_type>", "steps": [...], "current_step_index": 0, "status": "pending"}\n'
+                    "Each step: {\"step_id\": int, \"description\": str, \"tool\": str, "
+                    "\"parameters\": {}, \"dependencies\": [int], \"expected_outcome\": str}\n\n"
+                    + MCP_TOOLS_CONTEXT
                 )
-                user_msg = PLANNING_USER_PROMPT.format(
-                    design_spec=spec.model_dump_json(indent=2),
-                    scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
-                    research_notes=json.dumps(research or []),
-                )
-                response = await self.llm_service.generate(
+            )
+            user_msg = PLANNING_USER_PROMPT.format(
+                design_spec=spec.model_dump_json(indent=2),
+                scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
+                research_results=json.dumps(research or []),
+            )
+            # Tool planning must never hold the workflow indefinitely. A
+            # timeout falls through to the validated procedural fallback so
+            # the modeler can start creating the requested asset.
+            response = await asyncio.wait_for(
+                self.llm_service.generate(
                     prompt=user_msg,
                     system_prompt=system_prompt,
                     response_format={"type": "json_object"},
-                )
-                clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
-                data = json.loads(clean_json)
-                return DesignPlan.model_validate(data)
-            except Exception as e:
-                logger.warning("LLM planning failed (%s), using robust procedural plan generator", e)
+                ),
+                timeout=20,
+            )
 
-        return fallback_plan
+            if not response:
+                return None
 
-    def _generate_procedural_plan(self, spec: DesignSpec) -> DesignPlan:
-        """Generate a clean, structured plan for creating the asset in Blender."""
-        steps: list[PlanStep] = []
-        w, d, h = spec.dimensions.width, spec.dimensions.depth, spec.dimensions.height
+            clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            data = json.loads(clean_json)
 
-        # 1. Main body / primary geometry
-        main_name = f"{spec.asset_type.capitalize()}_Main"
-        primitive = "cylinder" if spec.asset_type in ["barrel", "street_lamp", "piston", "robot_wheel", "pipe_valve"] else "cube"
+            # Validate and normalize the LLM output
+            if "steps" not in data:
+                return None
 
-        steps.append(PlanStep(
-            step_id=1,
-            description=f"Create primary blockout primitive for {spec.asset_type}",
-            tool="create_primitive",
-            parameters={
-                "primitive_type": primitive,
-                "name": main_name,
-                "dimensions": [w, d, h],
-                "location": [0.0, 0.0, h / 2.0],
-            },
-            expected_outcome=f"Primary {primitive} '{main_name}' centered on ground plane",
-        ))
+            return DesignPlan.model_validate(data)
 
-        # 2. Bevel modifier for realistic edge highlight
-        steps.append(PlanStep(
-            step_id=2,
-            description="Add Bevel modifier for smooth edge reflections",
-            tool="add_modifier",
-            parameters={
-                "object_name": main_name,
-                "modifier_type": "BEVEL",
-                "modifier_name": "EdgeBevel",
-                "properties": {"width": 0.03, "segments": 2},
-            },
-            dependencies=[1],
-            expected_outcome=f"Bevel modifier added to '{main_name}'",
-        ))
+        except Exception as e:
+            logger.warning("LLM plan generation failed: %s", e)
+            return None
 
-        # 3. Apply Bevel
-        steps.append(PlanStep(
-            step_id=3,
-            description="Apply bevel modifier into geometry",
-            tool="apply_modifier",
-            parameters={
-                "object_name": main_name,
-                "modifier_name": "EdgeBevel",
-            },
-            dependencies=[2],
-            expected_outcome="Bevel baked into mesh",
-        ))
 
-        # 4. Secondary detail object (e.g. Lid, Base, Accent)
-        accent_name = f"{spec.asset_type.capitalize()}_Accent"
-        steps.append(PlanStep(
-            step_id=4,
-            description=f"Create accent detailing for {spec.asset_type}",
-            tool="create_primitive",
-            parameters={
-                "primitive_type": "cube",
-                "name": accent_name,
-                "dimensions": [w * 1.04, d * 1.04, h * 0.15],
-                "location": [0.0, 0.0, h * 0.9],
-            },
-            dependencies=[1],
-            expected_outcome=f"Accent detail '{accent_name}' positioned near top",
-        ))
-
-        # 5. Checkpoint
-        steps.append(PlanStep(
-            step_id=5,
-            description="Save blockout milestone checkpoint",
-            tool="save_checkpoint",
-            parameters={
-                "filepath": f"output/checkpoints/{spec.asset_type}_blockout.blend",
-                "checkpoint_name": "01_blockout_complete",
-            },
-            dependencies=[3, 4],
-            expected_outcome="Blockout .blend checkpoint saved",
-        ))
-
-        return DesignPlan(
-            spec_id=f"plan_{spec.asset_type}",
-            steps=steps,
-            current_step_index=0,
-            status=StepStatus.PENDING,
-        )

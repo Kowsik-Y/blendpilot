@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || "http://127.0.0.1:8000";
 
@@ -17,8 +18,15 @@ export async function POST(req: NextRequest) {
       if (settings) {
         body.overrides = {
           ...body.overrides,
-          api_key: settings.llmApiKey,
+          api_key: settings.llmApiKey ? decrypt(settings.llmApiKey) : "",
           provider: settings.llmProvider,
+          model: settings.llmModel,
+          base_url: settings.llmBaseUrl || null,
+          temperature: settings.llmTemperature,
+          max_tokens: settings.llmMaxTokens,
+          context_window_size: settings.contextWindowSize,
+          rag_enabled: settings.ragEnabled,
+          rag_top_k: settings.ragTopK,
         };
       }
     }
@@ -31,11 +39,11 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to connect to Python backend";
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to connect to Python backend" },
+      { success: false, error: message },
       { status: 500 }
     );
   }
 }
-

@@ -212,6 +212,32 @@ class TestMaterialOperators:
             ops.handle_create_material({"name": ""})
 
 
+# ── Project Operator Tests ─────────────────────────────────
+
+
+class TestProjectOperators:
+    def _setup(self):
+        import blender_addon.operators.export as ops
+        importlib.reload(ops)
+        ops.register()
+        return ops
+
+    def test_handle_save_checkpoint_accepts_filepath(self, mock_bpy):
+        ops = self._setup()
+        result = ops.handle_save_checkpoint({"filepath": "output/checkpoints/test"})
+        assert result["success"] is True
+
+    def test_handle_save_project_accepts_filepath(self, mock_bpy):
+        ops = self._setup()
+        result = ops.handle_save_project({"filepath": "output/projects/test"})
+        assert result["success"] is True
+
+    def test_handle_restore_checkpoint_accepts_filepath(self, mock_bpy):
+        ops = self._setup()
+        result = ops.handle_restore_checkpoint({"filepath": "output/checkpoints/test.blend"})
+        assert result["success"] is True
+
+
 # ── Modeling Operator Tests ─────────────────────────────────
 
 
