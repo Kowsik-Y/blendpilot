@@ -115,20 +115,28 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down all BlendPilot services...${NC}"
     for target in "${STOP_TARGETS[@]}"; do
-        if [[ "$target" == -* ]]; then
-            kill -TERM -- "$target" 2>/dev/null || true
-        elif kill -0 "$target" 2>/dev/null; then
+        target="${target#-}" # Remove leading dash if any
+        if kill -0 "$target" 2>/dev/null; then
+            pkill -P "$target" 2>/dev/null || true
             kill -TERM "$target" 2>/dev/null || true
         fi
     done
     sleep 0.5
     for target in "${STOP_TARGETS[@]}"; do
-        if [[ "$target" == -* ]]; then
-            kill -KILL -- "$target" 2>/dev/null || true
-        elif kill -0 "$target" 2>/dev/null; then
+        target="${target#-}"
+        if kill -0 "$target" 2>/dev/null; then
             kill -KILL "$target" 2>/dev/null || true
         fi
     done
+    
+    # Bulletproof cleanup for ports just in case a child process detached
+    for port in 3000 8000 8001 9876; do
+        pid=$(lsof -ti tcp:$port 2>/dev/null | head -n 1)
+        if [ -n "$pid" ]; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+
     echo -e "${GREEN}[✔] All services stopped cleanly. Goodbye!${NC}"
 }
 trap cleanup SIGINT SIGTERM EXIT
@@ -177,6 +185,22 @@ if [ -d "$PROJECT_DIR/ui" ]; then
         if ! wait_for_service "http://127.0.0.1:3000" "Next.js Frontend"; then
             exit 1
         fi
+fi
+fi
+
+# ── 7. Start MkDocs Documentation ───────────────────────────
+if [ -f "$PROJECT_DIR/mkdocs.yml" ]; then
+    if is_healthy "http://127.0.0.1:8001"; then
+        echo -e "${GREEN}[✔] Reusing MkDocs Documentation at http://localhost:8001${NC}"
+        register_port_owner 8001
+    else
+        echo -e "${GREEN}[+] Starting MkDocs Documentation Server on port 8001...${NC}"
+        "$VENV_PYTHON" -m mkdocs serve -a 127.0.0.1:8001 >/dev/null 2>&1 &
+        MKDOCS_PID=$!
+        register_stop_target "-$MKDOCS_PID"
+        if ! wait_for_service "http://127.0.0.1:8001" "MkDocs Documentation"; then
+            exit 1
+        fi
     fi
 fi
 
@@ -186,6 +210,7 @@ echo -e "${BOLD}${CYAN}   🌐 Next.js Frontend UI:   ${NC}${BOLD}http://localho
 echo -e "${BOLD}${CYAN}   🚀 3D Studio Workspace:  ${NC}${BOLD}http://localhost:3000/studio${NC}"
 echo -e "${BOLD}${CYAN}   📡 FastAPI Backend API:   ${NC}${BOLD}http://localhost:8000/docs${NC}"
 echo -e "${BOLD}${CYAN}   🔌 Blender Bridge:       ${NC}${BOLD}http://127.0.0.1:9876${NC}"
+echo -e "${BOLD}${CYAN}   📚 Documentation:        ${NC}${BOLD}http://localhost:8001${NC}"
 echo -e "${BOLD}${GREEN}===============================================================${NC}"
 echo -e "${YELLOW}Press [Ctrl+C] anytime to stop all services.${NC}\n"
 

@@ -44,8 +44,15 @@ $Jobs = @()
 function Cleanup {
     Write-Host "`n[*] Shutting down all BlendPilot services..." -ForegroundColor Yellow
     foreach ($Job in $Jobs) {
-        Stop-Job -Job $Job
-        Remove-Job -Job $Job -Force
+        Stop-Job -Job $Job -ErrorAction SilentlyContinue
+        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($Port in @(3000, 8000, 8001, 9876)) {
+        Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.OwningProcess -and $_.OwningProcess -ne $PID) {
+                Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
     Write-Host "[OK] All services stopped cleanly. Goodbye!" -ForegroundColor Green
 }
@@ -80,6 +87,17 @@ if (Test-Path "$PROJECT_DIR\ui") {
     $Jobs += $FrontendJob
 }
 
+# -- 6. Start MkDocs Documentation -----------------------------------
+if (Test-Path "$PROJECT_DIR\mkdocs.yml") {
+    Write-Host "[+] Starting MkDocs Documentation Server on port 8001..." -ForegroundColor Green
+    $MkDocsJob = Start-Job -Name "MkDocs" -ScriptBlock {
+        param($Python, $ProjectDir)
+        Set-Location $ProjectDir
+        & $Python -m mkdocs serve -a 127.0.0.1:8001
+    } -ArgumentList $VENV_PYTHON, $PROJECT_DIR
+    $Jobs += $MkDocsJob
+}
+
 Start-Sleep -Seconds 5
 
 Write-Host "`n===============================================================" -ForegroundColor Green
@@ -88,6 +106,7 @@ Write-Host "   -> Next.js Frontend UI:   http://localhost:3000" -ForegroundColor
 Write-Host "   -> 3D Studio Workspace:  http://localhost:3000/studio" -ForegroundColor Cyan
 Write-Host "   -> FastAPI Backend API:   http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host "   -> Blender Bridge:       http://127.0.0.1:9876" -ForegroundColor Cyan
+Write-Host "   -> Documentation:        http://localhost:8001" -ForegroundColor Cyan
 Write-Host "===============================================================" -ForegroundColor Green
 Write-Host "Press [Ctrl+C] anytime to stop all services.`n" -ForegroundColor Yellow
 

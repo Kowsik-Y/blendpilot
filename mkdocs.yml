@@ -1,0 +1,64 @@
+site_name: BlendPilot
+site_description: Autonomous 10-Agent for Blender
+site_author: Kowsik-Y
+repo_url: https://github.com/Kowsik-Y/blendpilot
+repo_name: Kowsik-Y/blendpilot
+
+theme:
+  name: material
+  custom_dir: overrides
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: lucide/moon
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: lucide/sun
+        name: Switch to dark mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Core Concepts:
+      - Architecture: architecture.md
+      - The 10 Agents: agents.md
+  - Developer Guide:
+      - Setup & Installation: setup.md
+      - MCP Servers: mcp_servers.md
+      - Backend API: api.md
