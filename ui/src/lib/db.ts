@@ -1,15 +1,15 @@
 import { PrismaClient } from "@prisma/client";
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
+import Database from "better-sqlite3";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const adapter = new PrismaPg(pool);
-  
+  const sqlite = new Database("dev.db");
+  const adapter = new PrismaBetterSqlite3(sqlite);
+
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],

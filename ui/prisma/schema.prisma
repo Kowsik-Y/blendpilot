@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 model User {
@@ -88,7 +88,7 @@ model Project {
 model Memory {
   id        String   @id @default(cuid())
   content   String
-  embedding Unsupported("vector(1536)")?
+
   sourceUrl String?
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id])
