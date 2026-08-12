@@ -699,11 +699,14 @@ export default function StudioPage() {
 
                           <div className="flex flex-wrap gap-2">
                             {(selectedObject.modifiers || []).length > 0 ? (
-                              selectedObject.modifiers?.map((modifier) => (
-                                <Badge key={modifier} variant="outline" className="text-[10px]">
-                                  {modifier}
-                                </Badge>
-                              ))
+                              selectedObject.modifiers?.map((modifier: any, idx) => {
+                                const modName = typeof modifier === "string" ? modifier : modifier?.name || "Unknown";
+                                return (
+                                  <Badge key={`${modName}-${idx}`} variant="outline" className="text-[10px]">
+                                    {modName}
+                                  </Badge>
+                                );
+                              })
                             ) : (
                               <span className="text-xs text-muted-foreground">No modifiers assigned yet.</span>
                             )}

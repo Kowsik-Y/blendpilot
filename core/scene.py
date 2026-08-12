@@ -56,13 +56,23 @@ def get_scene_summary() -> dict[str, Any]:
 
         # Add material info
         if obj.material_slots:
-            obj_info["materials"] = [
-                {
-                    "slot_index": i,
-                    "material_name": slot.material.name if slot.material else None,
-                }
-                for i, slot in enumerate(obj.material_slots)
-            ]
+            obj_info["materials"] = []
+            for i, slot in enumerate(obj.material_slots):
+                if slot.material:
+                    mat = slot.material
+                    color = (0.8, 0.8, 0.8, 1.0)
+                    if mat.use_nodes:
+                        for node in mat.node_tree.nodes:
+                            if node.type == "BSDF_PRINCIPLED":
+                                color = tuple(node.inputs["Base Color"].default_value)
+                                break
+                    elif hasattr(mat, "diffuse_color"):
+                        color = tuple(mat.diffuse_color)
+                    obj_info["materials"].append({
+                        "slot_index": i,
+                        "material_name": slot.material.name,
+                        "diffuse_color": color,
+                    })
 
         objects_info.append(obj_info)
 

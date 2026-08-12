@@ -27,12 +27,7 @@ export function Header() {
 
   return (
     <header className="h-14 border-b border-border bg-background/80 backdrop-blur-md px-4 flex items-center justify-between sticky top-0 z-30">
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted border border-border text-foreground text-xs font-medium">
-          <Sparkles className="w-3 h-3 text-primary animate-pulse" />
-          <span>Blender Bridge Connected</span>
-        </div>
-      </div>
+      <div className="flex items-center gap-2" />
 
       <div className="flex items-center gap-3">
         <ThemeToggle />

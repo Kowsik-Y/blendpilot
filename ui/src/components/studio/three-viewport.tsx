@@ -11,12 +11,15 @@ import { useTheme } from "next-themes";
 
 export interface WorkflowSceneObject {
   name: string;
+  type?: string;
   primitiveType: string;
   dimensions: [number, number, number];
   location: [number, number, number];
   rotation?: [number, number, number];
+  scale?: [number, number, number];
   materialName?: string;
-  modifiers?: string[];
+  materials?: { material_name: string; diffuse_color?: [number, number, number, number] }[];
+  modifiers?: any[];
 }
 
 interface ThreeViewportProps {
@@ -31,29 +34,44 @@ interface ThreeViewportProps {
 }
 
 function createGeometry(object: WorkflowSceneObject) {
-  const [w, d, h] = object.dimensions;
   const type = object.primitiveType;
 
-  if (type === "cylinder") return new THREE.CylinderGeometry(w / 2, d / 2, h, 32);
-  if (type === "uv_sphere" || type === "sphere") return new THREE.SphereGeometry(Math.max(w, d, h) / 2, 32, 16);
-  if (type === "ico_sphere") return new THREE.IcosahedronGeometry(Math.max(w, d, h) / 2, 2);
-  if (type === "cone") return new THREE.ConeGeometry(Math.max(w, d) / 2, h, 32);
-  if (type === "torus") return new THREE.TorusGeometry(Math.max(w, d) / 2, Math.max(0.01, h / 2), 16, 48);
-  if (type === "plane") return new THREE.PlaneGeometry(w, d);
-  return new THREE.BoxGeometry(w, h, d);
+  if (type === "cylinder") return new THREE.CylinderGeometry(1, 1, 2, 32);
+  if (type === "uv_sphere" || type === "sphere") return new THREE.SphereGeometry(1, 32, 16);
+  if (type === "ico_sphere") return new THREE.IcosahedronGeometry(1, 2);
+  if (type === "cone") return new THREE.ConeGeometry(1, 2, 32);
+  if (type === "torus") {
+    const geo = new THREE.TorusGeometry(1, 0.25, 16, 48);
+    geo.rotateX(-Math.PI / 2);
+    return geo;
+  }
+  if (type === "plane") {
+    const geo = new THREE.PlaneGeometry(2, 2);
+    geo.rotateX(-Math.PI / 2);
+    return geo;
+  }
+  return new THREE.BoxGeometry(2, 2, 2);
 }
 
 function createMaterial(object: WorkflowSceneObject, wireframe: boolean, selected: boolean) {
+  let baseColor = 0x334155;
+  let hasCustomColor = false;
+  if (object.materials && object.materials.length > 0 && object.materials[0].diffuse_color) {
+    const [r, g, b] = object.materials[0].diffuse_color;
+    baseColor = new THREE.Color(r, g, b).getHex();
+    hasCustomColor = true;
+  }
+
   const isAccent = /accent|strip|core|emissive|glow/i.test(object.name + object.materialName);
   const isMetal = /metal|hoop|bevel|dark/i.test(object.name + object.materialName);
   const isWood = /wood|barrel|table|leg/i.test(object.name + object.materialName);
 
   return new THREE.MeshStandardMaterial({
-    color: selected ? 0x38bdf8 : isAccent ? 0x06b6d4 : isWood ? 0x8b5a2b : isMetal ? 0x1f2937 : 0x334155,
+    color: selected ? 0x38bdf8 : hasCustomColor ? baseColor : (isAccent ? 0x06b6d4 : isWood ? 0x8b5a2b : isMetal ? 0x1f2937 : baseColor),
     metalness: selected || isMetal || isAccent ? 0.78 : 0.2,
     roughness: isWood ? 0.65 : selected ? 0.25 : 0.35,
-    emissive: selected ? 0x0f172a : isAccent ? 0x06b6d4 : 0x000000,
-    emissiveIntensity: selected ? 0.4 : isAccent ? 1.6 : 0,
+    emissive: selected ? 0x0f172a : isAccent && !hasCustomColor ? 0x06b6d4 : 0x000000,
+    emissiveIntensity: selected ? 0.4 : isAccent && !hasCustomColor ? 1.6 : 0,
     wireframe,
   });
 }
@@ -279,27 +297,36 @@ export function ThreeViewport({
 
     const group = new THREE.Group();
     sceneObjects.forEach((object) => {
+      if (object.type === "CAMERA" || object.type === "LIGHT") return;
+
       const selected = object.name === selectedObjectName;
       const mesh = new THREE.Mesh(
         createGeometry(object),
         createMaterial(object, effectiveWireframe, selected)
       );
       const [x, y, z] = object.location;
-      mesh.position.set(x, z, y);
+      mesh.position.set(x, z, -y);
+      
+      if (object.scale) {
+        const [sx, sy, sz] = object.scale;
+        mesh.scale.set(sx, sz, sy);
+      } else {
+        const [w, d, h] = object.dimensions;
+        mesh.scale.set(w / 2, h / 2, d / 2); // Fallback if scale is missing
+      }
+
       if (object.rotation) {
         const [rx, ry, rz] = object.rotation;
-        mesh.rotation.set(rx, rz, ry);
+        mesh.rotation.set(rx, rz, -ry, 'XZY');
       }
-      if (object.primitiveType === "torus") {
-        mesh.rotation.x = Math.PI / 2;
-      }
+      
       mesh.name = object.name;
       mesh.userData = { objectName: object.name };
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       addEdges(mesh);
       if (selected) {
-        mesh.scale.setScalar(1.02);
+        mesh.scale.multiplyScalar(1.02);
       }
       group.add(mesh);
     });

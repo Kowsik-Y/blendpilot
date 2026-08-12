@@ -88,6 +88,7 @@ def create_material(
         mat.node_tree.links.new(principled.outputs["BSDF"], output.inputs["Surface"])
 
     # Set material properties
+    mat.diffuse_color = base_color
     principled.inputs["Base Color"].default_value = base_color
     principled.inputs["Metallic"].default_value = metallic
     principled.inputs["Roughness"].default_value = roughness
