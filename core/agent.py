@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Core LangChain Agent
+BlendPilot — Core LangChain Agent
 
 Provides a tool-calling LangChain Agent that orchestrates Blender MCP tools.
 It maintains conversational memory and streams Chain-of-Thought execution.
@@ -20,6 +20,7 @@ from services.llm import LLMService
 
 logger = logging.getLogger("blendpilot.core.agent")
 
+
 class BlendPilotAgent:
     """Dynamic LangChain Agent that controls Blender via MCP tools."""
 
@@ -39,7 +40,7 @@ class BlendPilotAgent:
             fields = {}
             props = defn.parameters_schema.get("properties", {})
             required = defn.parameters_schema.get("required", [])
-            
+
             for key, prop in props.items():
                 ptype = Any
                 if prop.get("type") == "string":
@@ -50,7 +51,7 @@ class BlendPilotAgent:
                     ptype = bool
                 elif prop.get("type") == "array":
                     ptype = list
-                
+
                 default = ... if key in required else None
                 fields[key] = (ptype, default)
 
@@ -59,7 +60,8 @@ class BlendPilotAgent:
             # Create closure for the async handler
             def make_coro(tool_name: str):
                 async def _coro(**kwargs) -> dict[str, Any]:
-                    logger.info("Agent invoking tool: %s with args: %s", tool_name, kwargs)
+                    logger.info(
+                        "Agent invoking tool: %s with args: %s", tool_name, kwargs)
                     return await self.mcp_server.call_tool(tool_name, kwargs)
                 return _coro
 
@@ -71,19 +73,20 @@ class BlendPilotAgent:
                 coroutine=make_coro(defn.name),
             )
             lc_tools.append(tool)
-            
+
         if self.tavily_api_key:
             from services.web_search import WebSearchService
-            
+
             class WebSearchSchema(BaseModel):
-                query: str = Field(..., description="The search query to look up on the web.")
-                
+                query: str = Field(...,
+                                   description="The search query to look up on the web.")
+
             async def _web_search(query: str) -> dict[str, Any]:
                 logger.info("Agent invoking web_search: %s", query)
                 searcher = WebSearchService(api_key=self.tavily_api_key)
                 res = await searcher.search(query)
                 return res.model_dump()
-                
+
             web_search_tool = StructuredTool(
                 name="web_search",
                 description="Search the web for 3D reference data, requirements, and documentation.",
@@ -92,7 +95,7 @@ class BlendPilotAgent:
                 coroutine=_web_search,
             )
             lc_tools.append(web_search_tool)
-            
+
         return lc_tools
 
     def _build_agent_executor(self):
@@ -100,11 +103,11 @@ class BlendPilotAgent:
         model = self.llm_service.get_chat_model()
 
         system_prompt = (
-             "You are BlendPilot, an autonomous expert 3D modeling AI. "
-             "You have access to a suite of Blender MCP tools to create, modify, and render 3D scenes. "
-             "When the user asks you to create or change something, make a plan and execute the necessary tools. "
-             "Always explain what you are doing. If a tool fails, reason about the error and try again. "
-             "Once you finish your tasks, inform the user."
+            "You are BlendPilot, an autonomous expert 3D modeling AI. "
+            "You have access to a suite of Blender MCP tools to create, modify, and render 3D scenes. "
+            "When the user asks you to create or change something, make a plan and execute the necessary tools. "
+            "Always explain what you are doing. If a tool fails, reason about the error and try again. "
+            "Once you finish your tasks, inform the user."
         )
 
         return create_agent(
@@ -119,7 +122,8 @@ class BlendPilotAgent:
         try:
             summary = await self.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
             if isinstance(summary, dict) and not summary.get("error"):
-                safe_summary = {k: v for k, v in summary.items() if k not in ["success", "error"]}
+                safe_summary = {k: v for k, v in summary.items() if k not in [
+                    "success", "error"]}
                 user_input += (
                     f"\n\n[System Note: Current Blender scene state: {safe_summary}. "
                     "CRITICAL RULES: "
@@ -134,7 +138,8 @@ class BlendPilotAgent:
 
         async for event in self.agent_executor.astream_events(
             {"messages": [("user", user_input)]},
-            config={"configurable": {"thread_id": session_id}, "recursion_limit": 150},
+            config={"configurable": {"thread_id": session_id},
+                    "recursion_limit": 150},
             version="v2",
         ):
             yield event

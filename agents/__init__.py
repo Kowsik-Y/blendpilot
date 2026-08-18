@@ -1,5 +1,5 @@
 """
-BlendPilot AI — The 10 Specialized Autonomous Agents
+BlendPilot — The 10 Specialized Autonomous Agents
 
 1. IntentAgent       — Design Intent Understanding
 2. SceneAgent        — Blender Scene Understanding

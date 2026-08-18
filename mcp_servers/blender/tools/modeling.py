@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Modeling MCP Tools
+BlendPilot — Modeling MCP Tools
 
 Tools for adding/applying modifiers and executing mesh operations in Blender.
 """
@@ -19,7 +19,8 @@ class AddModifierInput(BaseModel):
         ...,
         description="Type of modifier: 'BEVEL', 'SUBSURF', 'SOLIDIFY', 'MIRROR', 'BOOLEAN', 'EDGE_SPLIT', 'DECIMATE'",
     )
-    modifier_name: str | None = Field(default=None, description="Optional custom name for the modifier")
+    modifier_name: str | None = Field(
+        default=None, description="Optional custom name for the modifier")
     properties: dict[str, Any] = Field(
         default_factory=dict,
         description="Modifier-specific properties (e.g. width=0.05, segments=3, thickness=0.02)",
@@ -29,14 +30,17 @@ class AddModifierInput(BaseModel):
 class ApplyModifierInput(BaseModel):
     """Input parameters for applying a modifier."""
     object_name: str = Field(..., description="Target object name")
-    modifier_name: str = Field(..., description="Name of the modifier to apply")
+    modifier_name: str = Field(...,
+                               description="Name of the modifier to apply")
 
 
 class EditMeshInput(BaseModel):
     """Input parameters for mesh editing operations."""
     object_name: str = Field(..., description="Target object name")
-    operation: str = Field(..., description="Operation: 'extrude_face', 'inset_face', 'bevel_edges', 'subdivide', 'recalculate_normals'")
-    parameters: dict[str, Any] = Field(default_factory=dict, description="Operation specific parameters")
+    operation: str = Field(
+        ..., description="Operation: 'extrude_face', 'inset_face', 'bevel_edges', 'subdivide', 'recalculate_normals'")
+    parameters: dict[str, Any] = Field(
+        default_factory=dict, description="Operation specific parameters")
 
 
 async def add_modifier(client: BlenderClient, params: dict[str, Any]) -> dict[str, Any]:

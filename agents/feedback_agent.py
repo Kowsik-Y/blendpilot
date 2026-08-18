@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Human Review & Feedback Agent
+BlendPilot — Human Review & Feedback Agent
 
 Workflow 9: Manages human-in-the-loop review interrupts, processes interactive chat
 or email feedback, and converts change requests into structured revision plans.
@@ -27,7 +27,8 @@ class FeedbackAgent:
         action: str = "APPROVE",
     ) -> dict[str, Any]:
         """Process human review decision."""
-        logger.info("Processing human feedback: action=%s, feedback=%s", action, feedback_text)
+        logger.info(
+            "Processing human feedback: action=%s, feedback=%s", action, feedback_text)
 
         action_upper = action.upper().strip()
         if action_upper in ["APPROVE", "APPROVED", "PASS", "YES"]:

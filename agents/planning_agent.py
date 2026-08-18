@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Step-by-Step Design Planning Agent
+BlendPilot — Step-by-Step Design Planning Agent
 
 Workflow 4: Uses LLM to generate creative, context-aware modeling plans that
 leverage the full MCP tool registry. Falls back to enhanced procedural plans.
@@ -56,13 +56,15 @@ class PlanningAgent:
         try:
             plan = await self._llm_generate_plan(spec, scene, research)
             if plan and len(plan.steps) > 0:
-                logger.info("LLM generated %d-step plan for %s", len(plan.steps), spec.asset_type)
+                logger.info("LLM generated %d-step plan for %s",
+                            len(plan.steps), spec.asset_type)
                 return plan
         except Exception as e:
             logger.error("LLM planning failed (%s)", e)
             raise RuntimeError(f"Failed to generate DesignPlan via LLM: {e}")
 
-        raise RuntimeError("LLM failed to return a valid DesignPlan and no fallback is permitted.")
+        raise RuntimeError(
+            "LLM failed to return a valid DesignPlan and no fallback is permitted.")
 
     async def _llm_generate_plan(
         self,
@@ -83,7 +85,8 @@ class PlanningAgent:
             )
             user_msg = PLANNING_USER_PROMPT.format(
                 design_spec=spec.model_dump_json(indent=2),
-                scene_summary=scene.model_dump_json(indent=2) if scene else "{}",
+                scene_summary=scene.model_dump_json(
+                    indent=2) if scene else "{}",
                 research_results=json.dumps(research or []),
             )
             # Tool planning must never hold the workflow indefinitely. A
@@ -101,7 +104,8 @@ class PlanningAgent:
             if not response:
                 return None
 
-            clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            clean_json = re.sub(r"^```json\s*|\s*```$", "",
+                                response.strip(), flags=re.MULTILINE)
             data = json.loads(clean_json)
 
             # Validate and normalize the LLM output
@@ -113,5 +117,3 @@ class PlanningAgent:
         except Exception as e:
             logger.warning("LLM plan generation failed: %s", e)
             return None
-
-

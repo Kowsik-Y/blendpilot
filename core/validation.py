@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Deterministic Geometry Validation
+BlendPilot — Deterministic Geometry Validation
 
 Implements geometry QA checks that do NOT depend on an LLM.
 Uses Blender Python (bpy/bmesh) for deterministic validation.
@@ -97,7 +97,8 @@ def check_normals(name: str) -> dict[str, Any]:
     return {
         "passed": passed,
         "flipped_count": len(flipped_faces),
-        "flipped_face_indices": flipped_faces[:20],  # Cap at 20 for readability
+        # Cap at 20 for readability
+        "flipped_face_indices": flipped_faces[:20],
         "message": (
             f"All normals appear consistent on '{name}'."
             if passed

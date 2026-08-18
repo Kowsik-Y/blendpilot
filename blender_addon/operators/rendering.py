@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Rendering Operators
+BlendPilot — Rendering Operators
 
 Bridge handlers for camera, lighting, and preview rendering.
 Wraps core/rendering.py.

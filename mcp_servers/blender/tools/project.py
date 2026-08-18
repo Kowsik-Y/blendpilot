@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Project MCP Tools
+BlendPilot — Project MCP Tools
 
 Tools for saving milestone checkpoints, rolling back states, saving .blend files, and exporting FBX/GLB.
 """
@@ -14,13 +14,16 @@ from services.blender_client import BlenderClient
 
 class SaveCheckpointInput(BaseModel):
     """Input parameters for saving an incremental checkpoint."""
-    filepath: str = Field(..., description="Destination file path for the .blend checkpoint")
-    checkpoint_name: str | None = Field(default=None, description="Descriptive checkpoint label")
+    filepath: str = Field(...,
+                          description="Destination file path for the .blend checkpoint")
+    checkpoint_name: str | None = Field(
+        default=None, description="Descriptive checkpoint label")
 
 
 class RestoreCheckpointInput(BaseModel):
     """Input parameters for restoring a checkpoint."""
-    filepath: str = Field(..., description="Filepath of the .blend checkpoint to restore")
+    filepath: str = Field(...,
+                          description="Filepath of the .blend checkpoint to restore")
 
 
 class SaveProjectInput(BaseModel):
@@ -30,10 +33,14 @@ class SaveProjectInput(BaseModel):
 
 class ExportAssetInput(BaseModel):
     """Input parameters for exporting a 3D asset."""
-    object_names: list[str] = Field(..., description="Names of objects to include in the export")
-    output_path: str = Field(..., description="Destination file path (.fbx, .glb, .obj)")
-    format: str = Field(default="FBX", description="Export format: 'FBX', 'GLB', 'OBJ'")
-    apply_modifiers: bool = Field(default=True, description="Whether to apply active modifiers during export")
+    object_names: list[str] = Field(...,
+                                    description="Names of objects to include in the export")
+    output_path: str = Field(...,
+                             description="Destination file path (.fbx, .glb, .obj)")
+    format: str = Field(
+        default="FBX", description="Export format: 'FBX', 'GLB', 'OBJ'")
+    apply_modifiers: bool = Field(
+        default=True, description="Whether to apply active modifiers during export")
 
 
 async def save_checkpoint(client: BlenderClient, params: dict[str, Any]) -> dict[str, Any]:

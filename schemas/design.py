@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Design Specification Schemas
+BlendPilot — Design Specification Schemas
 
 Pydantic models for the structured design specification
 produced by Workflow 1 (Design Intent Understanding).

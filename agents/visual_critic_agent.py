@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Visual Critic and Aesthetic Self-Repair Agent
+BlendPilot — Visual Critic and Aesthetic Self-Repair Agent
 
 Workflow 8: Evaluates rendered 2D preview with Vision LLM against DesignSpec,
 computes visual critique score, and triggers self-repair actions.
@@ -37,17 +37,20 @@ class VisualCriticAgent:
         revision_count: int = 0,
     ) -> VisualCritiqueResult:
         """Analyze rendered preview image and return visual critique, score, and revision actions."""
-        logger.info("Critiquing visual quality for %s (revision %d)...", spec.asset_type, revision_count)
+        logger.info("Critiquing visual quality for %s (revision %d)...",
+                    spec.asset_type, revision_count)
 
         # Try real Vision LLM critique first
         if self.llm_service and self.llm_service.config.api_key:
             try:
                 critique = await self._llm_vision_critique(spec, preview_image_path, revision_count)
                 if critique:
-                    logger.info("Vision LLM critique: score=%.2f approved=%s", critique.overall_score, critique.approved)
+                    logger.info("Vision LLM critique: score=%.2f approved=%s",
+                                critique.overall_score, critique.approved)
                     return critique
             except Exception as e:
-                logger.warning("Vision LLM critique failed (%s), falling back to text-only LLM", e)
+                logger.warning(
+                    "Vision LLM critique failed (%s), falling back to text-only LLM", e)
 
         # Fallback: text-only LLM critique (no image)
         try:
@@ -56,9 +59,11 @@ class VisualCriticAgent:
                 return critique
         except Exception as e:
             logger.error("Text-only LLM critique failed (%s)", e)
-            raise RuntimeError(f"Failed to generate VisualCritiqueResult via LLM: {e}")
+            raise RuntimeError(
+                f"Failed to generate VisualCritiqueResult via LLM: {e}")
 
-        raise RuntimeError("LLM failed to return a valid VisualCritiqueResult and no heuristic fallback is permitted.")
+        raise RuntimeError(
+            "LLM failed to return a valid VisualCritiqueResult and no heuristic fallback is permitted.")
 
     async def _llm_vision_critique(
         self,
@@ -69,7 +74,8 @@ class VisualCriticAgent:
         """Use multi-modal Vision LLM to evaluate the rendered preview image."""
         import os
         if not os.path.exists(preview_image_path):
-            logger.warning("Preview image not found at %s, skipping vision critique", preview_image_path)
+            logger.warning(
+                "Preview image not found at %s, skipping vision critique", preview_image_path)
             return None
 
         prompt = (
@@ -96,7 +102,8 @@ class VisualCriticAgent:
             return None
 
         try:
-            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            clean = re.sub(r"^```json\s*|\s*```$", "",
+                           response.strip(), flags=re.MULTILINE)
             data = json.loads(clean)
             return VisualCritiqueResult.model_validate(data)
         except Exception as e:
@@ -132,11 +139,10 @@ class VisualCriticAgent:
             return None
 
         try:
-            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            clean = re.sub(r"^```json\s*|\s*```$", "",
+                           response.strip(), flags=re.MULTILINE)
             data = json.loads(clean)
             return VisualCritiqueResult.model_validate(data)
         except Exception as e:
             logger.warning("Failed to parse text critique response: %s", e)
             return None
-
-

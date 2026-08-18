@@ -1,1 +1,1 @@
-"""BlendPilot AI — FastAPI Backend (Phase 4+)"""
+"""BlendPilot — FastAPI Backend (Phase 4+)"""

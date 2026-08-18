@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Resource Limiter
+BlendPilot — Resource Limiter
 
 Enforces resource limits per user workflow to prevent system overload:
 - Memory usage: 4GB per workflow

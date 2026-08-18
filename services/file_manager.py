@@ -1,5 +1,5 @@
 """
-BlendPilot AI — File & Directory Manager
+BlendPilot — File & Directory Manager
 
 Manages project directories, output files, checkpoints,
 and asset report generation.
@@ -72,7 +72,8 @@ class FileManager:
         Returns:
             Absolute path string for the checkpoint file.
         """
-        path = self.base_output_dir / project_id / "checkpoints" / f"{checkpoint_name}.blend"
+        path = self.base_output_dir / project_id / \
+            "checkpoints" / f"{checkpoint_name}.blend"
         return str(path.resolve())
 
     def get_render_path(self, project_id: str, render_name: str) -> str:
@@ -85,7 +86,8 @@ class FileManager:
         Returns:
             Absolute path string for the render file.
         """
-        path = self.base_output_dir / project_id / "renders" / f"{render_name}.png"
+        path = self.base_output_dir / project_id / \
+            "renders" / f"{render_name}.png"
         return str(path.resolve())
 
     def get_export_path(self, project_id: str, asset_name: str, fmt: str = "fbx") -> str:
@@ -99,7 +101,8 @@ class FileManager:
         Returns:
             Absolute path string for the export file.
         """
-        path = self.base_output_dir / project_id / "exports" / f"{asset_name}.{fmt}"
+        path = self.base_output_dir / project_id / \
+            "exports" / f"{asset_name}.{fmt}"
         return str(path.resolve())
 
     def generate_asset_report(
@@ -153,11 +156,11 @@ class FileManager:
                     "project_id": item.name,
                     "path": str(item.resolve()),
                     "has_checkpoints": (item / "checkpoints").exists()
-                                       and any((item / "checkpoints").iterdir()),
+                    and any((item / "checkpoints").iterdir()),
                     "has_renders": (item / "renders").exists()
-                                   and any((item / "renders").iterdir()),
+                    and any((item / "renders").iterdir()),
                     "has_exports": (item / "exports").exists()
-                                   and any((item / "exports").iterdir()),
+                    and any((item / "exports").iterdir()),
                     "has_report": (item / "asset_report.json").exists(),
                 }
                 projects.append(project_info)

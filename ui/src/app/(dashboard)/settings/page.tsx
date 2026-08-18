@@ -271,7 +271,8 @@ export default function SettingsPage() {
                     <SelectContent>
                       <SelectItem value="openai">OpenAI (GPT-4o, GPT-4o Mini)</SelectItem>
                       <SelectItem value="anthropic">Anthropic (Claude Sonnet 4, Claude 3.5)</SelectItem>
-                      <SelectItem value="custom">Custom / Ollama / OpenRouter / vLLM</SelectItem>
+                      <SelectItem value="ollama">Ollama (Local Models)</SelectItem>
+                      <SelectItem value="custom">Custom / OpenRouter / vLLM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -321,6 +322,8 @@ export default function SettingsPage() {
                         value={model}
                         onChange={(e) => setModel(e.target.value)}
                         className="bg-background border-input"
+                        autoComplete="off"
+                        name={`model-input-${provider}`}
                       />
                     )}
                   </div>
@@ -343,6 +346,8 @@ export default function SettingsPage() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="bg-background border-input font-mono"
+                  autoComplete="new-password"
+                  name="llm-api-key-new"
                 />
               </div>
 
@@ -518,6 +523,8 @@ export default function SettingsPage() {
                   value={tavilyApiKey}
                   onChange={(e) => setTavilyApiKey(e.target.value)}
                   className="bg-background border-input font-mono"
+                  autoComplete="new-password"
+                  name="tavily-api-key-new"
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Required for ResearchAgent dynamic web search capabilities. Get a key at <a href="https://tavily.com" target="_blank" rel="noreferrer" className="text-primary hover:underline">tavily.com</a>.

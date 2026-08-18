@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Project Management
+BlendPilot — Project Management
 
 Functions for saving checkpoints, restoring states, saving projects,
 and exporting assets (FBX, GLB).
@@ -141,7 +141,8 @@ def export_asset(
         ValueError: If no objects specified, format unsupported, or objects not found.
     """
     if not object_names:
-        raise ValueError("At least one object name must be specified for export.")
+        raise ValueError(
+            "At least one object name must be specified for export.")
 
     export_format = export_format.upper().strip()
     if export_format not in ("FBX", "GLB", "GLTF"):
@@ -153,7 +154,8 @@ def export_asset(
         raise ValueError("Output path cannot be empty.")
 
     # Validate all objects exist
-    missing = [name for name in object_names if bpy.data.objects.get(name) is None]
+    missing = [
+        name for name in object_names if bpy.data.objects.get(name) is None]
     if missing:
         raise ValueError(f"Objects not found in scene: {missing}")
 
@@ -197,7 +199,8 @@ def export_asset(
             export_apply=apply_modifiers,
         )
 
-    logger.info("Exported %s → %s (%d objects)", export_format, abs_path, len(object_names))
+    logger.info("Exported %s → %s (%d objects)",
+                export_format, abs_path, len(object_names))
     return {
         "success": True,
         "export_path": abs_path,

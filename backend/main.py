@@ -1,5 +1,5 @@
 """
-BlendPilot AI — FastAPI Application Entry Point
+BlendPilot — FastAPI Application Entry Point
 
 Main entry point for the BlendPilot backend API. Exposes workflow control,
 SSE real-time streaming, asset export, and health check endpoints.
@@ -37,18 +37,19 @@ logger = logging.getLogger("blendpilot.backend")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycles."""
-    logger.info("Starting %s (v%s)...", settings.app_name, settings.app_version)
+    logger.info("Starting %s (v%s)...",
+                settings.app_name, settings.app_version)
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs(settings.checkpoints_dir, exist_ok=True)
-    
+
     # Initialize OpenTelemetry Global Tracer Provider
     provider = TracerProvider()
     provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)
-    
+
     # Instrument Langchain and LangGraph calls globally
     LangchainInstrumentor().instrument()
-    
+
     yield
     logger.info("Shutting down %s...", settings.app_name)
 
@@ -77,6 +78,7 @@ app.include_router(copilot_router)
 # ── OpenTelemetry Instrumentation ───────────────────────────
 FastAPIInstrumentor.instrument_app(app)
 
+
 @app.get("/api/health")
 async def health_check() -> dict[str, str]:
     """Health check endpoint."""
@@ -94,4 +96,5 @@ if os.path.exists(settings.output_dir):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host=settings.host, port=settings.port, reload=settings.debug)
+    uvicorn.run("backend.main:app", host=settings.host,
+                port=settings.port, reload=settings.debug)

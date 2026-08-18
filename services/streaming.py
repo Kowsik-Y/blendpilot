@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Streaming Orchestrator
+BlendPilot — Streaming Orchestrator
 
 Manages real-time UI streaming with WebSocket and SSE support.
 Provides message batching, throttling, and graceful connection management.
@@ -29,7 +29,8 @@ class ClientConnection:
     """Represents a connected client with its message queue."""
     client_id: str
     stream_type: StreamType
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
+    queue: asyncio.Queue = field(
+        default_factory=lambda: asyncio.Queue(maxsize=1000))
     connected_at: datetime = field(default_factory=datetime.utcnow)
     last_activity: float = field(default_factory=time.monotonic)
     message_count: int = 0
@@ -91,7 +92,8 @@ class StreamingOrchestrator:
         """Connect a new client and return their client_id."""
         async with self._lock:
             if len(self._connections) >= self.max_clients:
-                raise RuntimeError(f"Maximum clients ({self.max_clients}) exceeded")
+                raise RuntimeError(
+                    f"Maximum clients ({self.max_clients}) exceeded")
 
             client_id = client_id or str(uuid4())
 
@@ -108,7 +110,8 @@ class StreamingOrchestrator:
                 self._batch_and_send(client_id)
             )
 
-            logger.info("Client %s connected via %s", client_id, stream_type.value)
+            logger.info("Client %s connected via %s",
+                        client_id, stream_type.value)
             return client_id
 
     async def disconnect(self, client_id: str) -> bool:
@@ -299,7 +302,8 @@ class StreamingOrchestrator:
                 raise
 
             except Exception as e:
-                logger.error("Error in batch task for client %s: %s", client_id, e)
+                logger.error(
+                    "Error in batch task for client %s: %s", client_id, e)
                 break
 
     async def _send_message(self, client_id: str, message: Dict[str, Any]) -> None:

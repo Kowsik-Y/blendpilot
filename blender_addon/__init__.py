@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Blender Add-on
+BlendPilot — Blender Add-on
 
 Registers BlendPilot as a Blender add-on and starts/stops
 the bridge server for external communication.
@@ -7,7 +7,7 @@ the bridge server for external communication.
 Installation:
     1. In Blender: Edit → Preferences → Add-ons → Install
     2. Select the blender_addon/ folder (or zip it first)
-    3. Enable "BlendPilot AI" in the add-on list
+    3. Enable "BlendPilot" in the add-on list
 
 The bridge server starts automatically when the add-on is enabled
 and stops when it is disabled.
@@ -20,7 +20,7 @@ import logging
 logger = logging.getLogger("blendpilot.addon")
 
 bl_info = {
-    "name": "BlendPilot AI",
+    "name": "BlendPilot",
     "author": "BlendPilot Team",
     "version": (0, 1, 0),
     "blender": (4, 0, 0),
@@ -46,15 +46,16 @@ def register():
     )
 
     logger.info("=" * 50)
-    logger.info("BlendPilot AI — Registering add-on")
+    logger.info("BlendPilot — Registering add-on")
     logger.info("=" * 50)
 
     try:
         from blender_addon.bridge import start_bridge_server
 
         start_bridge_server(host=BRIDGE_HOST, port=BRIDGE_PORT)
-        logger.info("BlendPilot AI add-on registered successfully.")
-        logger.info("Bridge server running on http://%s:%d", BRIDGE_HOST, BRIDGE_PORT)
+        logger.info("BlendPilot add-on registered successfully.")
+        logger.info("Bridge server running on http://%s:%d",
+                    BRIDGE_HOST, BRIDGE_PORT)
 
     except Exception as e:
         logger.error("Failed to start bridge server: %s", e)
@@ -66,13 +67,13 @@ def unregister():
 
     Called by Blender when the add-on is disabled.
     """
-    logger.info("BlendPilot AI — Unregistering add-on")
+    logger.info("BlendPilot — Unregistering add-on")
 
     try:
         from blender_addon.bridge import stop_bridge_server
 
         stop_bridge_server()
-        logger.info("BlendPilot AI add-on unregistered.")
+        logger.info("BlendPilot add-on unregistered.")
 
     except Exception as e:
         logger.error("Error stopping bridge server: %s", e)

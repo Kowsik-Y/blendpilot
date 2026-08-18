@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Project Module Tests
+BlendPilot — Project Module Tests
 
 Tests for core/project.py input validation.
 """
@@ -66,7 +66,8 @@ class TestExportAsset:
     def test_unsupported_format_raises(self):
         mod = self._import_module()
         with pytest.raises(ValueError, match="Unsupported export format"):
-            mod.export_asset(["Obj"], export_format="OBJ", output_path="test.obj")
+            mod.export_asset(["Obj"], export_format="OBJ",
+                             output_path="test.obj")
 
     def test_empty_output_path_raises(self):
         mod = self._import_module()
@@ -76,4 +77,5 @@ class TestExportAsset:
     def test_missing_objects_raises(self, mock_bpy):
         mod = self._import_module()
         with pytest.raises(ValueError, match="not found"):
-            mod.export_asset(["NonExistent1", "NonExistent2"], output_path="test.fbx")
+            mod.export_asset(["NonExistent1", "NonExistent2"],
+                             output_path="test.fbx")

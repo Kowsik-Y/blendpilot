@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Camera, Lighting & Rendering
+BlendPilot — Camera, Lighting & Rendering
 
 Functions for setting up preview cameras, studio lighting,
 and rendering preview images.
@@ -182,7 +182,8 @@ def setup_studio_lighting(
         light_obj.rotation_euler = rot_quat.to_euler()
 
         created_lights.append(light_obj.name)
-        logger.info("Created %s '%s' (%.0f W)", config["type"], light_obj.name, config["energy"])
+        logger.info("Created %s '%s' (%.0f W)",
+                    config["type"], light_obj.name, config["energy"])
 
     return {
         "success": True,
@@ -225,7 +226,8 @@ def render_preview(
     scene = bpy.context.scene
 
     if scene.camera is None:
-        raise ValueError("No active camera in the scene. Call setup_preview_camera() first.")
+        raise ValueError(
+            "No active camera in the scene. Call setup_preview_camera() first.")
 
     # Ensure output directory exists
     out_dir = os.path.dirname(os.path.abspath(output_path))

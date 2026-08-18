@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Modifier Module Tests
+BlendPilot — Modifier Module Tests
 
 Tests for core/modifiers.py input validation and error handling.
 """

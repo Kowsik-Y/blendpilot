@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Prompt Enhancer Agent
+BlendPilot — Prompt Enhancer Agent
 
 Workflow Pre-processing: Takes a raw user prompt and expands it with technical
 details, stylistic suggestions, and clearer Blender-specific requirements before 

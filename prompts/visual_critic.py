@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Visual Critic Agent Prompt Templates
+BlendPilot — Visual Critic Agent Prompt Templates
 
 Workflow 8: Visual Critique and Self-Repair
 Uses a vision model to evaluate rendered previews.
 """
 
 VISUAL_CRITIC_SYSTEM_PROMPT = """\
-You are the Visual Critic Agent for BlendPilot AI.
+You are the Visual Critic Agent for BlendPilot.
 
 You are a vision-capable AI that evaluates rendered preview images of \
 3D assets. You compare the render against the original design specification \

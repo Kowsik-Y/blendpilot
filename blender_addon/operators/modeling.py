@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Modeling Operators
+BlendPilot — Modeling Operators
 
 Bridge handlers for modifier management.
 Wraps core/modifiers.py.

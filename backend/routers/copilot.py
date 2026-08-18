@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Interactive Copilot Chat Router
+BlendPilot — Interactive Copilot Chat Router
 
 LLM-powered conversational 3D modeling assistant using LangChain.
 Supports real-time plan modifications, agent step reasoning, and
@@ -21,12 +21,18 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
 
 class CopilotChatRequest(BaseModel):
-    message: str = Field(..., description="User question or instruction to the Copilot")
-    asset_spec: dict[str, Any] | None = Field(default=None, description="Current 3D asset specification")
-    current_plan: list[dict[str, Any]] | None = Field(default=None, description="Current step-by-step modeling plan")
-    conversation_history: list[dict[str, str]] | None = Field(default=None, description="Multi-turn conversation history")
-    api_key: str | None = Field(default=None, description="Optional LLM API Key")
-    provider: str = Field(default="openai", description="LLM provider (openai, anthropic)")
+    message: str = Field(...,
+                         description="User question or instruction to the Copilot")
+    asset_spec: dict[str, Any] | None = Field(
+        default=None, description="Current 3D asset specification")
+    current_plan: list[dict[str, Any]] | None = Field(
+        default=None, description="Current step-by-step modeling plan")
+    conversation_history: list[dict[str, str]] | None = Field(
+        default=None, description="Multi-turn conversation history")
+    api_key: str | None = Field(
+        default=None, description="Optional LLM API Key")
+    provider: str = Field(
+        default="openai", description="LLM provider (openai, anthropic)")
     model: str = Field(default="gpt-4o", description="LLM model")
 
 
@@ -38,7 +44,7 @@ class CopilotChatResponse(BaseModel):
     is_live_llm: bool = False
 
 
-COPILOT_SYSTEM_PROMPT = """You are BlendPilot AI Copilot, an elite 3D Technical Director and Blender specialist.
+COPILOT_SYSTEM_PROMPT = """You are BlendPilot Copilot, an elite 3D Technical Director and Blender specialist.
 You coordinate a 10-agent autonomous 3D pipeline:
 1. Intent Understanding (Dimensions, triangle quota, asset taxonomy)
 2. Scene Understanding (Collision check, origin calibration)
@@ -80,13 +86,15 @@ async def chat_with_copilot(req: CopilotChatRequest) -> CopilotChatResponse:
             f"({dims.get('width', 1.0)}m × {dims.get('depth', 0.7)}m × {dims.get('height', 0.6)}m)"
         )
     if req.current_plan:
-        context_parts.append(f"Current Plan: {len(req.current_plan)} modeling steps queued")
+        context_parts.append(
+            f"Current Plan: {len(req.current_plan)} modeling steps queued")
 
     context_str = "\n".join(context_parts)
 
     # Ensure API key is configured
     if not llm_service.config.api_key:
-        raise HTTPException(status_code=401, detail="API Key Required. Please configure your LLM API Key to enable Copilot.")
+        raise HTTPException(
+            status_code=401, detail="API Key Required. Please configure your LLM API Key to enable Copilot.")
 
     # Execute LLM chat
     try:
@@ -115,7 +123,8 @@ async def _llm_chat(
     messages = [SystemMessage(content=COPILOT_SYSTEM_PROMPT)]
 
     # Add conversation history for multi-turn memory
-    for msg in conversation_history[-8:]:  # Keep last 8 turns for context window
+    # Keep last 8 turns for context window
+    for msg in conversation_history[-8:]:
         role = msg.get("role", "user")
         content = msg.get("content", "")
         if role == "user":
@@ -129,5 +138,3 @@ async def _llm_chat(
     chat_model = llm_service.get_chat_model()
     response = await chat_model.ainvoke(messages)
     return str(response.content) if response.content else ""
-
-

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LangGraph Typed State Definition
+BlendPilot — LangGraph Typed State Definition
 
 Defines the central state dictionary that flows across all 10 agent nodes,
 supporting serialization, checkpointing, and conditional branch routing.

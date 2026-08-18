@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Bridge & Operator Tests
+BlendPilot — Bridge & Operator Tests
 
 Tests for the bridge server schemas, operator registry,
 and command handler validation — all outside Blender.
@@ -224,7 +224,8 @@ class TestProjectOperators:
 
     def test_handle_save_checkpoint_accepts_filepath(self, mock_bpy):
         ops = self._setup()
-        result = ops.handle_save_checkpoint({"filepath": "output/checkpoints/test"})
+        result = ops.handle_save_checkpoint(
+            {"filepath": "output/checkpoints/test"})
         assert result["success"] is True
 
     def test_handle_save_project_accepts_filepath(self, mock_bpy):
@@ -234,7 +235,8 @@ class TestProjectOperators:
 
     def test_handle_restore_checkpoint_accepts_filepath(self, mock_bpy):
         ops = self._setup()
-        result = ops.handle_restore_checkpoint({"filepath": "output/checkpoints/test.blend"})
+        result = ops.handle_restore_checkpoint(
+            {"filepath": "output/checkpoints/test.blend"})
         assert result["success"] is True
 
 

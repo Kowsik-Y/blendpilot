@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Bridge Command & Response Schemas
+BlendPilot — Bridge Command & Response Schemas
 
 Defines the JSON contract between the external BlenderClient
 and the Blender add-on bridge server.

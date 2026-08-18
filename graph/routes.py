@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LangGraph Conditional Routing
+BlendPilot — LangGraph Conditional Routing
 
 Defines routing conditions for self-repair loops, quality thresholds, and human review decisions.
 """
@@ -23,10 +23,12 @@ def route_after_geometry_qa(
     max_repairs = state.get("max_geometry_repairs", 3)
 
     if status == "PASS" or repair_count >= max_repairs:
-        logger.info("[Route] Geometry QA passed or max repairs reached (%d/%d) -> visual_critic", repair_count, max_repairs)
+        logger.info(
+            "[Route] Geometry QA passed or max repairs reached (%d/%d) -> visual_critic", repair_count, max_repairs)
         return "visual_critic"
 
-    logger.info("[Route] Geometry QA failed -> triggering geometry_repair loop (attempt %d/%d)", repair_count + 1, max_repairs)
+    logger.info("[Route] Geometry QA failed -> triggering geometry_repair loop (attempt %d/%d)",
+                repair_count + 1, max_repairs)
     return "geometry_repair"
 
 
@@ -39,10 +41,12 @@ def route_after_visual_critic(
     max_revs = state.get("max_visual_revisions", 3)
 
     if approved or rev_count >= max_revs:
-        logger.info("[Route] Visual critique approved or max revisions reached (%d/%d) -> human_feedback", rev_count, max_revs)
+        logger.info(
+            "[Route] Visual critique approved or max revisions reached (%d/%d) -> human_feedback", rev_count, max_revs)
         return "human_feedback"
 
-    logger.info("[Route] Visual critique requires aesthetic refinement -> visual_repair (attempt %d/%d)", rev_count + 1, max_revs)
+    logger.info("[Route] Visual critique requires aesthetic refinement -> visual_repair (attempt %d/%d)",
+                rev_count + 1, max_revs)
     return "visual_repair"
 
 

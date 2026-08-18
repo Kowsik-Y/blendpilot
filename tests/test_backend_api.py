@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Tests for FastAPI Backend API Endpoints
+BlendPilot — Tests for FastAPI Backend API Endpoints
 """
 
 import httpx

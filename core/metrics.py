@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Metrics Dashboard Backend
+BlendPilot — Metrics Dashboard Backend
 
 Performance monitoring and metrics collection with:
 - Timing breakdown per agent at pipeline completion
@@ -233,7 +233,8 @@ class MetricsCollector:
 
         total_duration = session.get("duration_seconds", 0)
         avg_agent_duration = (
-            sum(a.get("duration_seconds", 0) for a in agents.values()) / len(agents)
+            sum(a.get("duration_seconds", 0)
+                for a in agents.values()) / len(agents)
             if agents else 0
         )
 

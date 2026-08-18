@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Live Blender Bridge Server Launcher
+BlendPilot — Live Blender Bridge Server Launcher
 
 Starts Blender with the BlendPilot bridge add-on running on localhost:9876.
 The GUI process stays alive so the bridge can safely execute Blender commands.
@@ -19,7 +19,8 @@ import time
 from urllib.error import URLError
 from urllib.request import urlopen
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blendpilot.bridge.launcher")
 
 
@@ -32,7 +33,8 @@ def find_blender_binary() -> str:
     # macOS standard locations
     mac_paths = [
         "/Applications/Blender.app/Contents/MacOS/Blender",
-        os.path.expanduser("~/Applications/Blender.app/Contents/MacOS/Blender"),
+        os.path.expanduser(
+            "~/Applications/Blender.app/Contents/MacOS/Blender"),
     ]
     for path in mac_paths:
         if os.path.exists(path):
@@ -66,12 +68,14 @@ def start_bridge(
 ) -> subprocess.Popen:
     """Launch Blender and start the BlendPilot bridge server."""
     if bridge_is_healthy(host, port):
-        raise RuntimeError(f"BlendPilot Bridge is already running on http://{host}:{port}")
+        raise RuntimeError(
+            f"BlendPilot Bridge is already running on http://{host}:{port}")
 
     bin_path = blender_path or find_blender_binary()
     logger.info("Found Blender executable at: %s", bin_path)
 
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    project_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), ".."))
 
     # Python bootstrap script executed inside Blender
     bootstrap_code = f"""
@@ -89,7 +93,8 @@ print(f"BlendPilot Bridge active on http://{host}:{port}")
     # interactive process alive so the bridge's HTTP server remains available.
     cmd = [bin_path]
     if not gui:
-        raise ValueError("Headless bridge mode is not supported; start the interactive Blender bridge instead.")
+        raise ValueError(
+            "Headless bridge mode is not supported; start the interactive Blender bridge instead.")
 
     cmd.extend(["--python-expr", bootstrap_code])
 
@@ -100,14 +105,17 @@ print(f"BlendPilot Bridge active on http://{host}:{port}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Start BlendPilot Blender Bridge")
-    parser.add_argument("--gui", action="store_true", help="Deprecated: the bridge always launches Blender interactively")
+    parser = argparse.ArgumentParser(
+        description="Start BlendPilot Blender Bridge")
+    parser.add_argument("--gui", action="store_true",
+                        help="Deprecated: the bridge always launches Blender interactively")
     parser.add_argument("--host", default="127.0.0.1", help="Bridge host")
     parser.add_argument("--port", type=int, default=9876, help="Bridge port")
     args = parser.parse_args()
 
     if bridge_is_healthy(args.host, args.port):
-        logger.info("BlendPilot Bridge is already healthy on http://%s:%d", args.host, args.port)
+        logger.info(
+            "BlendPilot Bridge is already healthy on http://%s:%d", args.host, args.port)
         raise SystemExit(0)
 
     proc = start_bridge(gui=True, host=args.host, port=args.port)

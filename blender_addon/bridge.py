@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Blender Bridge Server
+BlendPilot — Blender Bridge Server
 
 An HTTP server running inside Blender that receives JSON commands
 from external clients (BlenderClient) and executes them via the
@@ -64,10 +64,12 @@ def _run_on_blender_main_thread(handler: Any, parameters: dict[str, Any], timeou
 
     bpy.app.timers.register(invoke, first_interval=0.0)
     if not completed.wait(timeout):
-        raise TimeoutError(f"Blender did not execute the command within {timeout:.0f} seconds.")
+        raise TimeoutError(
+            f"Blender did not execute the command within {timeout:.0f} seconds.")
     if "error" in outcome:
         error = outcome["error"]
-        logger.error("Blender command failed on main thread:\n%s", outcome.get("traceback", ""))
+        logger.error("Blender command failed on main thread:\n%s",
+                     outcome.get("traceback", ""))
         raise error
     return outcome.get("result", {})
 
@@ -182,7 +184,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         # Execute the command
         start = time.perf_counter()
         try:
-            logger.info("Executing command: %s (id=%s)", command_name, request_id)
+            logger.info("Executing command: %s (id=%s)",
+                        command_name, request_id)
             result = _run_on_blender_main_thread(handler, parameters)
             elapsed_ms = (time.perf_counter() - start) * 1000.0
 

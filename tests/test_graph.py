@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Tests for LangGraph Multi-Agent Orchestration & State Machine
+BlendPilot — Tests for LangGraph Multi-Agent Orchestration & State Machine
 """
 
 import pytest
@@ -26,23 +26,28 @@ def test_initial_state_factory():
 
 def test_conditional_routing_geometry_qa():
     # Pass status
-    state_pass: BlendPilotState = {"geometry_qa_status": "PASS", "geometry_repair_count": 0}
+    state_pass: BlendPilotState = {
+        "geometry_qa_status": "PASS", "geometry_repair_count": 0}
     assert route_after_geometry_qa(state_pass) == "visual_critic"
 
     # Fail status under limit
-    state_fail: BlendPilotState = {"geometry_qa_status": "FAIL", "geometry_repair_count": 0, "max_geometry_repairs": 3}
+    state_fail: BlendPilotState = {
+        "geometry_qa_status": "FAIL", "geometry_repair_count": 0, "max_geometry_repairs": 3}
     assert route_after_geometry_qa(state_fail) == "geometry_repair"
 
     # Fail status max repairs exceeded
-    state_max: BlendPilotState = {"geometry_qa_status": "FAIL", "geometry_repair_count": 3, "max_geometry_repairs": 3}
+    state_max: BlendPilotState = {"geometry_qa_status": "FAIL",
+                                  "geometry_repair_count": 3, "max_geometry_repairs": 3}
     assert route_after_geometry_qa(state_max) == "visual_critic"
 
 
 def test_conditional_routing_visual_critic():
-    state_approved: BlendPilotState = {"visual_qa_approved": True, "visual_revision_count": 0}
+    state_approved: BlendPilotState = {
+        "visual_qa_approved": True, "visual_revision_count": 0}
     assert route_after_visual_critic(state_approved) == "human_feedback"
 
-    state_needs_work: BlendPilotState = {"visual_qa_approved": False, "visual_revision_count": 0, "max_visual_revisions": 3}
+    state_needs_work: BlendPilotState = {
+        "visual_qa_approved": False, "visual_revision_count": 0, "max_visual_revisions": 3}
     assert route_after_visual_critic(state_needs_work) == "visual_repair"
 
 

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Blender MCP Server
+BlendPilot — Blender MCP Server
 
 Implements the Model Context Protocol (MCP) server for Blender.
 Exposes safe, validated Blender operations as MCP tools to the LangGraph
@@ -23,9 +23,12 @@ class MCPToolDefinition(BaseModel):
     """Definition of an MCP tool for discovery and invocation."""
 
     name: str = Field(..., description="Tool name")
-    description: str = Field(..., description="Human-readable tool description")
-    category: str = Field(..., description="Tool category (scene, objects, modeling, materials, validation, rendering, project)")
-    parameters_schema: dict[str, Any] = Field(default_factory=dict, description="JSON schema for parameters")
+    description: str = Field(...,
+                             description="Human-readable tool description")
+    category: str = Field(
+        ..., description="Tool category (scene, objects, modeling, materials, validation, rendering, project)")
+    parameters_schema: dict[str, Any] = Field(
+        default_factory=dict, description="JSON schema for parameters")
 
 
 class BlenderMCPServer:
@@ -43,7 +46,8 @@ class BlenderMCPServer:
     def __init__(self, client: BlenderClient | None = None):
         self.name: str = "blendpilot-blender"
         self.client = client or BlenderClient()
-        self._handlers: dict[str, Callable[[BlenderClient, dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]] = {}
+        self._handlers: dict[str, Callable[[
+            BlenderClient, dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]] = {}
         self._tool_definitions: dict[str, MCPToolDefinition] = {}
         self._register_default_tools()
 
@@ -434,7 +438,8 @@ class BlenderMCPServer:
             name=name,
             description=description,
             category=category,
-            parameters_schema=parameters_schema or {"type": "object", "properties": {}},
+            parameters_schema=parameters_schema or {
+                "type": "object", "properties": {}},
         )
 
     def list_tools(self, category: str | None = None) -> list[MCPToolDefinition]:
@@ -468,15 +473,16 @@ class BlenderMCPServer:
 
         handler = self._handlers[name]
         args = arguments or {}
-        
+
         # Deterministic Policy Check: Block destructive actions without idempotency or safety intent
         destructive_tools = {"delete_object", "apply_modifier", "edit_mesh"}
         if name in destructive_tools:
             # Check if this invocation has safety flags (like expected_revision or snapshot taken)
             # For simplicity, we just enforce that they are logged as destructive.
-            logger.warning("Policy checkpoint: %s is a destructive operation. Verifying safety constraints.", name)
+            logger.warning(
+                "Policy checkpoint: %s is a destructive operation. Verifying safety constraints.", name)
             # Real implementation would query OPA here or check agent context for valid active snapshot.
-            
+
         try:
             logger.info("Executing MCP tool: %s with args=%s", name, args)
             result = await handler(self.client, args)

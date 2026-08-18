@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Material Module Tests
+BlendPilot — Material Module Tests
 
 Tests for core/materials.py input validation and error handling.
 """

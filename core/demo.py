@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Demo: Low-Poly Red Table
+BlendPilot — Demo: Low-Poly Red Table
 
 End-to-end demonstration of Phase 1 capabilities:
 1. Create a tabletop (scaled cube)
@@ -121,9 +121,9 @@ def create_red_table(
 
     leg_positions = [
         ("LegFrontLeft",  (-inset_x, -inset_y, leg_z)),
-        ("LegFrontRight", ( inset_x, -inset_y, leg_z)),
+        ("LegFrontRight", (inset_x, -inset_y, leg_z)),
         ("LegBackLeft",   (-inset_x,  inset_y, leg_z)),
-        ("LegBackRight",  ( inset_x,  inset_y, leg_z)),
+        ("LegBackRight",  (inset_x,  inset_y, leg_z)),
     ]
 
     leg_names = []
@@ -247,5 +247,6 @@ if __name__ == "__main__":
     # Print summary
     print("\n✅ Demo Results:")
     for step in result["steps"]:
-        status = "✓" if step.get("success", step.get("skipped", False)) else "✗"
+        status = "✓" if step.get(
+            "success", step.get("skipped", False)) else "✗"
         print(f"  {status} {step['step']}")

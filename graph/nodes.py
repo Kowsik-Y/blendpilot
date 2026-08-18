@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LangGraph Node Implementations
+BlendPilot — LangGraph Node Implementations
 
 Wraps the 10 specialized agent executors into stateful LangGraph node functions.
 Each node returns a plain dict update to the state — never tuples or non-dict types.
@@ -122,14 +122,16 @@ async def node_enhancer(state: BlendPilotState) -> dict[str, Any]:
     try:
         agent = EnhancerAgent(llm_service=_get_llm_service(state))
         enhanced = await agent.execute(user_prompt=state["user_prompt"])
-        _record_event(state, "enhancer_agent", "COMPLETED", "Enhanced user prompt")
+        _record_event(state, "enhancer_agent",
+                      "COMPLETED", "Enhanced user prompt")
         return {
             "current_agent": "intent_agent",
             "enhanced_prompt": enhanced,
         }
     except Exception as e:
         logger.exception("[Node] Enhancer Agent failed: %s", e)
-        _record_event(state, "enhancer_agent", "FAILED", f"Enhancer failed: {e}")
+        _record_event(state, "enhancer_agent",
+                      "FAILED", f"Enhancer failed: {e}")
         return {
             "current_agent": "intent_agent",
             "enhanced_prompt": state["user_prompt"],
@@ -149,14 +151,16 @@ async def node_intent(state: BlendPilotState) -> dict[str, Any]:
             reference_images=state.get("reference_images", []),
         )
         spec_dict = _safe_model_dump(spec)
-        _record_event(state, "intent_agent", "COMPLETED", f"Parsed design specification for {spec.asset_type}", {"spec": spec_dict})
+        _record_event(state, "intent_agent", "COMPLETED",
+                      f"Parsed design specification for {spec.asset_type}", {"spec": spec_dict})
         return {
             "current_agent": "scene_agent",
             "design_spec": spec_dict,
         }
     except Exception as e:
         logger.exception("[Node] Intent Agent failed: %s", e)
-        _record_event(state, "intent_agent", "FAILED", f"Intent parsing failed: {e}")
+        _record_event(state, "intent_agent", "FAILED",
+                      f"Intent parsing failed: {e}")
         # Minimal fallback spec
         return {
             "current_agent": "scene_agent",
@@ -182,14 +186,16 @@ async def node_scene(state: BlendPilotState, mcp_server: BlenderMCPServer | None
         agent = SceneAgent(mcp_server=_get_mcp_server(state, mcp_server))
         scene = await agent.execute()
         scene_dict = _safe_model_dump(scene)
-        _record_event(state, "scene_agent", "COMPLETED", f"Scanned scene: {len(scene.objects)} objects present", {"scene": scene_dict})
+        _record_event(state, "scene_agent", "COMPLETED",
+                      f"Scanned scene: {len(scene.objects)} objects present", {"scene": scene_dict})
         return {
             "current_agent": "research_agent",
             "scene_summary": scene_dict,
         }
     except Exception as e:
         logger.exception("[Node] Scene Agent failed: %s", e)
-        _record_event(state, "scene_agent", "FAILED", f"Scene scan failed: {e}")
+        _record_event(state, "scene_agent", "FAILED",
+                      f"Scene scan failed: {e}")
         return {
             "current_agent": "research_agent",
             "scene_summary": {"objects": [], "materials": [], "lights": [], "camera": None},
@@ -205,14 +211,16 @@ async def node_research(state: BlendPilotState) -> dict[str, Any]:
         agent = ResearchAgent(llm_service=_get_llm_service(state))
         spec = DesignSpec.model_validate(state["design_spec"])
         results = await agent.execute(spec=spec)
-        _record_event(state, "research_agent", "COMPLETED", f"Gathered technical guidelines for {spec.target_platform}", {"results": results})
+        _record_event(state, "research_agent", "COMPLETED",
+                      f"Gathered technical guidelines for {spec.target_platform}", {"results": results})
         return {
             "current_agent": "planning_agent",
             "research_results": results,
         }
     except Exception as e:
         logger.exception("[Node] Research Agent failed: %s", e)
-        _record_event(state, "research_agent", "FAILED", f"Research failed: {e}")
+        _record_event(state, "research_agent",
+                      "FAILED", f"Research failed: {e}")
         return {
             "current_agent": "planning_agent",
             "research_results": [],
@@ -227,10 +235,12 @@ async def node_planning(state: BlendPilotState) -> dict[str, Any]:
     try:
         agent = PlanningAgent(llm_service=_get_llm_service(state))
         spec = DesignSpec.model_validate(state["design_spec"])
-        scene = SceneSummary.model_validate(state["scene_summary"]) if state.get("scene_summary") else None
+        scene = SceneSummary.model_validate(
+            state["scene_summary"]) if state.get("scene_summary") else None
         plan = await agent.execute(spec=spec, scene=scene, research=state.get("research_results"))
         plan_dict = _safe_model_dump(plan)
-        _record_event(state, "planning_agent", "COMPLETED", f"Generated {len(plan.steps)}-step modeling plan", {"plan": plan_dict})
+        _record_event(state, "planning_agent", "COMPLETED",
+                      f"Generated {len(plan.steps)}-step modeling plan", {"plan": plan_dict})
         await _emit_runtime_event(state, {
             "event": "plan_ready",
             "node": "planning",
@@ -245,7 +255,8 @@ async def node_planning(state: BlendPilotState) -> dict[str, Any]:
         }
     except Exception as e:
         logger.exception("[Node] Planning Agent failed: %s", e)
-        _record_event(state, "planning_agent", "FAILED", f"Planning failed: {e}")
+        _record_event(state, "planning_agent",
+                      "FAILED", f"Planning failed: {e}")
         return {
             "current_agent": "modeling_agent",
             "design_plan": {"spec_id": "fallback", "steps": [], "current_step_index": 0, "status": "pending"},
@@ -259,7 +270,7 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
     await _emit_agent_state(state, "modeling", "modeling_agent", "RUNNING", "Executing Blender tool calls")
     try:
         mcp = _get_mcp_server(state, mcp_server)
-        
+
         # Create a snapshot before any modeling starts
         await mcp.call_tool("scene_snapshot", {"snapshot_name": "modeling_start"})
 
@@ -277,7 +288,8 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
         plan = DesignPlan.model_validate(state["design_plan"])
         res = await agent.execute(plan=plan)
         plan_dict = _safe_model_dump(res["plan"])
-        _record_event(state, "modeling_agent", "COMPLETED" if res["success"] else "FAILED", f"Executed modeling steps ({len(res['created_objects'])} objects created)", {"created_objects": res["created_objects"]})
+        _record_event(state, "modeling_agent", "COMPLETED" if res["success"] else "FAILED", f"Executed modeling steps ({len(res['created_objects'])} objects created)", {
+                      "created_objects": res["created_objects"]})
         return {
             "current_agent": "material_agent",
             "created_objects": res["created_objects"],
@@ -286,7 +298,8 @@ async def node_modeling(state: BlendPilotState, mcp_server: BlenderMCPServer | N
         }
     except Exception as e:
         logger.exception("[Node] Modeling Agent failed: %s", e)
-        _record_event(state, "modeling_agent", "FAILED", f"Modeling failed: {e}")
+        _record_event(state, "modeling_agent",
+                      "FAILED", f"Modeling failed: {e}")
         return {
             "current_agent": "material_agent",
             "created_objects": [],
@@ -305,7 +318,8 @@ async def node_material(state: BlendPilotState, mcp_server: BlenderMCPServer | N
         created_objs = state.get("created_objects", [])
         preview_path = f"output/{spec.asset_type}/preview.png"
         res = await agent.execute(spec=spec, created_objects=created_objs, output_image_path=preview_path)
-        _record_event(state, "material_agent", "COMPLETED", f"Applied PBR shaders and rendered preview image", {"preview_image": preview_path})
+        _record_event(state, "material_agent", "COMPLETED",
+                      f"Applied PBR shaders and rendered preview image", {"preview_image": preview_path})
         return {
             "current_agent": "geometry_qa_agent",
             "materials_created": res["materials"],
@@ -313,7 +327,8 @@ async def node_material(state: BlendPilotState, mcp_server: BlenderMCPServer | N
         }
     except Exception as e:
         logger.exception("[Node] Material Agent failed: %s", e)
-        _record_event(state, "material_agent", "FAILED", f"Material setup failed: {e}")
+        _record_event(state, "material_agent", "FAILED",
+                      f"Material setup failed: {e}")
         return {
             "current_agent": "geometry_qa_agent",
             "materials_created": [],
@@ -333,14 +348,17 @@ async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer 
         repairs = state.get("geometry_repair_count", 0)
 
         res = await agent.execute(spec=spec, created_objects=created_objs, repair_iteration=repairs)
-        issues_list = [_safe_model_dump(i) for i in res["validation_result"].issues] if hasattr(res.get("validation_result"), "issues") else []
-        repair_steps = [_safe_model_dump(s) for s in res.get("repair_steps", [])]
+        issues_list = [_safe_model_dump(i) for i in res["validation_result"].issues] if hasattr(
+            res.get("validation_result"), "issues") else []
+        repair_steps = [_safe_model_dump(s)
+                        for s in res.get("repair_steps", [])]
         _record_event(
             state,
             "geometry_qa_agent",
             "COMPLETED",
             f"Geometry QA Result: {res['status']} (Score: {res['score']:.2f})",
-            {"status": res["status"], "score": res["score"], "issues": len(issues_list)},
+            {"status": res["status"], "score": res["score"],
+                "issues": len(issues_list)},
         )
         return {
             "current_agent": "visual_critic_agent" if res["status"] == "PASS" else "geometry_repair",
@@ -351,7 +369,8 @@ async def node_geometry_qa(state: BlendPilotState, mcp_server: BlenderMCPServer 
         }
     except Exception as e:
         logger.exception("[Node] Geometry QA Agent failed: %s", e)
-        _record_event(state, "geometry_qa_agent", "FAILED", f"Geometry QA failed: {e}")
+        _record_event(state, "geometry_qa_agent",
+                      "FAILED", f"Geometry QA failed: {e}")
         return {
             "current_agent": "visual_critic_agent",
             "geometry_qa_status": "PASS",
@@ -368,17 +387,19 @@ async def node_geometry_repair(state: BlendPilotState, mcp_server: BlenderMCPSer
     await _emit_agent_state(state, "geometry_repair", "geometry_qa_agent", "RUNNING", "Applying geometry repair steps")
     try:
         mcp = _get_mcp_server(state, mcp_server)
-        
+
         # Deterministic Rollback: Revert to state before modeling rather than manual un-doing
-        logger.info("Rolling back scene to 'modeling_start' before attempting repairs...")
+        logger.info(
+            "Rolling back scene to 'modeling_start' before attempting repairs...")
         await mcp.call_tool("scene_rollback", {"snapshot_name": "modeling_start"})
-        
+
         repair_steps = state.get("_repair_steps", [])
         for step in repair_steps:
             await mcp.call_tool(step["tool"], step.get("parameters", {}))
 
         repair_count = state.get("geometry_repair_count", 0) + 1
-        _record_event(state, "geometry_qa_agent", "RUNNING", f"Applied {len(repair_steps)} geometric repair operations (Iteration {repair_count})")
+        _record_event(state, "geometry_qa_agent", "RUNNING",
+                      f"Applied {len(repair_steps)} geometric repair operations (Iteration {repair_count})")
         return {
             "geometry_repair_count": repair_count,
             "current_agent": "geometry_qa_agent",
@@ -418,7 +439,8 @@ async def node_visual_critic(state: BlendPilotState) -> dict[str, Any]:
         }
     except Exception as e:
         logger.exception("[Node] Visual Critic failed: %s", e)
-        _record_event(state, "visual_critic_agent", "FAILED", f"Visual critique failed: {e}")
+        _record_event(state, "visual_critic_agent", "FAILED",
+                      f"Visual critique failed: {e}")
         return {
             "current_agent": "human_feedback",
             "visual_qa_approved": True,
@@ -437,7 +459,8 @@ async def node_visual_repair(state: BlendPilotState, mcp_server: BlenderMCPServe
         # Refine lighting and material
         await mcp.call_tool("setup_studio_lighting", {"key_energy": 1400.0, "fill_energy": 550.0, "rim_energy": 900.0})
         revs = state.get("visual_revision_count", 0) + 1
-        _record_event(state, "visual_critic_agent", "RUNNING", f"Applied visual lighting & material refinements (Revision {revs})")
+        _record_event(state, "visual_critic_agent", "RUNNING",
+                      f"Applied visual lighting & material refinements (Revision {revs})")
         return {
             "visual_revision_count": revs,
             "current_agent": "visual_critic_agent",
@@ -464,7 +487,8 @@ async def node_human_feedback(state: BlendPilotState) -> dict[str, Any]:
         fb_text = state.get("human_feedback")
 
         res = await agent.execute(spec=spec, plan=plan, feedback_text=fb_text, action=action)
-        _record_event(state, "feedback_agent", "COMPLETED", f"Human Review status: {res['status']}", {"action": action})
+        _record_event(state, "feedback_agent", "COMPLETED",
+                      f"Human Review status: {res['status']}", {"action": action})
         return {
             "current_agent": "export_agent" if res["approved"] else "planning_agent",
             "approval_status": res["status"],
@@ -503,7 +527,8 @@ async def node_export(state: BlendPilotState, mcp_server: BlenderMCPServer | Non
             geometry_qa=geo_qa,
             visual_qa=vis_qa,
         )
-        _record_event(state, "export_agent", "COMPLETED", f"Exported {len(res['exported_files'])} production assets to {res['export_directory']}", {"files": res["exported_files"]})
+        _record_event(state, "export_agent", "COMPLETED", f"Exported {len(res['exported_files'])} production assets to {res['export_directory']}", {
+                      "files": res["exported_files"]})
         return {
             "status": "COMPLETED",
             "current_agent": "completed",

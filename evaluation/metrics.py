@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Evaluation Benchmark Runner and Metrics Calculator
+BlendPilot — Evaluation Benchmark Runner and Metrics Calculator
 
 Evaluates the autonomous multi-agent pipeline against the 20 benchmark test cases
 and generates comparative metrics (Baseline 1-Shot vs. BlendPilot Multi-Agent Engine).
@@ -86,7 +86,8 @@ async def run_full_benchmark(
 ) -> dict[str, Any]:
     """Run all benchmark cases and produce aggregate evaluation statistics."""
     if not os.path.exists(benchmark_path):
-        raise FileNotFoundError(f"Benchmark file not found at {benchmark_path}")
+        raise FileNotFoundError(
+            f"Benchmark file not found at {benchmark_path}")
 
     with open(benchmark_path, "r", encoding="utf-8") as f:
         cases = json.load(f)
@@ -94,7 +95,8 @@ async def run_full_benchmark(
     if limit:
         cases = cases[:limit]
 
-    logger.info("Starting BlendPilot evaluation benchmark on %d cases...", len(cases))
+    logger.info(
+        "Starting BlendPilot evaluation benchmark on %d cases...", len(cases))
 
     results = []
     for c in cases:
@@ -108,7 +110,8 @@ async def run_full_benchmark(
     completion_rate = completed_count / total_cases if total_cases > 0 else 0.0
     avg_dim_acc = sum(r["dimension_accuracy"] for r in results) / total_cases
     avg_visual_score = sum(r["visual_score"] for r in results) / total_cases
-    qa_pass_rate = sum(1 for r in results if r["geometry_qa_passed"]) / total_cases
+    qa_pass_rate = sum(
+        1 for r in results if r["geometry_qa_passed"]) / total_cases
     avg_time = sum(r["elapsed_seconds"] for r in results) / total_cases
 
     summary = {

@@ -1,1 +1,1 @@
-"""BlendPilot AI — Test Suite"""
+"""BlendPilot — Test Suite"""

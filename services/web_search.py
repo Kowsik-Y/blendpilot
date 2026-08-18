@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Web Search Service
+BlendPilot — Web Search Service
 
 Provides web search capabilities for the Research Agent.
 All web content is treated as UNTRUSTED reference data.
@@ -32,7 +32,8 @@ class SearchResult(BaseModel):
     title: str = Field(..., description="Page title")
     url: str = Field(..., description="Page URL")
     snippet: str = Field(default="", description="Text excerpt from the page")
-    source_domain: str = Field(default="", description="Domain name of the source")
+    source_domain: str = Field(
+        default="", description="Domain name of the source")
     trust_level: str = Field(
         default="untrusted",
         description="Trust level — always 'untrusted' for web content",
@@ -96,8 +97,9 @@ class WebSearchService:
         Returns:
             SearchResponse with results marked as untrusted.
         """
-        logger.info("Web search: '%s' (provider=%s)", query, self.search_provider)
-        
+        logger.info("Web search: '%s' (provider=%s)",
+                    query, self.search_provider)
+
         if self.search_provider == "tavily" and self.api_key:
             try:
                 from tavily import AsyncTavilyClient
@@ -111,7 +113,7 @@ class WebSearchService:
                     include_domains=[],
                     exclude_domains=[],
                 )
-                
+
                 results = []
                 for result in response.get("results", []):
                     results.append(SearchResult(
@@ -121,12 +123,12 @@ class WebSearchService:
                         source_domain="",
                         trust_level="untrusted"
                     ))
-                    
+
                 return SearchResponse(query=query, results=results, total_results=len(results))
             except Exception as e:
                 logger.error("Tavily search failed: %s", e)
                 return SearchResponse(query=query, results=[], total_results=0, error=str(e))
-                
+
         # Fallback or stub if API key is missing
         logger.warning("Web search stub fallback — returning empty results.")
         return SearchResponse(query=query, results=[], total_results=0)

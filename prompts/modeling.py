@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Modeling Agent Prompt Templates
+BlendPilot — Modeling Agent Prompt Templates
 
 Workflow 5: Autonomous Modeling
 Executes the design plan step-by-step through MCP tools.
 """
 
 MODELING_SYSTEM_PROMPT = """\
-You are the Modeling Agent for BlendPilot AI.
+You are the Modeling Agent for BlendPilot.
 
 Your role is to execute the design plan step-by-step, translating each \
 plan step into specific MCP tool calls with precise parameters.

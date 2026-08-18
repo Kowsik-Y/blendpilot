@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Material Creation & Assignment
+BlendPilot — Material Creation & Assignment
 
 Functions for creating Principled BSDF materials and assigning them
 to Blender objects.
@@ -50,17 +50,22 @@ def create_material(
         raise ValueError("base_color values must be between 0.0 and 1.0.")
 
     if not 0.0 <= metallic <= 1.0:
-        raise ValueError(f"Metallic must be between 0.0 and 1.0, got {metallic}.")
+        raise ValueError(
+            f"Metallic must be between 0.0 and 1.0, got {metallic}.")
     if not 0.0 <= roughness <= 1.0:
-        raise ValueError(f"Roughness must be between 0.0 and 1.0, got {roughness}.")
+        raise ValueError(
+            f"Roughness must be between 0.0 and 1.0, got {roughness}.")
     if emission_strength < 0.0:
-        raise ValueError(f"Emission strength must be >= 0.0, got {emission_strength}.")
+        raise ValueError(
+            f"Emission strength must be >= 0.0, got {emission_strength}.")
 
     if emission_color is not None:
         if len(emission_color) != 4:
-            raise ValueError("emission_color must be a tuple of 4 floats (RGBA).")
+            raise ValueError(
+                "emission_color must be a tuple of 4 floats (RGBA).")
         if any(c < 0.0 or c > 1.0 for c in emission_color):
-            raise ValueError("emission_color values must be between 0.0 and 1.0.")
+            raise ValueError(
+                "emission_color values must be between 0.0 and 1.0.")
 
     # Check if material already exists — reuse it
     mat = bpy.data.materials.get(name)
@@ -85,7 +90,8 @@ def create_material(
         nodes.clear()
         principled = nodes.new("ShaderNodeBsdfPrincipled")
         output = nodes.new("ShaderNodeOutputMaterial")
-        mat.node_tree.links.new(principled.outputs["BSDF"], output.inputs["Surface"])
+        mat.node_tree.links.new(
+            principled.outputs["BSDF"], output.inputs["Surface"])
 
     # Set material properties
     mat.diffuse_color = base_color
@@ -155,7 +161,8 @@ def assign_material(
     # Check if material is already assigned
     for slot in obj.material_slots:
         if slot.material and slot.material.name == material_name:
-            logger.info("Material '%s' already assigned to '%s'.", material_name, object_name)
+            logger.info("Material '%s' already assigned to '%s'.",
+                        material_name, object_name)
             return {
                 "success": True,
                 "message": f"Material '{material_name}' already assigned to '{object_name}'.",

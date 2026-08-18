@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LangGraph Multi-Agent Orchestration Package
+BlendPilot — LangGraph Multi-Agent Orchestration Package
 """
 
 from graph.graph import build_blendpilot_graph, run_pipeline

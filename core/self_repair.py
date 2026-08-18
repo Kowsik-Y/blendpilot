@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Self-Repair Manager
+BlendPilot — Self-Repair Manager
 
 Implements automated error recovery with:
 - 5 repair strategies (simplify geometry, simplify materials, reduce lighting, scale down scene, skip non-critical features)
@@ -131,7 +131,8 @@ class SelfRepairManager:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Simplify geometry in context."""
-        context["geometry_complexity"] = context.get("geometry_complexity", "high")
+        context["geometry_complexity"] = context.get(
+            "geometry_complexity", "high")
         if context["geometry_complexity"] == "high":
             context["geometry_complexity"] = "medium"
         elif context["geometry_complexity"] == "medium":
@@ -145,7 +146,8 @@ class SelfRepairManager:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Simplify materials in context."""
-        context["material_complexity"] = context.get("material_complexity", "high")
+        context["material_complexity"] = context.get(
+            "material_complexity", "high")
         if context["material_complexity"] == "high":
             context["material_complexity"] = "medium"
         elif context["material_complexity"] == "medium":
@@ -159,7 +161,8 @@ class SelfRepairManager:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Reduce lighting complexity in context."""
-        context["lighting_complexity"] = context.get("lighting_complexity", "high")
+        context["lighting_complexity"] = context.get(
+            "lighting_complexity", "high")
         if context["lighting_complexity"] == "high":
             context["lighting_complexity"] = "medium"
         elif context["lighting_complexity"] == "medium":
@@ -183,9 +186,11 @@ class SelfRepairManager:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Skip non-critical features in context."""
-        context["non_critical_features"] = context.get("non_critical_features", [])
+        context["non_critical_features"] = context.get(
+            "non_critical_features", [])
         if context["non_critical_features"]:
-            context["non_critical_features"].pop()  # Remove one non-critical feature
+            # Remove one non-critical feature
+            context["non_critical_features"].pop()
         return context
 
     async def attempt_repair(

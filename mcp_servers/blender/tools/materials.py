@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Material MCP Tools
+BlendPilot — Material MCP Tools
 
 Tools for creating Principled BSDF / PBR materials and assigning them to Blender objects.
 """
@@ -19,19 +19,23 @@ class CreateMaterialInput(BaseModel):
         default_factory=lambda: [0.8, 0.8, 0.8, 1.0],
         description="RGBA color values [0.0 - 1.0]",
     )
-    metallic: float = Field(default=0.0, ge=0.0, le=1.0, description="Metallic reflection value")
-    roughness: float = Field(default=0.5, ge=0.0, le=1.0, description="Surface roughness value")
+    metallic: float = Field(default=0.0, ge=0.0, le=1.0,
+                            description="Metallic reflection value")
+    roughness: float = Field(default=0.5, ge=0.0, le=1.0,
+                             description="Surface roughness value")
     emission_color: list[float] = Field(
         default_factory=lambda: [0.0, 0.0, 0.0, 1.0],
         description="RGBA emission color values [0.0 - 1.0]",
     )
-    emission_strength: float = Field(default=0.0, ge=0.0, description="Emission glow strength multiplier")
+    emission_strength: float = Field(
+        default=0.0, ge=0.0, description="Emission glow strength multiplier")
 
 
 class AssignMaterialInput(BaseModel):
     """Input parameters for assigning a material to an object."""
     object_name: str = Field(..., description="Target object name")
-    material_name: str = Field(..., description="Name of the material to assign")
+    material_name: str = Field(...,
+                               description="Name of the material to assign")
     slot_index: int = Field(default=0, ge=0, description="Material slot index")
 
 

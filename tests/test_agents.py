@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Tests for The 10 Specialized Agents
+BlendPilot — Tests for The 10 Specialized Agents
 """
 
 import pytest
@@ -48,8 +48,10 @@ async def test_notebook_uses_a_notebook_specific_plan():
     plan = await PlanningAgent().execute(spec)
 
     assert spec.asset_type == "notebook"
-    assert any(step.parameters.get("name") == "Notebook_Pages" for step in plan.steps)
-    assert any(step.parameters.get("name") == "Notebook_Cover" for step in plan.steps)
+    assert any(step.parameters.get("name") ==
+               "Notebook_Pages" for step in plan.steps)
+    assert any(step.parameters.get("name") ==
+               "Notebook_Cover" for step in plan.steps)
 
 
 @pytest.mark.asyncio
@@ -129,12 +131,14 @@ async def test_modeling_agent_emits_live_tool_events(mock_mcp_server):
                 step_id=2,
                 description="Add bevel to live preview cube",
                 tool="add_modifier",
-                parameters={"object_name": "Live_Cube", "modifier_type": "BEVEL"},
+                parameters={"object_name": "Live_Cube",
+                            "modifier_type": "BEVEL"},
                 dependencies=[1],
             ),
         ],
     )
-    model_agent = ModelingAgent(mcp_server=mock_mcp_server, event_callback=collect_event)
+    model_agent = ModelingAgent(
+        mcp_server=mock_mcp_server, event_callback=collect_event)
     result = await model_agent.execute(plan)
 
     assert result["success"] is True
@@ -207,7 +211,8 @@ async def test_feedback_agent_approval():
     )
     plan = DesignPlan(
         spec_id="test",
-        steps=[PlanStep(step_id=1, action="Create body", tool="create_primitive")],
+        steps=[PlanStep(step_id=1, action="Create body",
+                        tool="create_primitive")],
     )
     res = await agent.execute(spec, plan, action="APPROVE")
 
@@ -225,7 +230,8 @@ async def test_feedback_agent_revision():
     )
     plan = DesignPlan(
         spec_id="test",
-        steps=[PlanStep(step_id=1, action="Create body", tool="create_primitive")],
+        steps=[PlanStep(step_id=1, action="Create body",
+                        tool="create_primitive")],
     )
     res = await agent.execute(spec, plan, feedback_text="Make it taller and wider", action="REQUEST_CHANGE")
 

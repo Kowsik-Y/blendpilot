@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Design Plan Schemas
+BlendPilot — Design Plan Schemas
 
 Pydantic models for the step-by-step modeling plan
 produced by Workflow 4 (Design Planning).
@@ -30,8 +30,10 @@ class PlanStep(BaseModel):
     """
 
     step_id: int = Field(..., ge=1, description="Sequential step number")
-    action: str = Field(default="", description="What to do, e.g. 'Create main crate body'")
-    description: str | None = Field(default=None, description="Description alias for action")
+    action: str = Field(
+        default="", description="What to do, e.g. 'Create main crate body'")
+    description: str | None = Field(
+        default=None, description="Description alias for action")
     target_object: str = Field(
         default="",
         description="Name of the Blender object this step operates on",
@@ -40,13 +42,16 @@ class PlanStep(BaseModel):
         default="",
         description="What the scene should look like after this step",
     )
-    expected_outcome: str | None = Field(default=None, description="Alias for expected_result")
+    expected_outcome: str | None = Field(
+        default=None, description="Alias for expected_result")
     required_tool: str = Field(
         default="",
         description="The MCP tool needed, e.g. 'create_primitive', 'add_modifier'",
     )
-    tool: str | None = Field(default=None, description="Alias for required_tool")
-    parameters: dict[str, Any] = Field(default_factory=dict, description="Tool invocation parameters")
+    tool: str | None = Field(
+        default=None, description="Alias for required_tool")
+    parameters: dict[str, Any] = Field(
+        default_factory=dict, description="Tool invocation parameters")
     dependencies: list[int] = Field(
         default_factory=list,
         description="step_id values that must be completed first",
@@ -80,20 +85,24 @@ class DesignPlan(BaseModel):
     """
 
     plan_id: str = Field(default="", description="Plan identifier")
-    spec_id: str = Field(default="", description="ID of the DesignSpec this plan implements")
-    asset_type: str = Field(default="", description="Type of asset being created")
+    spec_id: str = Field(
+        default="", description="ID of the DesignSpec this plan implements")
+    asset_type: str = Field(
+        default="", description="Type of asset being created")
     steps: list[PlanStep] = Field(
         ...,
         min_length=1,
         description="Ordered list of steps to execute",
     )
-    total_steps: int = Field(default=0, description="Total number of steps in plan")
+    total_steps: int = Field(
+        default=0, description="Total number of steps in plan")
     current_step_index: int = Field(
         default=0,
         ge=0,
         description="Index of the currently executing step",
     )
-    completed_count: int = Field(default=0, description="Completed steps count")
+    completed_count: int = Field(
+        default=0, description="Completed steps count")
     status: StepStatus = Field(
         default=StepStatus.PENDING,
         description="Overall plan completion status",

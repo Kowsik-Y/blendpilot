@@ -1,5 +1,5 @@
 /**
- * BlendPilot AI — Blender Documentation Knowledge Service
+ * BlendPilot — Blender Documentation Knowledge Service
  *
  * Provides domain-specific knowledge chunks for Blender modeling,
  * Python bpy API, modifiers, materials, and low-poly guidelines.

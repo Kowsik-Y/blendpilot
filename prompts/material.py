@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Material Agent Prompt Templates
+BlendPilot — Material Agent Prompt Templates
 
 Workflow 6: Materials, Lighting, and Rendering
 Creates PBR-compatible materials from design descriptions.
 """
 
 MATERIAL_SYSTEM_PROMPT = """\
-You are the Material Agent for BlendPilot AI.
+You are the Material Agent for BlendPilot.
 
 Your role is to create Principled BSDF materials in Blender based on \
 natural-language material descriptions from the design specification.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  BlendPilot AI — All-in-One Services Launcher (Next.js + FastAPI + Blender)
+#  BlendPilot — All-in-One Services Launcher (Next.js + FastAPI + Blender)
 # ==============================================================================
 
 set -e

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Mode Manager
+BlendPilot — Mode Manager
 
 Manages execution mode (live/simulated) with:
 - Live-to-simulated mode switching detection
@@ -59,7 +59,8 @@ class ModeManager:
 
         self._current_mode = ExecutionMode.SIMULATED
         self._connection_established = False
-        self._mode_change_callbacks: list[Callable[[ModeChangeEvent], Any]] = []
+        self._mode_change_callbacks: list[Callable[[
+            ModeChangeEvent], Any]] = []
         self._health_check_interval = 5.0  # seconds
         self._last_health_check = 0.0
         self._health_check_failures = 0
@@ -118,7 +119,8 @@ class ModeManager:
         from_mode = self._current_mode
         self._current_mode = mode
 
-        logger.info("Mode changed from %s to %s: %s", from_mode.value, mode.value, reason)
+        logger.info("Mode changed from %s to %s: %s",
+                    from_mode.value, mode.value, reason)
 
         await self._emit_mode_change(
             from_mode=from_mode,

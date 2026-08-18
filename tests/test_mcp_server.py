@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Tests for MCP Server and Tool Registry
+BlendPilot — Tests for MCP Server and Tool Registry
 """
 
 import pytest
@@ -32,7 +32,8 @@ def test_mcp_server_langchain_tools_conversion(mcp_server):
 async def test_mcp_server_call_primitive(mcp_server):
     res = await mcp_server.call_tool(
         "create_primitive",
-        {"primitive_type": "cube", "name": "TestCube", "dimensions": [1.0, 1.0, 1.0]},
+        {"primitive_type": "cube", "name": "TestCube",
+            "dimensions": [1.0, 1.0, 1.0]},
     )
     assert res["success"] is True
     assert "result" in res

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Scene Understanding Agent
+BlendPilot — Scene Understanding Agent
 
 Workflow 2: Inspects active Blender scene state, builds structured SceneSummary,
 and verifies existing scene context.
@@ -30,7 +30,8 @@ class SceneAgent:
             if res.get("success") and "scene" in res:
                 return SceneSummary.model_validate(res["scene"])
         except Exception as e:
-            logger.warning("Live scene inspection encountered error (%s), returning clean baseline", e)
+            logger.warning(
+                "Live scene inspection encountered error (%s), returning clean baseline", e)
 
         # Baseline clean scene summary
         return SceneSummary(

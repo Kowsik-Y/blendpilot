@@ -75,7 +75,7 @@ export function AppSidebar() {
           <Box className="w-5 h-5" />
         </div>
         <div>
-          <h2 className="font-bold text-sm tracking-tight text-sidebar-foreground">BlendPilot AI</h2>
+          <h2 className="font-bold text-sm tracking-tight text-sidebar-foreground">BlendPilot</h2>
           <p className="text-[11px] text-muted-foreground">Blender Copilot v0.1</p>
         </div>
       </div>
@@ -96,11 +96,10 @@ export function AppSidebar() {
       <div className="px-3 py-1 space-y-1">
         <Link
           href="/projects"
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            pathname.startsWith("/projects")
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${pathname.startsWith("/projects")
               ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
               : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-          }`}
+            }`}
         >
           <FolderKanban className="w-4 h-4" />
           <span>Projects</span>
@@ -127,11 +126,10 @@ export function AppSidebar() {
                 <Link
                   key={p.id}
                   href={`/studio/${p.id}`}
-                  className={`group relative flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
-                    active
+                  className={`group relative flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium border border-sidebar-border"
                       : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-                  }`}
+                    }`}
                 >
                   <span className="truncate pr-4">{p.name || "Untitled Design"}</span>
                   <button
@@ -152,11 +150,10 @@ export function AppSidebar() {
       <div className="p-3 border-t border-sidebar-border space-y-1">
         <Link
           href="/settings"
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            pathname === "/settings"
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${pathname === "/settings"
               ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
               : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-          }`}
+            }`}
         >
           <Settings className="w-4 h-4" />
           <span>LLM & RAG Settings</span>

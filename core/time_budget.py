@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Time Budget Manager
+BlendPilot — Time Budget Manager
 
 Enforces per-agent time budgets with:
 - Modeling: 120s budget, 20% warning threshold
@@ -77,7 +77,8 @@ class TimeBudgetManager:
 
     def get_budget(self, operation_name: str) -> TimeBudget:
         """Get time budget for an operation."""
-        budget_seconds = self.budgets.get(operation_name, self.budgets["default"])
+        budget_seconds = self.budgets.get(
+            operation_name, self.budgets["default"])
         return TimeBudget(
             name=operation_name,
             budget_seconds=budget_seconds,

@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Geometry QA Agent Prompt Templates
+BlendPilot — Geometry QA Agent Prompt Templates
 
 Workflow 7: Deterministic Geometry QA
 Validates geometry and generates repair plans for failures.
 """
 
 GEOMETRY_QA_SYSTEM_PROMPT = """\
-You are the Geometry QA Agent for BlendPilot AI.
+You are the Geometry QA Agent for BlendPilot.
 
 Your role has TWO parts:
 

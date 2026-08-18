@@ -1,8 +1,8 @@
-# BlendPilot AI
+# BlendPilot
 
 **Autonomous 3D Asset Synthesis & Multi-Agent Self-Correcting Geometry Engine for Blender**
 
-BlendPilot AI is an autonomous, multi-agent AI copilot that translates natural language prompts into production-ready 3D assets inside Blender. Built on **LangGraph**, **Model Context Protocol (MCP)**, and safe structured socket/HTTP bridges, BlendPilot coordinates **10 specialized agents** to perform intent parsing, technical research, step-by-step modeling planning, autonomous geometry generation, PBR shader authoring, studio lighting, deterministic topology QA, vision-based aesthetic self-repair, and multi-format export.
+BlendPilot is an autonomous, multi-agent AI copilot that translates natural language prompts into production-ready 3D assets inside Blender. Built on **LangGraph**, **Model Context Protocol (MCP)**, and safe structured socket/HTTP bridges, BlendPilot coordinates **10 specialized agents** to perform intent parsing, technical research, step-by-step modeling planning, autonomous geometry generation, PBR shader authoring, studio lighting, deterministic topology QA, vision-based aesthetic self-repair, and multi-format export.
 
 ## Key Features
 

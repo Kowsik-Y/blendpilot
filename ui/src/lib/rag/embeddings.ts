@@ -1,5 +1,5 @@
 /**
- * BlendPilot AI — Embeddings Service
+ * BlendPilot — Embeddings Service
  *
  * Generates vector embeddings for text chunks using:
  * 1. OpenAI / OpenAI-compatible API (if API key provided)

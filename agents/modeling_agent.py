@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Autonomous Modeling Agent
+BlendPilot — Autonomous Modeling Agent
 
 Workflow 5: Executes 3D modeling operations sequentially, calls Blender MCP tools,
 tracks created objects, and uses LLM for adaptive error recovery when steps fail.
@@ -19,7 +19,7 @@ logger = logging.getLogger("blendpilot.agents.modeling")
 
 class ModelingAgent:
     """Agent that executes step-by-step 3D modeling operations in Blender.
-    
+
     When a step fails, uses LLM to reason about alternative approaches
     and generate recovery operations.
     """
@@ -28,7 +28,8 @@ class ModelingAgent:
         self,
         mcp_server: BlenderMCPServer | None = None,
         llm_service: LLMService | None = None,
-        event_callback: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        event_callback: Callable[[dict[str, Any]],
+                                 Awaitable[None]] | None = None,
     ):
         self.mcp_server = mcp_server or BlenderMCPServer()
         self.llm_service = llm_service
@@ -45,13 +46,15 @@ class ModelingAgent:
 
     async def execute(self, plan: DesignPlan) -> dict[str, Any]:
         """Execute all modeling steps in the DesignPlan with adaptive error recovery."""
-        logger.info("Executing 3D modeling operations for plan: %s", plan.spec_id)
+        logger.info(
+            "Executing 3D modeling operations for plan: %s", plan.spec_id)
 
         created_objects: list[str] = []
         execution_logs: list[dict[str, Any]] = []
 
         for i, step in enumerate(plan.steps):
-            logger.info("Executing Step %d/%d: %s", step.step_id, len(plan.steps), step.description)
+            logger.info("Executing Step %d/%d: %s", step.step_id,
+                        len(plan.steps), step.description)
             step.status = StepStatus.IN_PROGRESS
             plan.current_step_index = i
 
@@ -91,7 +94,8 @@ class ModelingAgent:
                     "created_objects": list(created_objects),
                 })
             else:
-                error_msg = res.get("error", "Unknown error during tool execution")
+                error_msg = res.get(
+                    "error", "Unknown error during tool execution")
                 logger.error("Step %d failed: %s", step.step_id, error_msg)
 
                 await self._emit({
@@ -112,7 +116,8 @@ class ModelingAgent:
                     step.status = StepStatus.COMPLETED
                     if recovered.get("created_object"):
                         created_objects.append(recovered["created_object"])
-                    logger.info("Step %d recovered via LLM adaptation", step.step_id)
+                    logger.info(
+                        "Step %d recovered via LLM adaptation", step.step_id)
                     await self._emit({
                         "event": "tool_recovered",
                         "agent_name": "modeling_agent",
@@ -134,7 +139,8 @@ class ModelingAgent:
                 "response": res,
             })
 
-        all_completed = all(s.status == StepStatus.COMPLETED for s in plan.steps)
+        all_completed = all(
+            s.status == StepStatus.COMPLETED for s in plan.steps)
         plan.status = StepStatus.COMPLETED if all_completed else StepStatus.FAILED
 
         return {
@@ -183,17 +189,20 @@ class ModelingAgent:
                 return None
 
             import re
-            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            clean = re.sub(r"^```json\s*|\s*```$", "",
+                           response.strip(), flags=re.MULTILINE)
             recovery = json.loads(clean)
 
             # Execute the recovery tool call
             tool_name = recovery.get("tool", failed_step.tool)
             params = recovery.get("parameters", failed_step.parameters)
-            logger.info("LLM recovery: calling %s with %s (reason: %s)", tool_name, params, recovery.get("reasoning", ""))
+            logger.info("LLM recovery: calling %s with %s (reason: %s)",
+                        tool_name, params, recovery.get("reasoning", ""))
 
             retry_res = await self.mcp_server.call_tool(tool_name, params)
             if retry_res.get("success", False):
-                result: dict[str, Any] = {"success": True, "reasoning": recovery.get("reasoning", "")}
+                result: dict[str, Any] = {
+                    "success": True, "reasoning": recovery.get("reasoning", "")}
                 if "object_name" in retry_res:
                     result["created_object"] = retry_res["object_name"]
                 elif "name" in params:

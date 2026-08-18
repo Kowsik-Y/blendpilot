@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Schema Tests
+BlendPilot — Schema Tests
 
 Tests for Pydantic models that can run entirely outside Blender.
 """
@@ -181,8 +181,10 @@ class TestDesignPlan:
             plan_id="test-001",
             asset_type="crate",
             steps=[
-                PlanStep(step_id=1, action="Create body", status=StepStatus.COMPLETED),
-                PlanStep(step_id=2, action="Add modifier", status=StepStatus.COMPLETED),
+                PlanStep(step_id=1, action="Create body",
+                         status=StepStatus.COMPLETED),
+                PlanStep(step_id=2, action="Add modifier",
+                         status=StepStatus.COMPLETED),
             ],
             total_steps=2,
             completed_count=2,
@@ -195,9 +197,12 @@ class TestDesignPlan:
             plan_id="test-002",
             asset_type="table",
             steps=[
-                PlanStep(step_id=1, action="Create top", status=StepStatus.COMPLETED),
-                PlanStep(step_id=2, action="Create legs", status=StepStatus.PENDING),
-                PlanStep(step_id=3, action="Add material", status=StepStatus.PENDING),
+                PlanStep(step_id=1, action="Create top",
+                         status=StepStatus.COMPLETED),
+                PlanStep(step_id=2, action="Create legs",
+                         status=StepStatus.PENDING),
+                PlanStep(step_id=3, action="Add material",
+                         status=StepStatus.PENDING),
             ],
             total_steps=3,
             completed_count=1,

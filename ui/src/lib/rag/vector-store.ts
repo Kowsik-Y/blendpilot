@@ -1,5 +1,5 @@
 /**
- * BlendPilot AI — In-Memory & Persisted Vector Store
+ * BlendPilot — In-Memory & Persisted Vector Store
  *
  * Fast vector similarity store supporting cosine similarity,
  * category filtering, and persistence.

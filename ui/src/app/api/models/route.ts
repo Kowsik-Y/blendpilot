@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function fetchModelsFromProvider(provider: LLMProvider, baseUrl: string, apiKey: string) {
-  if (!apiKey) {
+  if (!apiKey && provider !== "ollama" && provider !== "custom") {
     return NextResponse.json({ models: DEFAULT_MODELS[provider].map((m) => ({ id: m.id, name: m.name })) });
   }
 
@@ -78,10 +78,13 @@ async function fetchModelsFromProvider(provider: LLMProvider, baseUrl: string, a
 
   if (baseUrl) {
     try {
+      const headers: Record<string, string> = {};
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+      
       const res = await fetch(`${baseUrl}/models`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers,
       });
       if (res.ok) {
         const data = await res.json();

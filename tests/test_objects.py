@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Object Module Tests
+BlendPilot — Object Module Tests
 
 Tests for core/objects.py input validation and error handling.
 Uses the bpy mock from conftest.py.

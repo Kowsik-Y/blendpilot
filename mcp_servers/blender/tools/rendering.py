@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Rendering MCP Tools
+BlendPilot — Rendering MCP Tools
 
 Tools for framing preview cameras, setting up 3-point studio lighting, and rendering preview images.
 """
@@ -14,23 +14,32 @@ from services.blender_client import BlenderClient
 
 class SetupCameraInput(BaseModel):
     """Input parameters for setting up the preview camera."""
-    target_object: str | None = Field(default=None, description="Object to focus the camera on")
-    distance: float = Field(default=3.5, gt=0, description="Camera distance multiplier")
-    focal_length: float = Field(default=50.0, gt=0, description="Lens focal length in mm")
+    target_object: str | None = Field(
+        default=None, description="Object to focus the camera on")
+    distance: float = Field(
+        default=3.5, gt=0, description="Camera distance multiplier")
+    focal_length: float = Field(
+        default=50.0, gt=0, description="Lens focal length in mm")
 
 
 class SetupLightingInput(BaseModel):
     """Input parameters for studio 3-point lighting setup."""
-    key_energy: float = Field(default=1000.0, ge=0, description="Key light power in Watts")
-    fill_energy: float = Field(default=400.0, ge=0, description="Fill light power in Watts")
-    rim_energy: float = Field(default=600.0, ge=0, description="Rim light power in Watts")
+    key_energy: float = Field(default=1000.0, ge=0,
+                              description="Key light power in Watts")
+    fill_energy: float = Field(
+        default=400.0, ge=0, description="Fill light power in Watts")
+    rim_energy: float = Field(
+        default=600.0, ge=0, description="Rim light power in Watts")
 
 
 class RenderPreviewInput(BaseModel):
     """Input parameters for rendering a preview image."""
-    output_path: str = Field(..., description="File path for the rendered image (.png/.jpg)")
-    resolution_x: int = Field(default=1024, gt=0, description="Image width in pixels")
-    resolution_y: int = Field(default=1024, gt=0, description="Image height in pixels")
+    output_path: str = Field(...,
+                             description="File path for the rendered image (.png/.jpg)")
+    resolution_x: int = Field(
+        default=1024, gt=0, description="Image width in pixels")
+    resolution_y: int = Field(
+        default=1024, gt=0, description="Image height in pixels")
     samples: int = Field(default=64, gt=0, description="Render sample count")
 
 

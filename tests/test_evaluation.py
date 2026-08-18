@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Tests for Benchmark Dataset and Metrics
+BlendPilot — Tests for Benchmark Dataset and Metrics
 """
 
 import json

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LLM Provider Service
+BlendPilot — LLM Provider Service
 
 Unified interface for LLM providers (OpenAI, Anthropic, Google Gemini, Ollama, etc.)
 used by all agents for text generation, plan synthesis, copilot chat, and vision critique.
@@ -20,12 +20,15 @@ logger = logging.getLogger("blendpilot.services.llm")
 class LLMConfig(BaseModel):
     """Configuration for an LLM provider."""
 
-    provider: str = Field(default="openai", description="LLM provider: openai, anthropic, custom")
+    provider: str = Field(
+        default="openai", description="LLM provider: openai, anthropic, ollama, custom")
     model: str = Field(default="gpt-4o", description="Model name")
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, gt=0)
-    api_key: str = Field(default="", description="API key (loaded from env or request)")
-    base_url: str | None = Field(default=None, description="Custom API base URL")
+    api_key: str = Field(
+        default="", description="API key (loaded from env or request)")
+    base_url: str | None = Field(
+        default=None, description="Custom API base URL")
 
 
 class LLMService:
@@ -69,7 +72,7 @@ class LLMService:
 
     def get_chat_model(self) -> Any:
         """Return a LangChain ChatModel instance for text generation."""
-        if self.config.provider == "openai":
+        if self.config.provider in ("openai", "ollama", "custom"):
             from langchain_openai import ChatOpenAI
             kwargs: dict[str, Any] = {
                 "model": self.config.model,
@@ -78,8 +81,15 @@ class LLMService:
             }
             if self.config.api_key:
                 kwargs["api_key"] = self.config.api_key
+            elif self.config.provider in ("ollama", "custom"):
+                # placeholder required by ChatOpenAI
+                kwargs["api_key"] = "ollama"
+
             if self.config.base_url:
                 kwargs["base_url"] = self.config.base_url
+            elif self.config.provider == "ollama":
+                kwargs["base_url"] = "http://localhost:11434/v1"
+
             return ChatOpenAI(**kwargs)
 
         elif self.config.provider == "anthropic":
@@ -93,7 +103,8 @@ class LLMService:
                 kwargs["api_key"] = self.config.api_key
             return ChatAnthropic(**kwargs)
         else:
-            raise ValueError(f"Unsupported LLM provider: {self.config.provider}")
+            raise ValueError(
+                f"Unsupported LLM provider: {self.config.provider}")
 
     async def generate(
         self,
@@ -102,8 +113,9 @@ class LLMService:
         response_format: dict[str, Any] | None = None,
     ) -> str:
         """Execute async text generation using the configured LLM provider."""
-        if not self.config.api_key and self.config.provider != "custom":
-            logger.debug("No API key configured for LLMService; returning empty for heuristic fallback")
+        if not self.config.api_key and self.config.provider not in ("custom", "ollama"):
+            logger.debug(
+                "No API key configured for LLMService; returning empty for heuristic fallback")
             return ""
 
         try:
@@ -123,12 +135,13 @@ class LLMService:
 
     async def generate_vision(self, prompt: str, image_paths: list[str]) -> str:
         """Execute multimodal vision evaluation using real vision models."""
-        if not self.config.api_key or not image_paths:
+        if (not self.config.api_key and self.config.provider not in ("custom", "ollama")) or not image_paths:
             return ""
 
         try:
             from langchain_core.messages import HumanMessage
-            content_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+            content_parts: list[dict[str, Any]] = [
+                {"type": "text", "text": prompt}]
 
             for img_path in image_paths:
                 if os.path.exists(img_path):

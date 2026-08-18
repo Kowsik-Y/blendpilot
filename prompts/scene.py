@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Scene Agent Prompt Templates
+BlendPilot — Scene Agent Prompt Templates
 
 Workflow 2: Blender Scene Understanding
 Inspects the current Blender scene and produces a structured summary.
 """
 
 SCENE_SYSTEM_PROMPT = """\
-You are the Scene Understanding Agent for BlendPilot AI.
+You are the Scene Understanding Agent for BlendPilot.
 
 Your role is to inspect the current Blender scene and produce a clear, \
 structured summary that downstream agents can use. You have access to \

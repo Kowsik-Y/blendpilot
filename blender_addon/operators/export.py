@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Export Operators
+BlendPilot — Export Operators
 
 Bridge handlers for project saving, checkpoints, and asset export.
 Wraps core/project.py.

@@ -242,8 +242,56 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  code: function Code({ className, ...props }) {
+  img: ({ className, src, alt, ...props }: any) => {
+    let imageUrl = src;
+    if (typeof src === "string" && src.startsWith("/")) {
+      imageUrl = `/api/local-image?path=${encodeURIComponent(src)}`;
+    }
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt={alt}
+        className={cn("aui-md-img max-w-full rounded-md my-3 shadow-sm", className)}
+        {...props}
+      />
+    );
+  },
+  code: function Code({ className, children, ...props }: any) {
     const isCodeBlock = useIsMarkdownCodeBlock();
+    
+    let text = "";
+    if (typeof children === "string") {
+      text = children;
+    } else if (Array.isArray(children) && children.length === 1 && typeof children[0] === "string") {
+      text = children[0];
+    }
+
+    if (!isCodeBlock && text) {
+      const trimmedText = text.trim();
+      if (trimmedText.startsWith("/") && /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(trimmedText)) {
+        return (
+          <span className="flex flex-col gap-2 my-3">
+            <code
+              className={cn(
+                "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em] w-fit break-all",
+                className,
+              )}
+              {...props}
+            >
+              {children}
+            </code>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={`/api/local-image?path=${encodeURIComponent(trimmedText)}`} 
+              alt={trimmedText.split("/").pop() || "Local image"} 
+              className="max-w-full max-h-100 object-contain rounded-md border shadow-sm"
+            />
+          </span>
+        );
+      }
+    }
+
     return (
       <code
         className={cn(
@@ -252,7 +300,9 @@ const defaultComponents = memoizeMarkdownComponents({
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+      </code>
     );
   },
   CodeHeader,

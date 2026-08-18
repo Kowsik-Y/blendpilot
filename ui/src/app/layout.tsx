@@ -9,7 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "BlendPilot AI — Self-Correcting 3D Agent Copilot",
+  title: "BlendPilot — Self-Correcting 3D Agent Copilot",
   description: "Natural-language AI copilot for low-poly and game-ready 3D modeling in Blender.",
 };
 

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Test Configuration & Shared Fixtures
+BlendPilot — Test Configuration & Shared Fixtures
 
 Provides a comprehensive bpy mock so core module tests can run
 outside of Blender's Python environment.
@@ -249,7 +249,8 @@ class MockNodeCollection:
             "Surface", "BSDF",
         ]:
             mock_input = MagicMock()
-            mock_input.default_value = (0.8, 0.8, 0.8, 1.0) if "Color" in input_name else 0.0
+            mock_input.default_value = (
+                0.8, 0.8, 0.8, 1.0) if "Color" in input_name else 0.0
             inputs[input_name] = mock_input
         node.inputs = inputs
         node.outputs = inputs  # simplified

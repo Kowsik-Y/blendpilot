@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LLM Prompt Templates
+BlendPilot — LLM Prompt Templates
 
 Complete prompt templates for all 10 AI agents.
 Each module exports SYSTEM_PROMPT and USER_PROMPT constants.

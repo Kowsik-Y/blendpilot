@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Modifier Management
+BlendPilot — Modifier Management
 
 Functions for adding and applying Blender modifiers (bevel, solidify, etc.).
 
@@ -111,7 +111,8 @@ def add_modifier(
             try:
                 setattr(modifier, key, value)
             except (TypeError, AttributeError) as e:
-                logger.warning("Could not set default %s=%s: %s", key, value, e)
+                logger.warning(
+                    "Could not set default %s=%s: %s", key, value, e)
 
     # Apply user-specified parameters (override defaults)
     if params:
@@ -120,7 +121,8 @@ def add_modifier(
                 try:
                     setattr(modifier, key, value)
                 except (TypeError, AttributeError) as e:
-                    logger.warning("Could not set param %s=%s: %s", key, value, e)
+                    logger.warning(
+                        "Could not set param %s=%s: %s", key, value, e)
             else:
                 logger.warning(
                     "Modifier '%s' has no attribute '%s' — skipping.",

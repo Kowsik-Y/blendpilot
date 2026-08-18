@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Object MCP Tools
+BlendPilot — Object MCP Tools
 
 Tools for creating primitives, transforming, duplicating, and deleting objects in Blender.
 """
@@ -36,15 +36,19 @@ class CreatePrimitiveInput(BaseModel):
 class SetTransformInput(BaseModel):
     """Input parameters for setting object transforms."""
     name: str = Field(..., description="Name of the target object")
-    location: list[float] | None = Field(default=None, description="[X, Y, Z] world position")
-    rotation: list[float] | None = Field(default=None, description="[X, Y, Z] Euler rotation in radians")
-    scale: list[float] | None = Field(default=None, description="[X, Y, Z] scale multipliers")
+    location: list[float] | None = Field(
+        default=None, description="[X, Y, Z] world position")
+    rotation: list[float] | None = Field(
+        default=None, description="[X, Y, Z] Euler rotation in radians")
+    scale: list[float] | None = Field(
+        default=None, description="[X, Y, Z] scale multipliers")
 
 
 class DuplicateObjectInput(BaseModel):
     """Input parameters for duplicating an object."""
     name: str = Field(..., description="Source object name")
-    new_name: str | None = Field(default=None, description="Name for the duplicate object")
+    new_name: str | None = Field(
+        default=None, description="Name for the duplicate object")
     offset: list[float] = Field(
         default_factory=lambda: [0.0, 0.0, 0.0],
         description="Position offset relative to the source object",
@@ -62,9 +66,12 @@ async def create_primitive(client: BlenderClient, params: dict[str, Any]) -> dic
     response = await client.create_primitive(
         primitive_type=validated.primitive_type,
         name=validated.name,
-        dimensions=validated.dimensions if validated.dimensions is not None else [1.0, 1.0, 1.0],
-        location=validated.location if validated.location is not None else [0.0, 0.0, 0.0],
-        rotation=validated.rotation if validated.rotation is not None else [0.0, 0.0, 0.0],
+        dimensions=validated.dimensions if validated.dimensions is not None else [
+            1.0, 1.0, 1.0],
+        location=validated.location if validated.location is not None else [
+            0.0, 0.0, 0.0],
+        rotation=validated.rotation if validated.rotation is not None else [
+            0.0, 0.0, 0.0],
     )
     return {
         "success": response.success,

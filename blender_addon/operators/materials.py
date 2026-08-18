@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Material Operators
+BlendPilot — Material Operators
 
 Bridge handlers for material creation and assignment.
 Wraps core/materials.py.
@@ -20,7 +20,8 @@ def handle_create_material(params: dict[str, Any]) -> dict[str, Any]:
     from core.materials import create_material
 
     base_color = tuple(params.get("base_color", (0.8, 0.8, 0.8, 1.0)))
-    emission_color = tuple(params["emission_color"]) if "emission_color" in params else None
+    emission_color = tuple(params["emission_color"]
+                           ) if "emission_color" in params else None
 
     return create_material(
         name=params["name"],

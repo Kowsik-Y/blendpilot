@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Validation Module Tests
+BlendPilot — Validation Module Tests
 
 Tests for core/validation.py input validation.
 """

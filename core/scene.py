@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Scene Inspection
+BlendPilot — Scene Inspection
 
 Functions for reading and summarizing the current Blender scene state.
 These produce structured data for the Scene Understanding workflow.
@@ -64,7 +64,8 @@ def get_scene_summary() -> dict[str, Any]:
                     if mat.use_nodes:
                         for node in mat.node_tree.nodes:
                             if node.type == "BSDF_PRINCIPLED":
-                                color = tuple(node.inputs["Base Color"].default_value)
+                                color = tuple(
+                                    node.inputs["Base Color"].default_value)
                                 break
                     elif hasattr(mat, "diffuse_color"):
                         color = tuple(mat.diffuse_color)

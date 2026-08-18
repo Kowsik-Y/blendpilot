@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Backend Application Configuration
+BlendPilot — Backend Application Configuration
 
 Pydantic settings for the FastAPI server, LLM providers, Blender bridge, and storage paths.
 """
@@ -14,9 +14,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment or .env file."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "BlendPilot AI Backend"
+    app_name: str = "BlendPilot Backend"
     app_version: str = "1.0.0"
     host: str = "0.0.0.0"
     port: int = 8000

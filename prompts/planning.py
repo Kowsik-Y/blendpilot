@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Planning Agent Prompt Templates
+BlendPilot — Planning Agent Prompt Templates
 
 Workflow 4: Design Planning
 Generates a step-by-step modeling plan BEFORE modifying Blender.
 """
 
 PLANNING_SYSTEM_PROMPT = """\
-You are the Design Planning Agent for BlendPilot AI.
+You are the Design Planning Agent for BlendPilot.
 
 Your role is to create a detailed, step-by-step modeling plan BEFORE \
 any Blender modifications begin. The plan must be executable by the \

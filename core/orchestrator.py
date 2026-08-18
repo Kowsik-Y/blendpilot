@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Agent Orchestration
+BlendPilot — Agent Orchestration
 
 Orchestrates the 10 specialized agents using LangGraph StateGraph:
 1. IntentAgent      — Design Intent Understanding

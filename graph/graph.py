@@ -1,5 +1,5 @@
 """
-BlendPilot AI — LangGraph Multi-Agent Orchestration StateGraph
+BlendPilot — LangGraph Multi-Agent Orchestration StateGraph
 
 Compiles the complete 10-workflow agent graph with self-correcting QA loops,
 visual critique refinement, human interrupt support, and multi-format export.
@@ -136,6 +136,7 @@ async def run_pipeline(
         overrides=runtime_overrides,
     )
     graph = build_blendpilot_graph(enable_human_interrupt=False)
-    config = {"configurable": {"thread_id": initial_state["session_id"]}, "recursion_limit": 150}
+    config = {"configurable": {
+        "thread_id": initial_state["session_id"]}, "recursion_limit": 150}
     final_state = await graph.ainvoke(initial_state, config=config)
     return final_state

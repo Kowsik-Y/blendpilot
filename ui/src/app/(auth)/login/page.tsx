@@ -31,7 +31,7 @@ export default function LoginPage() {
       if (res?.error) {
         toast.error("Invalid credentials. Please check your email and password.");
       } else {
-        toast.success("Welcome back to BlendPilot AI!");
+        toast.success("Welcome back to BlendPilot!");
         router.push("/projects");
         router.refresh();
       }
@@ -53,7 +53,7 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Sign in to your 3D Asset Creation Workspace</p>
         </div>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-none">
           <CardHeader>
             <CardTitle className="text-xl">Sign In</CardTitle>
             <CardDescription>
@@ -108,11 +108,6 @@ export default function LoginPage() {
             </CardFooter>
           </form>
         </Card>
-
-        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span>Self-Correcting Multi-Agent Blender Copilot</span>
-        </div>
       </div>
     </div>
   );

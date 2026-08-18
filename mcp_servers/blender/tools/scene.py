@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Scene MCP Tools
+BlendPilot — Scene MCP Tools
 
 Tools for inspecting the active Blender scene and querying mesh statistics.
 """
@@ -15,17 +15,20 @@ from services.blender_client import BlenderClient
 
 class SceneSnapshotInput(BaseModel):
     """Input for creating a fast scene snapshot."""
-    snapshot_name: str = Field(default="latest", description="Name of the snapshot")
+    snapshot_name: str = Field(
+        default="latest", description="Name of the snapshot")
 
 
 class SceneRollbackInput(BaseModel):
     """Input for rolling back to a scene snapshot."""
-    snapshot_name: str = Field(default="latest", description="Name of the snapshot to restore")
+    snapshot_name: str = Field(
+        default="latest", description="Name of the snapshot to restore")
 
 
 class GetSceneSummaryInput(BaseModel):
     """Input for getting the scene summary."""
-    include_mesh_stats: bool = Field(default=True, description="Whether to include detailed vertex/face counts")
+    include_mesh_stats: bool = Field(
+        default=True, description="Whether to include detailed vertex/face counts")
 
 
 class GetObjectDetailsInput(BaseModel):

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Blender MCP Tools Registry
+BlendPilot — Blender MCP Tools Registry
 """
 
 from mcp_servers.blender.tools.materials import assign_material, create_material

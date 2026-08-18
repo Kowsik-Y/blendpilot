@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Design Intent Understanding Agent
+BlendPilot — Design Intent Understanding Agent
 
 Workflow 1: Converts natural-language design requests into structured DesignSpec models
 using LangChain structured output (with_structured_output) for reliable LLM-driven parsing.
@@ -40,7 +40,8 @@ class IntentAgent:
         # If user provided programmatic overrides, apply them directly
         if overrides:
             try:
-                spec = DesignSpec.model_validate({**overrides, "user_prompt": user_prompt})
+                spec = DesignSpec.model_validate(
+                    {**overrides, "user_prompt": user_prompt})
                 return spec
             except ValidationError:
                 pass
@@ -49,13 +50,15 @@ class IntentAgent:
         try:
             spec = await self._llm_structured_parse(user_prompt, reference_images or [])
             if spec:
-                logger.info("LLM structured output produced DesignSpec for: %s", spec.asset_type)
+                logger.info(
+                    "LLM structured output produced DesignSpec for: %s", spec.asset_type)
                 return spec
         except Exception as e:
             logger.error("LLM intent parsing failed (%s)", e)
             raise RuntimeError(f"Failed to generate DesignSpec via LLM: {e}")
 
-        raise RuntimeError("LLM failed to return a valid DesignSpec and no fallback is permitted.")
+        raise RuntimeError(
+            "LLM failed to return a valid DesignSpec and no fallback is permitted.")
 
     async def _llm_structured_parse(
         self,
@@ -113,7 +116,8 @@ class IntentAgent:
                 response_format={"type": "json_object"},
             )
             if response:
-                clean_json = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+                clean_json = re.sub(r"^```json\s*|\s*```$",
+                                    "", response.strip(), flags=re.MULTILINE)
                 data = json.loads(clean_json)
                 data["user_prompt"] = user_prompt
                 if reference_images:
@@ -123,4 +127,3 @@ class IntentAgent:
             logger.warning("JSON fallback parsing also failed: %s", e)
 
         return None
-

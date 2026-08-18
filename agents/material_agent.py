@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Materials, Lighting, and Rendering Agent
+BlendPilot — Materials, Lighting, and Rendering Agent
 
 Workflow 6: Creates PBR shaders, assigns materials to geometry, sets up studio lighting
 and preview camera, and triggers render generation.
@@ -32,7 +32,8 @@ class MaterialAgent:
         output_image_path: str = "output/preview.png",
     ) -> dict[str, Any]:
         """Create PBR materials, assign to objects, set up lighting/camera, and render preview."""
-        logger.info("Applying materials & lighting for %s (objects: %s)...", spec.asset_type, created_objects)
+        logger.info("Applying materials & lighting for %s (objects: %s)...",
+                    spec.asset_type, created_objects)
 
         materials_created: list[str] = []
 
@@ -54,7 +55,7 @@ Return a JSON array of material objects. Each object should have:
 Output ONLY valid JSON without any markdown formatting like ```json.
 """
         response = await self.llm_service.generate(prompt)
-        
+
         generated_materials = []
         try:
             clean_res = response.strip()
@@ -66,7 +67,8 @@ Output ONLY valid JSON without any markdown formatting like ```json.
                 clean_res = clean_res[:-3]
             generated_materials = json.loads(clean_res.strip())
         except Exception as e:
-            logger.error("Failed to parse LLM material generation: %s. Response was: %s", e, response)
+            logger.error(
+                "Failed to parse LLM material generation: %s. Response was: %s", e, response)
 
         for i, mat_spec in enumerate(generated_materials):
             mat_name = mat_spec.get("name", f"Mat_{spec.asset_type}_{i}")
@@ -80,7 +82,7 @@ Output ONLY valid JSON without any markdown formatting like ```json.
                 mat_params["emission_color"] = mat_spec["emission_color"]
             if "emission_strength" in mat_spec:
                 mat_params["emission_strength"] = mat_spec["emission_strength"]
-                
+
             await self.mcp_server.call_tool("create_material", mat_params)
             materials_created.append(mat_name)
 
@@ -92,7 +94,6 @@ Output ONLY valid JSON without any markdown formatting like ```json.
                     "object_name": obj,
                     "material_name": materials_created[mat_idx],
                 })
-
 
         # 2. Generate Camera & Lighting Setup via LLM
         setup_prompt = f"""
@@ -111,7 +112,7 @@ Return a JSON object with:
 Output ONLY valid JSON without any markdown formatting.
 """
         setup_response = await self.llm_service.generate(setup_prompt)
-        
+
         try:
             clean_res = setup_response.strip()
             if clean_res.startswith("```json"):
@@ -122,8 +123,10 @@ Output ONLY valid JSON without any markdown formatting.
                 clean_res = clean_res[:-3]
             cam_light_setup = json.loads(clean_res.strip())
         except Exception as e:
-            logger.error("Failed to parse LLM lighting/camera generation: %s", e)
-            raise RuntimeError(f"Failed to generate lighting/camera setup via LLM: {e}")
+            logger.error(
+                "Failed to parse LLM lighting/camera generation: %s", e)
+            raise RuntimeError(
+                f"Failed to generate lighting/camera setup via LLM: {e}")
 
         # 3. Studio Lighting Setup
         await self.mcp_server.call_tool("setup_studio_lighting", {

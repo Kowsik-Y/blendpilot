@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Validation Operators
+BlendPilot — Validation Operators
 
 Bridge handlers for deterministic geometry QA checks.
 Wraps core/validation.py.

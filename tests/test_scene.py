@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Scene Module Tests
+BlendPilot — Scene Module Tests
 
 Tests for core/scene.py input validation.
 """

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Reference & Technical Research Agent
+BlendPilot — Reference & Technical Research Agent
 
 Workflow 3: Uses LLM to generate contextual research findings based on the
 specific asset + style combination. Falls back to curated knowledge base.
@@ -32,7 +32,8 @@ class ResearchAgent:
 
     async def execute(self, spec: DesignSpec) -> list[dict[str, Any]]:
         """Research technical and stylistic guidelines for the target asset."""
-        logger.info("Conducting technical research for %s (%s)", spec.asset_type, spec.target_platform)
+        logger.info("Conducting technical research for %s (%s)",
+                    spec.asset_type, spec.target_platform)
 
         findings: list[dict[str, Any]] = []
 
@@ -44,7 +45,7 @@ class ResearchAgent:
             # e.g., query for dimensions, layout, and specifics
             search_query = f"{spec.asset_type} dimensions, standard layout positioning, and {spec.target_platform} import requirements"
             search_response = await self.search_service.search(search_query)
-            
+
             for result in search_response.results:
                 findings.append({
                     "category": "web_research",
@@ -63,10 +64,12 @@ class ResearchAgent:
                 llm_findings = await self._llm_research(spec)
                 if llm_findings:
                     findings.extend(llm_findings)
-                    logger.info("LLM generated %d additional research findings", len(llm_findings))
+                    logger.info(
+                        "LLM generated %d additional research findings", len(llm_findings))
                     return findings
             except Exception as e:
-                logger.warning("LLM research generation failed (%s), using knowledge base only", e)
+                logger.warning(
+                    "LLM research generation failed (%s), using knowledge base only", e)
 
         # Add static topology best practices
         findings.append({
@@ -113,7 +116,8 @@ class ResearchAgent:
             return None
 
         try:
-            clean = re.sub(r"^```json\s*|\s*```$", "", response.strip(), flags=re.MULTILINE)
+            clean = re.sub(r"^```json\s*|\s*```$", "",
+                           response.strip(), flags=re.MULTILINE)
             data = json.loads(clean)
             # Handle both {"findings": [...]} and [...] formats
             if isinstance(data, dict) and "findings" in data:
@@ -161,7 +165,8 @@ class ResearchAgent:
             },
         }
 
-        guide = platform_guides.get(spec.target_platform, platform_guides["Unity"])
+        guide = platform_guides.get(
+            spec.target_platform, platform_guides["Unity"])
         return [{
             "category": "platform_constraints",
             "title": f"{spec.target_platform} Geometry & Shader Specs",
@@ -174,21 +179,23 @@ class ResearchAgent:
         """Embed and persist finding to PostgreSQL pgvector table."""
         if not self.llm_service or not self.llm_service.config.api_key:
             return
-            
+
         try:
             from langchain_openai import OpenAIEmbeddings
             import psycopg
             import os
             import uuid
-            
+
             # 1. Generate embedding
-            embeddings = OpenAIEmbeddings(api_key=self.llm_service.config.api_key)
+            embeddings = OpenAIEmbeddings(
+                api_key=self.llm_service.config.api_key)
             # ainvoke is not universally available on embeddings, use sync embed_query for simplicity
             # but ideally wrap in executor. Or if async is needed, aembed_query.
             vector = await embeddings.aembed_query(content)
-            
+
             # 2. Insert to Postgres
-            db_url = os.environ.get("DATABASE_URL", "postgresql://blendpilot:blendpilot@localhost:5432/blendpilot")
+            db_url = os.environ.get(
+                "DATABASE_URL", "postgresql://blendpilot:blendpilot@localhost:5432/blendpilot")
             # We connect using psycopg sync or async (since we're in async, we can use psycopg.AsyncConnection)
             async with await psycopg.AsyncConnection.connect(db_url) as conn:
                 async with conn.cursor() as cur:
@@ -201,6 +208,8 @@ class ResearchAgent:
                         (str(uuid.uuid4()), content, str(vector), "web_research")
                     )
                     await conn.commit()
-            logger.info("Persisted research finding '%s' to pgvector Memory.", title)
+            logger.info(
+                "Persisted research finding '%s' to pgvector Memory.", title)
         except Exception as e:
-            logger.warning("Failed to persist research finding to memory: %s", e)
+            logger.warning(
+                "Failed to persist research finding to memory: %s", e)

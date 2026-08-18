@@ -1,1 +1,1 @@
-"""BlendPilot AI — Pydantic Schema Models"""
+"""BlendPilot — Pydantic Schema Models"""

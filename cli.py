@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Command Line Interface (CLI)
+BlendPilot — Command Line Interface (CLI)
 
 Interactive terminal runner for the 10-agent autonomous 3D modeling pipeline.
 
@@ -51,20 +51,25 @@ async def run_prompt_cli(prompt: str) -> None:
     state = await run_pipeline(user_prompt=prompt)
     elapsed = time.perf_counter() - start_time
 
-    print(f"\n{GREEN}{BOLD}✔ PIPELINE EXECUTION COMPLETED in {elapsed:.2f}s!{RESET}\n")
+    print(
+        f"\n{GREEN}{BOLD}✔ PIPELINE EXECUTION COMPLETED in {elapsed:.2f}s!{RESET}\n")
 
     spec = state.get("design_spec", {})
     dims = spec.get("dimensions", {})
     print(f"{BOLD}📦 Asset Specification:{RESET}")
     print(f"   • Asset Type: {spec.get('asset_type', 'N/A')}")
     print(f"   • Target Platform: {spec.get('target_platform', 'Unity')}")
-    print(f"   • Dimensions: {dims.get('width', 1.0)}m × {dims.get('depth', 1.0)}m × {dims.get('height', 1.0)}m")
+    print(
+        f"   • Dimensions: {dims.get('width', 1.0)}m × {dims.get('depth', 1.0)}m × {dims.get('height', 1.0)}m")
     print(f"   • Triangle Budget: {spec.get('triangle_limit', 8000)}")
 
     print(f"\n{BOLD}🔍 Quality & Verification:{RESET}")
-    print(f"   • Geometry QA: {state.get('geometry_qa_status', 'PASS')} (Score: {state.get('geometry_score', 1.0) * 100:.0f}%)")
-    print(f"   • Visual Critic Score: {state.get('visual_score', 0.9) * 100:.0f}%")
-    print(f"   • Repair Loops: {state.get('geometry_repair_count', 0)} QA repairs, {state.get('visual_revision_count', 0)} visual revisions")
+    print(
+        f"   • Geometry QA: {state.get('geometry_qa_status', 'PASS')} (Score: {state.get('geometry_score', 1.0) * 100:.0f}%)")
+    print(
+        f"   • Visual Critic Score: {state.get('visual_score', 0.9) * 100:.0f}%")
+    print(
+        f"   • Repair Loops: {state.get('geometry_repair_count', 0)} QA repairs, {state.get('visual_revision_count', 0)} visual revisions")
 
     exported = state.get("exported_files", [])
     print(f"\n{BOLD}🚀 Exported Production Files ({len(exported)} files):{RESET}")
@@ -77,24 +82,35 @@ async def run_benchmark_cli() -> None:
     print(f"\n{MAGENTA}{BOLD}▶ Executing 20-Prompt Evaluation Benchmark...{RESET}\n")
     summary = await run_full_benchmark()
 
-    print(f"\n{GREEN}{BOLD}═══════════════════════════════════════════════════════════════")
+    print(
+        f"\n{GREEN}{BOLD}═══════════════════════════════════════════════════════════════")
     print(f"                 BENCHMARK EVALUATION SUMMARY                  ")
-    print(f"═══════════════════════════════════════════════════════════════{RESET}")
-    print(f" Total Cases Evaluated:       {summary['benchmark_cases_evaluated']}")
-    print(f" Task Completion Rate:        {GREEN}{summary['task_completion_rate']}%{RESET}")
-    print(f" Topology QA Pass Rate:       {GREEN}{summary['geometry_qa_pass_rate_pct']}%{RESET}")
-    print(f" Dimension Accuracy:          {GREEN}{summary['dimension_accuracy_pct']}%{RESET}")
-    print(f" Average Visual Score:        {CYAN}{summary['average_visual_score']}{RESET}")
-    print(f" Average Execution Time:      {YELLOW}{summary['average_generation_time_sec']}s{RESET}")
+    print(
+        f"═══════════════════════════════════════════════════════════════{RESET}")
+    print(
+        f" Total Cases Evaluated:       {summary['benchmark_cases_evaluated']}")
+    print(
+        f" Task Completion Rate:        {GREEN}{summary['task_completion_rate']}%{RESET}")
+    print(
+        f" Topology QA Pass Rate:       {GREEN}{summary['geometry_qa_pass_rate_pct']}%{RESET}")
+    print(
+        f" Dimension Accuracy:          {GREEN}{summary['dimension_accuracy_pct']}%{RESET}")
+    print(
+        f" Average Visual Score:        {CYAN}{summary['average_visual_score']}{RESET}")
+    print(
+        f" Average Execution Time:      {YELLOW}{summary['average_generation_time_sec']}s{RESET}")
     print(f"{BOLD}═══════════════════════════════════════════════════════════════{RESET}\n")
 
 
 def main() -> None:
     print_banner()
-    parser = argparse.ArgumentParser(description="BlendPilot AI CLI Runner")
-    parser.add_argument("prompt", nargs="?", help="Natural language description of 3D asset")
-    parser.add_argument("--benchmark", action="store_true", help="Run full 20-case evaluation benchmark")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Run interactive prompt loop")
+    parser = argparse.ArgumentParser(description="BlendPilot CLI Runner")
+    parser.add_argument("prompt", nargs="?",
+                        help="Natural language description of 3D asset")
+    parser.add_argument("--benchmark", action="store_true",
+                        help="Run full 20-case evaluation benchmark")
+    parser.add_argument("--interactive", "-i",
+                        action="store_true", help="Run interactive prompt loop")
     args = parser.parse_args()
 
     if args.benchmark:
@@ -102,7 +118,8 @@ def main() -> None:
     elif args.interactive or not args.prompt:
         try:
             while True:
-                prompt = input(f"{BOLD}Enter 3D asset prompt (or 'exit'): {RESET}").strip()
+                prompt = input(
+                    f"{BOLD}Enter 3D asset prompt (or 'exit'): {RESET}").strip()
                 if not prompt or prompt.lower() in ["exit", "quit", "q"]:
                     break
                 asyncio.run(run_prompt_cli(prompt))

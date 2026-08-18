@@ -17,6 +17,19 @@
   }
 }
 
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@utility animate-ticker {
+  animation: ticker 50s linear infinite;
+}
+
 @utility shimmer {
   animation: shimmer 1.5s linear infinite;
 }

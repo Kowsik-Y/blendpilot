@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Validation MCP Tools
+BlendPilot — Validation MCP Tools
 
 Deterministic geometry QA tools for checking polygon counts, manifold topology, normals, and transforms.
 """
@@ -16,8 +16,10 @@ from services.blender_client import BlenderClient
 class ValidateAssetInput(BaseModel):
     """Input parameters for complete deterministic asset validation."""
     object_name: str = Field(..., description="Target object name to validate")
-    triangle_limit: int = Field(default=10000, gt=0, description="Max allowed triangle count")
-    target_engine: str = Field(default="Unity", description="Target platform (Unity, Unreal, WebGL, Godot)")
+    triangle_limit: int = Field(
+        default=10000, gt=0, description="Max allowed triangle count")
+    target_engine: str = Field(
+        default="Unity", description="Target platform (Unity, Unreal, WebGL, Godot)")
 
 
 class CheckMetricInput(BaseModel):
@@ -28,7 +30,8 @@ class CheckMetricInput(BaseModel):
 class CheckTriangleCountInput(BaseModel):
     """Input parameters for checking triangle budget."""
     object_name: str = Field(..., description="Target object name")
-    max_triangles: int = Field(default=8000, gt=0, description="Maximum triangle threshold")
+    max_triangles: int = Field(
+        default=8000, gt=0, description="Maximum triangle threshold")
 
 
 async def validate_asset(client: BlenderClient, params: dict[str, Any]) -> dict[str, Any]:
@@ -45,7 +48,8 @@ async def validate_asset(client: BlenderClient, params: dict[str, Any]) -> dict[
             "error": response.error or f"Validation failed for '{validated.object_name}'",
             "result": ValidationResult(
                 status="FAIL",
-                issues=[ValidationIssue(type="VALIDATION_ERROR", description=response.error or "Unknown error", severity=IssueSeverity.HIGH)],
+                issues=[ValidationIssue(
+                    type="VALIDATION_ERROR", description=response.error or "Unknown error", severity=IssueSeverity.HIGH)],
             ).model_dump(),
         }
     return {

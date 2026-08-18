@@ -69,9 +69,9 @@ export default function RegisterPage() {
           <p className="text-sm text-muted-foreground">Create your 3D Copilot Workspace Account</p>
         </div>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-none!">
           <CardHeader>
-            <CardTitle className="text-xl">Get Started</CardTitle>
+            <CardTitle className="text-xl font-semibold">Get Started</CardTitle>
             <CardDescription>
               Sign up to configure your BYO API keys and start generating 3D models.
             </CardDescription>
@@ -134,10 +134,6 @@ export default function RegisterPage() {
           </form>
         </Card>
 
-        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span>Self-Correcting Multi-Agent Blender Copilot</span>
-        </div>
       </div>
     </div>
   );

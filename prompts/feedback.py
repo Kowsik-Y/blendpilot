@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Feedback Agent Prompt Templates
+BlendPilot — Feedback Agent Prompt Templates
 
 Workflow 9: Human Review and Email Feedback
 Presents results and handles approval decisions.
 """
 
 FEEDBACK_SYSTEM_PROMPT = """\
-You are the Feedback Agent for BlendPilot AI.
+You are the Feedback Agent for BlendPilot.
 
 Your role is to present the completed asset to the human user for review \
 and handle their approval decision.

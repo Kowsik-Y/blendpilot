@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Workflow API Endpoints
+BlendPilot — Workflow API Endpoints
 
 Provides endpoints for launching autonomous modeling workflows and streaming
 live Agent chain-of-thought and tool execution over WebSocket.
@@ -26,34 +26,47 @@ router = APIRouter(prefix="/api/workflow", tags=["Workflow"])
 _active_sessions: dict[str, dict[str, Any]] = {}
 _session_event_queues: dict[str, list[asyncio.Queue]] = {}
 
+
 class StartWorkflowRequest(BaseModel):
     """Payload to initiate a 3D modeling workflow."""
-    user_prompt: str = Field(..., min_length=3, description="Natural-language description of the 3D asset")
-    project_id: str | None = Field(default=None, description="Studio project that owns this workflow session")
-    overrides: dict[str, Any] | None = Field(default=None, description="Optional manual parameter overrides including API keys")
+    user_prompt: str = Field(..., min_length=3,
+                             description="Natural-language description of the 3D asset")
+    project_id: str | None = Field(
+        default=None, description="Studio project that owns this workflow session")
+    overrides: dict[str, Any] | None = Field(
+        default=None, description="Optional manual parameter overrides including API keys")
+
 
 @router.post("/start")
 async def start_workflow(request: StartWorkflowRequest) -> dict[str, Any]:
     """Initiate a new dynamic LangChain agent workflow."""
     project_id = request.project_id or f"proj_{uuid.uuid4().hex[:8]}"
     session_id = f"sess_{uuid.uuid4().hex[:8]}"
-    
+
     from services.llm import LLMService
     llm_kwargs = {}
     if request.overrides:
-        if request.overrides.get("provider"): llm_kwargs["provider"] = request.overrides["provider"]
-        if request.overrides.get("model"): llm_kwargs["model"] = request.overrides["model"]
-        if request.overrides.get("api_key"): llm_kwargs["api_key"] = request.overrides["api_key"]
-        if request.overrides.get("base_url"): llm_kwargs["base_url"] = request.overrides["base_url"]
-        if request.overrides.get("temperature") is not None: llm_kwargs["temperature"] = request.overrides["temperature"]
-        if request.overrides.get("max_tokens") is not None: llm_kwargs["max_tokens"] = request.overrides["max_tokens"]
-        
-    tavily_api_key = request.overrides.get("tavily_api_key") if request.overrides else None
-    
+        if request.overrides.get("provider"):
+            llm_kwargs["provider"] = request.overrides["provider"]
+        if request.overrides.get("model"):
+            llm_kwargs["model"] = request.overrides["model"]
+        if request.overrides.get("api_key"):
+            llm_kwargs["api_key"] = request.overrides["api_key"]
+        if request.overrides.get("base_url"):
+            llm_kwargs["base_url"] = request.overrides["base_url"]
+        if request.overrides.get("temperature") is not None:
+            llm_kwargs["temperature"] = request.overrides["temperature"]
+        if request.overrides.get("max_tokens") is not None:
+            llm_kwargs["max_tokens"] = request.overrides["max_tokens"]
+
+    tavily_api_key = request.overrides.get(
+        "tavily_api_key") if request.overrides else None
+
     llm_service = LLMService(**llm_kwargs)
 
     # Instantiate a new stateful agent for this session
-    agent = BlendPilotAgent(llm_service=llm_service, tavily_api_key=tavily_api_key)
+    agent = BlendPilotAgent(llm_service=llm_service,
+                            tavily_api_key=tavily_api_key)
 
     _active_sessions[session_id] = {
         "agent": agent,
@@ -130,16 +143,14 @@ async def _run_agent_task(session_id: str, user_prompt: str) -> None:
             event_type = event.get("event")
             name = event.get("name")
             data = event.get("data", {})
-            
 
-            
             payload = {
                 "session_id": session_id,
                 "event": event_type,
                 "node": name,
                 "state": data,
             }
-            
+
             if event_type == "on_tool_end":
                 try:
                     summary = await agent.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
@@ -147,7 +158,7 @@ async def _run_agent_task(session_id: str, user_prompt: str) -> None:
                         payload["scene_objects"] = summary["scene"]["objects"]
                 except Exception as e:
                     logger.warning("Failed to sync scene on tool end: %s", e)
-                    
+
             await _broadcast_event(session_id, payload)
 
         session["status"] = "COMPLETED"
@@ -158,7 +169,8 @@ async def _run_agent_task(session_id: str, user_prompt: str) -> None:
             if project_id:
                 import os
                 os.makedirs("data/projects", exist_ok=True)
-                save_path = os.path.abspath(f"data/projects/{project_id}.blend")
+                save_path = os.path.abspath(
+                    f"data/projects/{project_id}.blend")
                 await agent.mcp_server.call_tool("save_project", {"filepath": save_path})
 
             summary = await agent.mcp_server.call_tool("get_scene_summary", {"include_mesh_stats": False})
@@ -178,9 +190,9 @@ async def _run_agent_task(session_id: str, user_prompt: str) -> None:
         logger.exception("Agent error in session %s: %s", session_id, e)
         session["status"] = "FAILED"
         await _broadcast_event(session_id, {
-            "session_id": session_id, 
-            "event": "workflow_failed", 
-            "error": str(e), 
+            "session_id": session_id,
+            "event": "workflow_failed",
+            "error": str(e),
             "status": "FAILED"
         })
 
@@ -248,7 +260,7 @@ async def websocket_workflow_progress(websocket: WebSocket, session_id: str) -> 
                 await websocket.send_json(_make_json_safe(data))
             except Exception:
                 break
-                
+
             if _is_terminal_stream_event(data):
                 break
     except WebSocketDisconnect:
@@ -266,7 +278,7 @@ async def get_scene(project_id: str | None = None) -> dict[str, Any]:
     try:
         # Create a transient connection to fetch the summary
         server = BlenderMCPServer()
-        
+
         # Auto-load the saved project session if available
         if project_id:
             save_path = os.path.abspath(f"data/projects/{project_id}.blend")
@@ -278,7 +290,7 @@ async def get_scene(project_id: str | None = None) -> dict[str, Any]:
                 if current_summary and "scene" in current_summary and "objects" in current_summary["scene"]:
                     for obj in current_summary["scene"]["objects"]:
                         await server.call_tool("delete_object", {"name": obj["name"]})
-                
+
         summary = await server.call_tool("get_scene_summary", {"include_mesh_stats": False})
         return summary
     except Exception as e:

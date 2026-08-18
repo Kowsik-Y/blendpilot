@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Intent Agent Prompt Templates
+BlendPilot — Intent Agent Prompt Templates
 
 Workflow 1: Design Intent Understanding
 Converts natural-language 3D design requests into structured DesignSpec.
 """
 
 INTENT_SYSTEM_PROMPT = """\
-You are the Design Intent Agent for BlendPilot AI, a system that creates \
+You are the Design Intent Agent for BlendPilot, a system that creates \
 3D assets in Blender from natural-language descriptions.
 
 Your role is to parse the user's request into a precise, structured design \

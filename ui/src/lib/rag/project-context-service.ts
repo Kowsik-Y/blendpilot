@@ -1,5 +1,5 @@
 /**
- * BlendPilot AI — Project Context Service
+ * BlendPilot — Project Context Service
  *
  * Extracts and formats project specifications, QA reports, and iteration
  * history for retrieval into the LLM context window.

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Production Validation & Multi-Format Export Agent
+BlendPilot — Production Validation & Multi-Format Export Agent
 
 Workflow 10: Runs pre-flight validation, exports .blend, .fbx, and .glb bundles,
 and generates structured asset_report.json into the output directory.
@@ -35,7 +35,8 @@ class ExportAgent:
         visual_qa: VisualCritiqueResult | None = None,
     ) -> dict[str, Any]:
         """Export production assets and build comprehensive asset report."""
-        logger.info("Executing final production export for %s...", spec.asset_type)
+        logger.info("Executing final production export for %s...",
+                    spec.asset_type)
 
         asset_folder = os.path.join(output_dir, spec.asset_type)
         os.makedirs(asset_folder, exist_ok=True)
@@ -85,11 +86,11 @@ class ExportAgent:
             },
             "quality_assurance": {}
         }
-        
+
         if geometry_qa:
             report_data["quality_assurance"]["geometry_status"] = geometry_qa.status
             report_data["quality_assurance"]["geometry_score"] = geometry_qa.score
-        
+
         if visual_qa:
             report_data["quality_assurance"]["visual_score"] = visual_qa.overall_score
             report_data["quality_assurance"]["approved"] = visual_qa.approved

@@ -1,5 +1,5 @@
 """
-BlendPilot AI — External Service Clients
+BlendPilot — External Service Clients
 
 This package provides async client interfaces for communicating
 with external systems used by BlendPilot agents.

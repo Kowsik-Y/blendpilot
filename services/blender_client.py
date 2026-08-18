@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Blender Bridge Client
+BlendPilot — Blender Bridge Client
 
 HTTP client for communicating with the Blender add-on bridge server.
 Sends structured commands and receives validated responses.
@@ -23,7 +23,8 @@ logger = logging.getLogger("blendpilot.services.blender_client")
 class BridgeCommand(BaseModel):
     """Command sent to the Blender bridge server."""
 
-    command: str = Field(..., description="Command name, e.g. 'create_primitive'")
+    command: str = Field(...,
+                         description="Command name, e.g. 'create_primitive'")
     request_id: str = Field(
         default_factory=lambda: f"req_{uuid.uuid4().hex[:8]}",
         description="Unique request identifier for tracking",
@@ -101,7 +102,8 @@ class BlenderClient:
             return BridgeResponse(
                 request_id=req.request_id,
                 success=False,
-                error=str(payload.get("error") or f"Blender bridge returned HTTP {response.status_code}"),
+                error=str(payload.get(
+                    "error") or f"Blender bridge returned HTTP {response.status_code}"),
             )
         except Exception as e:
             message = f"Blender Bridge unavailable at {self.base_url}: {e}"
@@ -129,7 +131,8 @@ class BlenderClient:
             return BridgeResponse(
                 request_id=req.request_id,
                 success=True,
-                result={"name": name, "object_name": name, "triangle_count": 12},
+                result={"name": name, "object_name": name,
+                        "triangle_count": 12},
                 execution_time_ms=1.2,
             )
 

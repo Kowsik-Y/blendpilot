@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Object Operators
+BlendPilot — Object Operators
 
 Bridge handlers for object creation, transform, duplication, and deletion.
 Wraps core/objects.py with parameter validation for bridge commands.
@@ -20,7 +20,8 @@ def handle_create_primitive(params: dict[str, Any]) -> dict[str, Any]:
     from core.objects import create_primitive
 
     # Convert list params to tuples (JSON sends arrays)
-    dimensions = tuple(params["dimensions"]) if "dimensions" in params and params["dimensions"] else None
+    dimensions = tuple(
+        params["dimensions"]) if "dimensions" in params and params["dimensions"] else None
     location = tuple(params.get("location", (0.0, 0.0, 0.0)))
     rotation = tuple(params.get("rotation", (0.0, 0.0, 0.0)))
 

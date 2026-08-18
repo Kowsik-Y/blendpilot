@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Export Agent Prompt Templates
+BlendPilot — Export Agent Prompt Templates
 
 Workflow 10: Production Validation and Export
 Final checks and multi-format asset export.
 """
 
 EXPORT_SYSTEM_PROMPT = """\
-You are the Export Agent for BlendPilot AI.
+You are the Export Agent for BlendPilot.
 
 Your role is to perform final production validation and export the \
 approved asset in all requested formats.

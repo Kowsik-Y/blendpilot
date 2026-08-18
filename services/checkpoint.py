@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Checkpoint Manager
+BlendPilot — Checkpoint Manager
 
 Manages state persistence for long-running workflows with:
 - 30-second checkpoint intervals
@@ -101,7 +101,8 @@ class CheckpointManager:
     ) -> Checkpoint:
         """Create a new checkpoint for the session."""
         # Update sequence counter
-        self._sequence_counter[session_id] = self._sequence_counter.get(session_id, 0) + 1
+        self._sequence_counter[session_id] = self._sequence_counter.get(
+            session_id, 0) + 1
         sequence = self._sequence_counter[session_id]
 
         # Compute hash for integrity verification
@@ -155,7 +156,8 @@ class CheckpointManager:
 
         # Verify integrity
         if not checkpoint.verify():
-            raise ValueError(f"Checkpoint integrity check failed: {checkpoint.path}")
+            raise ValueError(
+                f"Checkpoint integrity check failed: {checkpoint.path}")
 
         # Load state
         with open(checkpoint.path, 'r') as f:
@@ -196,7 +198,8 @@ class CheckpointManager:
                 old_file.unlink()
                 logger.info("Removed old checkpoint: %s", old_file)
             except Exception as e:
-                logger.warning("Failed to remove checkpoint %s: %s", old_file, e)
+                logger.warning(
+                    "Failed to remove checkpoint %s: %s", old_file, e)
 
     async def get_latest_checkpoint(
         self,

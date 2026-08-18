@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Mesh Optimizer
+BlendPilot — Mesh Optimizer
 
 Performs polycount-driven optimization with:
 - Progressive decimation algorithm with quality preservation
@@ -182,9 +182,12 @@ class MeshOptimizer:
         if not self._optimization_history:
             return {"total_optimizations": 0, "avg_ratio": 0.0, "avg_quality": 0.0}
 
-        total_ratio = sum(r.decimation_ratio for r in self._optimization_history)
-        total_quality = sum(r.quality_score for r in self._optimization_history)
-        total_preserved = sum(r.features_preserved for r in self._optimization_history)
+        total_ratio = sum(
+            r.decimation_ratio for r in self._optimization_history)
+        total_quality = sum(
+            r.quality_score for r in self._optimization_history)
+        total_preserved = sum(
+            r.features_preserved for r in self._optimization_history)
 
         return {
             "total_optimizations": len(self._optimization_history),

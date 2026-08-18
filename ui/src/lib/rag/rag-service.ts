@@ -1,5 +1,5 @@
 /**
- * BlendPilot AI — Unified RAG Service
+ * BlendPilot — Unified RAG Service
  *
  * Orchestrates document ingestion, vector indexing, and context retrieval
  * for Blender documentation and project history.

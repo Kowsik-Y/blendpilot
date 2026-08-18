@@ -1,1 +1,1 @@
-"""BlendPilot AI — MCP Blender Server (Phase 3+)"""
+"""BlendPilot — MCP Blender Server (Phase 3+)"""

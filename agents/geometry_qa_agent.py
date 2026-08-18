@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Deterministic Geometry QA Agent
+BlendPilot — Deterministic Geometry QA Agent
 
 Workflow 7: Runs deterministic checks (triangle count, manifold geometry, normals, transforms, origins)
 and generates targeted repair plans if validation fails.
@@ -31,7 +31,8 @@ class GeometryQAAgent:
         repair_iteration: int = 0,
     ) -> dict[str, Any]:
         """Validate all created geometry against spec constraints and return QA status with repair actions if needed."""
-        logger.info("Running deterministic Geometry QA (iteration %d) on %s...", repair_iteration, created_objects)
+        logger.info("Running deterministic Geometry QA (iteration %d) on %s...",
+                    repair_iteration, created_objects)
 
         issues: list[ValidationIssue] = []
         overall_status = "PASS"
@@ -55,7 +56,8 @@ class GeometryQAAgent:
                 else:
                     issues.append(ValidationIssue(
                         type="TOPOLOGY_ERROR",
-                        description=res.get("error", f"Validation failed on {obj_name}"),
+                        description=res.get(
+                            "error", f"Validation failed on {obj_name}"),
                         severity=IssueSeverity.MEDIUM,
                         object_name=obj_name,
                     ))
@@ -78,13 +80,15 @@ class GeometryQAAgent:
         repair_steps: list[PlanStep] = []
         if overall_status == "FAIL" and repair_iteration < 3:
             for i, iss in enumerate(issues, start=1):
-                target = iss.object_name or (created_objects[0] if created_objects else "Object")
+                target = iss.object_name or (
+                    created_objects[0] if created_objects else "Object")
                 if "normal" in iss.type.lower() or "normal" in iss.description.lower():
                     repair_steps.append(PlanStep(
                         step_id=100 + i,
                         description=f"Recalculate face normals for {target}",
                         tool="edit_mesh",
-                        parameters={"object_name": target, "operation": "recalculate_normals"},
+                        parameters={"object_name": target,
+                                    "operation": "recalculate_normals"},
                         expected_outcome="Face normals outward pointing and consistent",
                     ))
                 elif "triangle" in iss.type.lower() or "budget" in iss.description.lower():
@@ -105,7 +109,8 @@ class GeometryQAAgent:
                         step_id=100 + i,
                         description=f"Bake transform matrix on {target}",
                         tool="edit_mesh",
-                        parameters={"object_name": target, "operation": "apply_transforms"},
+                        parameters={"object_name": target,
+                                    "operation": "apply_transforms"},
                         expected_outcome="Scale set to (1,1,1) with origin at base",
                     ))
 

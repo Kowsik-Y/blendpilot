@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Object Creation & Manipulation
+BlendPilot — Object Creation & Manipulation
 
 Functions for creating Blender primitives, setting transforms,
 duplicating, and deleting objects.
@@ -66,14 +66,16 @@ def create_primitive(
 
     if dimensions is not None:
         if len(dimensions) != 3:
-            raise ValueError("Dimensions must be a tuple of 3 floats (width, depth, height).")
+            raise ValueError(
+                "Dimensions must be a tuple of 3 floats (width, depth, height).")
         if any(d <= 0 for d in dimensions):
             raise ValueError("All dimensions must be positive values.")
 
     if len(location) != 3:
         raise ValueError("Location must be a tuple of 3 floats (x, y, z).")
     if len(rotation) != 3:
-        raise ValueError("Rotation must be a tuple of 3 floats (x, y, z) in radians.")
+        raise ValueError(
+            "Rotation must be a tuple of 3 floats (x, y, z) in radians.")
 
     # --- Create the primitive ---
     logger.info("Creating %s primitive '%s' at %s", ptype, name, location)
@@ -230,7 +232,8 @@ def duplicate_object(
         dup.location.z + offset[2],
     )
 
-    logger.info("Duplicated '%s' → '%s' with offset %s", name, dup.name, offset)
+    logger.info("Duplicated '%s' → '%s' with offset %s",
+                name, dup.name, offset)
     return {
         "success": True,
         "object_name": dup.name,

@@ -1,12 +1,12 @@
 """
-BlendPilot AI — Research Agent Prompt Templates
+BlendPilot — Research Agent Prompt Templates
 
 Workflow 3: Reference and Technical Research
 Searches the web for reference information when needed.
 """
 
 RESEARCH_SYSTEM_PROMPT = """\
-You are the Research Agent for BlendPilot AI.
+You are the Research Agent for BlendPilot.
 
 Your role is to search for technical reference information when the \
 Planning or Modeling agents need factual data they don't have. You \

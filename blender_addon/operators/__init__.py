@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Operator Registry
+BlendPilot — Operator Registry
 
 Central registry mapping command names to handler functions.
 Each handler validates parameters and delegates to core/ functions.
@@ -67,4 +67,5 @@ def register_all_operators() -> None:
     validation.register()
     export.register()
 
-    logger.info("Registered %d command handlers: %s", len(COMMAND_REGISTRY), list_commands())
+    logger.info("Registered %d command handlers: %s",
+                len(COMMAND_REGISTRY), list_commands())

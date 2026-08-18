@@ -1,5 +1,5 @@
 """
-BlendPilot AI — Scene Data Schemas
+BlendPilot — Scene Data Schemas
 
 Pydantic models for representing the Blender scene state,
 produced by Workflow 2 (Scene Understanding).
@@ -80,7 +80,8 @@ class SceneSummary(BaseModel):
     by downstream agents to understand the current project state.
     """
 
-    blend_file: str = Field(default="", description="Path to current .blend file")
+    blend_file: str = Field(
+        default="", description="Path to current .blend file")
     object_count: int = Field(default=0, ge=0)
     objects: list[ObjectInfo] = Field(default_factory=list)
     collections: list[str] = Field(default_factory=list)
