@@ -50,7 +50,7 @@ export function InteractiveHeader() {
       </div>
 
       <Link href="/" className="flex items-center gap-3 group">
-        <div className="relative p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-md transition-all duration-300 group-hover:shadow-lg group-hover:shadow-cyan-500/20">
+        <div className="relative p-2 rounded-xl bg-foreground text-background shadow-md transition-all duration-300 group-hover:shadow-lg group-hover:shadow-cyan-500/20">
           <Box className="w-5 h-5 transition-transform duration-300 group-hover:rotate-12" />
         </div>
         <span className="font-bold tracking-tight text-base text-foreground transition-colors group-hover:text-cyan-400">

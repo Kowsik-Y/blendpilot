@@ -63,7 +63,7 @@ export function TypingPromptDemo() {
 
   return (
     <div className="w-full max-w-2xl mx-auto relative group">
-      <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-cyan-500/30 via-violet-500/30 to-orange-500/30 blur-sm opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute -inset-px rounded-2xl bg-linear-to-r from-cyan-500/30 via-violet-500/30 to-orange-500/30 blur-sm opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
       <div className="relative rounded-2xl bg-card/80 backdrop-blur-xl border border-border/50 p-5 shadow-2xl">
         {/* Terminal-like header */}
         <div className="flex items-center gap-2 mb-3">
@@ -415,12 +415,14 @@ interface SpotlightCardProps {
   children: React.ReactNode;
   className?: string;
   glowColor?: "cyan" | "violet" | "orange";
+  intensity?: number;
 }
 
 export function InteractiveSpotlightCard({
   children,
   className = "",
   glowColor = "cyan",
+  intensity = 0.12,
 }: SpotlightCardProps) {
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -433,9 +435,9 @@ export function InteractiveSpotlightCard({
   };
 
   const glowColors = {
-    cyan: "rgba(6, 182, 212, 0.12)",
-    violet: "rgba(139, 92, 246, 0.12)",
-    orange: "rgba(249, 115, 22, 0.12)",
+    cyan: `rgba(6, 182, 212, ${intensity})`,
+    violet: `rgba(139, 92, 246, ${intensity})`,
+    orange: `rgba(249, 115, 22, ${intensity})`,
   };
 
   return (
@@ -444,11 +446,11 @@ export function InteractiveSpotlightCard({
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setOpacity(1)}
       onMouseLeave={() => setOpacity(0)}
-      className={`relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-md border border-border/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl ${className}`}
+      className={`relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-md border border-border/50 transition-all duration-500 hover:shadow-2xl ${className}`}
     >
       {/* Spotlight mouse-tracking radial glow */}
       <div
-        className="pointer-events-none absolute -inset-px rounded-2xl transition-opacity duration-300"
+        className="pointer-events-none absolute -inset-4 rounded-2xl transition-opacity duration-300"
         style={{
           opacity,
           background: `radial-gradient(400px circle at ${position.x}px ${position.y}px, ${glowColors[glowColor]}, transparent 60%)`,

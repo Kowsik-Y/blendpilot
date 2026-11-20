@@ -53,8 +53,8 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Sign in to your 3D Asset Creation Workspace</p>
         </div>
 
-        <Card className="shadow-none">
-          <CardHeader>
+        <Card className="shadow-none space-y-3">
+          <CardHeader className="px-5">
             <CardTitle className="text-xl">Sign In</CardTitle>
             <CardDescription>
               Enter your email and password to access your agent dashboard.
@@ -92,6 +92,7 @@ export default function LoginPage() {
                 type="submit"
                 disabled={loading}
                 className="w-full"
+                size="lg"
               >
                 {loading ? "Signing in..." : (
                   <>

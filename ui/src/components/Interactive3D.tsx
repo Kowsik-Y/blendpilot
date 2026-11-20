@@ -99,17 +99,6 @@ export function Interactive3D() {
       const mesh = new THREE.Mesh(geo, mat);
       scene.add(mesh);
 
-      // Glow sprite for each node
-      const spriteMat = new THREE.SpriteMaterial({
-        color: nodeColors[i % 4],
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(0.3, 0.3, 1);
-      mesh.add(sprite);
-
       nodes.push({
         mesh,
         angle: (Math.PI * 2 * i) / 12 + Math.random() * 0.5,
@@ -256,9 +245,6 @@ export function Interactive3D() {
         node.mesh.position.z = Math.sin(a) * node.radius * Math.sin(node.plane);
       });
 
-      // Slowly rotate particles with subtle parallax
-      particles.rotation.y = t * 0.01 + targetRotY * 0.2 + scrollFactor * 0.1;
-      particles.rotation.x = t * 0.006 + targetRotX * 0.15 + scrollFactor * 0.08;
 
       // Animate lights for subtle color shifts
       pointLight1.position.x = 3 * Math.cos(t * 0.25 + scrollFactor * 0.2);

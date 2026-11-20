@@ -69,8 +69,8 @@ export default function RegisterPage() {
           <p className="text-sm text-muted-foreground">Create your 3D Copilot Workspace Account</p>
         </div>
 
-        <Card className="shadow-none!">
-          <CardHeader>
+        <Card className="shadow-none! space-y-4">
+          <CardHeader className="mx-1">
             <CardTitle className="text-xl font-semibold">Get Started</CardTitle>
             <CardDescription>
               Sign up to configure your BYO API keys and start generating 3D models.
@@ -116,6 +116,7 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 className="w-full"
+                size="lg"
                 disabled={loading}
               >
                 {loading ? "Creating account..." : (

@@ -179,7 +179,7 @@ if [ -d "$PROJECT_DIR/ui" ]; then
         register_port_owner 3000
     else
         echo -e "${GREEN}[+] Starting Next.js Frontend Dev Server on port 3000...${NC}"
-        (cd "$PROJECT_DIR/ui" && npm run dev) &
+        (cd "$PROJECT_DIR/ui" && npx prisma generate --no-hints 2>/dev/null && npm run dev) &
         NEXT_PID=$!
         register_stop_target "-$NEXT_PID"
         if ! wait_for_service "http://127.0.0.1:3000" "Next.js Frontend"; then

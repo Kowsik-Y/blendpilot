@@ -18,6 +18,7 @@ authors = [
 
 dependencies = [
     "pydantic>=2.0",
+    "pydantic-settings>=2.0",
     "python-dotenv>=1.0",
     "fastapi>=0.100",
     "uvicorn>=0.23",
@@ -32,7 +33,9 @@ dependencies = [
     "tavily-python",
     "opentelemetry-sdk",
     "opentelemetry-instrumentation-fastapi",
-    "opentelemetry-instrumentation-langchain"
+    "opentelemetry-instrumentation-langchain",
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.0",
 ]
 
 [project.optional-dependencies]
